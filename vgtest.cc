@@ -30,6 +30,7 @@ using namespace cv;
 
 struct options_t {
   // Global configurable options
+  bool drawEdges=false;
   bool dogrid=false;
   bool gridLabels=true;
   unsigned int ngridx=10u, ngridy=10u; // number of grid lines (if any)
@@ -43,6 +44,8 @@ struct options_t {
   string sites_path;
   string users_path;
 } options;
+
+static options_t opts;
 
 // Colors for solution polygons
 static const size_t maxcolor = (1 << 8) - 1;
@@ -78,6 +81,8 @@ usage(const char *prog, const char *errmsg)
     << endl
     << "  -T <N>		Thickness (pixels) of grid lines (default: 1)"
     << endl
+    << "  -e			Draw edges of VD (default: no)" << endl
+    << "  -E			Do not draw edges of VD (default)" << endl
     << "  -g			Draw a grid (default: no grid)" << endl
     << "  -G			Do not draw a grid (this is default)" << endl
     << "  -l			Label the grid lines (default: yes)" << endl
@@ -113,7 +118,7 @@ T getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FC:X:Y:T:gGlLdW:H:hs:u:";
+static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:";
 
 // Parses options and sets the global options structure.
 static void
@@ -135,6 +140,10 @@ get_options(int argc, char *argv[], options_t &o)
       o.ngridx = getenum<int>(INT_MAX, optarg, errstr, "X grid lines"); break;
     case 'Y':
       o.ngridy = getenum<int>(INT_MAX, optarg, errstr, "Y grid lines"); break;
+    case 'e':
+      o.drawEdges = true; break;
+    case 'E':
+      o.drawEdges = false; break;
     case 'g':
       o.dogrid = true; break;
     case 'G':
@@ -401,7 +410,7 @@ public:
     do {
       Point2d v0, v1;
       clip_infinite_edge(*e, v0, v1);
-      cv::line(img, v0, v1, color, 4);
+      cv::line(img, v0, v1, color, 2);
     } while ((e = e->next()) != edges);
   }
 };
@@ -448,7 +457,13 @@ voronoi_map(Mat img,
     const size_t cell_idx = cell.source_index();
     const Point &center = sites[cell_idx];
 
-    //vp.draw_cell(img, edge);
+    if (opts.drawEdges) {
+      vp.draw_cell(img, edge);
+      if (opts.debug) {
+        cv::imshow("output", img);
+        cv::waitKey(0);
+      }
+    }
 
     // Get the cell bounding box for range query.
     Rectd bbox = vp.boundingRect (edge);
@@ -487,7 +502,6 @@ draw_sites(Mat img, const vector<Point> &sites, const vector<Point> &users,
 
 int main(int argc, char *argv[])
 {
-  options_t opts;
   get_options(argc, argv, opts);
 
   vector<Point> sites, users;
