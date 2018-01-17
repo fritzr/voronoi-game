@@ -320,6 +320,11 @@ draw_cells (Mat img, const VoronoiDiagram<Tp_> &vd)
       auto edge = *edge_iter;
       cv::line(img, edge.p0, edge.p1, color, 2);
     }
+    // With debug, show each cell's borders as it is drawn
+    if (opts.debug) {
+      cv::imshow("output", img);
+      cv::waitKey(0);
+    }
   }
 }
 
