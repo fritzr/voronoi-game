@@ -4,9 +4,6 @@
 #include <sstream>
 #include <cstring>
 #include <cerrno>
-#include <bitset>
-#include <set>
-#include <iomanip>
 #include <array>
 #include <algorithm>
 #include <iterator>
@@ -24,7 +21,8 @@
 #include <boost/range/join.hpp>
 #include <boost/foreach.hpp>
 
-#include "vgame.h"
+#include "main.h"
+#include "voronoi.h"
 
 #define i2f(...) static_cast<float>(__VA_ARGS__)
 #define i2u(...) static_cast<unsigned int>(__VA_ARGS__)
@@ -34,7 +32,7 @@ using namespace cv;
 
 struct options_t {
   // Global configurable options
-  bool drawEdges=false;
+  bool drawEdges=true;
   bool dogrid=false;
   bool gridLabels=true;
   unsigned int ngridx=10u, ngridy=10u; // number of grid lines (if any)
@@ -85,8 +83,8 @@ usage(const char *prog, const char *errmsg)
     << endl
     << "  -T <N>		Thickness (pixels) of grid lines (default: 1)"
     << endl
-    << "  -e			Draw edges of VD (default: no)" << endl
-    << "  -E			Do not draw edges of VD (default)" << endl
+    << "  -e			Draw edges of VD (default: yes)" << endl
+    << "  -E			Do not draw edges of VD (default: yes)" << endl
     << "  -g			Draw a grid (default: no grid)" << endl
     << "  -G			Do not draw a grid (this is default)" << endl
     << "  -l			Label the grid lines (default: yes)" << endl
@@ -197,11 +195,6 @@ get_options(int argc, char *argv[], options_t &o)
   o.users_path = string(argv[optind+1]);
 }
 
-static inline Scalar
-colorKey(int i, int imax) {
-  return ((i+1) * maxcolor)/ (imax+1);
-}
-
 // Draw grid lines.
 static void
 drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
@@ -307,231 +300,42 @@ readOrDie(const string &path, It out)
   }
 }
 
-#ifndef CELLS_SLOW
-
-// Whether pq -> qr makes a left turn at q
-static inline bool
-leftTurn(Point2d p, Point2d q, Point2d r)
-{
-  Point2d pq = q - p;
-  Point2d w = r - p;
-  return cv::determinant(Mat(Matx<double, 2, 2>({pq.x, w.x, pq.y, w.y}))) > 0;
+static inline Scalar
+colorKey(int i, int imax) {
+  return Scalar(((i+1) * double(maxcolor))/ (imax+1));
 }
 
-struct voronoi_plane
-{
-private:
-  const vector<Point> &sites_;
-  const Size &bounds_;
-
-  void clip_infinite_edge(const edge_t& edge, Point2d &p0, Point2d &p1) const
-  {
-    const cell_t& cell1 = *edge.cell();
-    const cell_t& cell2 = *edge.twin()->cell();
-    Point2d origin, direction;
-
-    Point2d s1 = sites_[cell1.source_index()];
-    Point2d s2 = sites_[cell2.source_index()];
-    origin.x = (s1.x + s2.x) * 0.5;
-    origin.y = (s1.y + s2.y) * 0.5;
-    direction.x = (s1.y - s2.y);
-    direction.y = (s2.x - s1.x);
-
-    coordinate_t koef =
-        bounds_.width / (std::max)(fabs(direction.x), fabs(direction.y));
-    if (edge.vertex0() == NULL) {
-      p0 = Point2d(
-          origin.x - direction.x * koef,
-          origin.y - direction.y * koef);
-    } else {
-      p0 = Point2d(edge.vertex0()->x(), edge.vertex0()->y());
-    }
-    if (edge.vertex1() == NULL) {
-      p1 = Point2d(
-          origin.x + direction.x * koef,
-          origin.y + direction.y * koef);
-    } else {
-      p1 = Point2d(edge.vertex1()->x(), edge.vertex1()->y());
-    }
-  }
-
-
-public:
-  voronoi_plane(const vector<Point> &sites, const Size &bounds)
-    : sites_(sites), bounds_(bounds)
-  {}
-
-  inline bool
-  is_inside(const edge_t *cell, const Point2d &pt) const
-  {
-    bool winding_known = false;
-    bool winding = true; // right
-    const edge_t *e = cell;
-    do {
-      Point2d v0, v1;
-      clip_infinite_edge(*e, v0, v1);
-      // Make sure all edges wind in the same direction towards pt.
-      // This works because the cell must be convex.
-      bool this_wind = leftTurn(v0, v1, pt);
-      if (winding_known && winding != this_wind)
-        return false;
-      winding = this_wind;
-      winding_known = true;
-    } while ((e = e->next()) != cell);
-
-    return true;
-  }
-
-  Rectd boundingRect (const edge_t *const edges) const
-  {
-    Rectd bbox;
-    bool bbox_init = false;
-    const edge_t *e = edges;
-    do {
-      // Get the endpoints of the vertex, which might be infinite.
-      Point2d v0, v1;
-      clip_infinite_edge(*e, v0, v1);
-      if (!bbox_init)
-      {
-        bp::set_points(bbox, v0, v1);
-        bbox_init = true;
-      }
-      else {
-        bp::encompass(bbox, v0);
-        bp::encompass(bbox, v1);
-      }
-    } while ((e = e->next()) != edges);
-    return bbox;
-  }
-
-  void draw_cell (Mat img, const edge_t *const edges) const
-  {
-    size_t site_idx = edges->cell()->source_index();
-    const Scalar color = colorKey(site_idx, sites_.size());
-    const edge_t *e = edges;
-    do {
-      Point2d v0, v1;
-      clip_infinite_edge(*e, v0, v1);
-      cv::line(img, v0, v1, color, 2);
-    } while ((e = e->next()) != edges);
-  }
-};
-
-// This is an efficient method for mapping user points to their cells using
-// voronoi cells and a range-tree to quickly find the site to which each user
-// point belongs.
-// This runs in O(m log m + n log n) for m sites and n users.
-// Currently this method doesn't work - the cell containment check using clip
-// lines is incomplete since some cells are infinite.
-// TODO use winding checks since Voronoi edge set is O(m) and cells are convex.
+template <class Tp_>
 static void
-voronoi_map_efficient(Mat img,
-    const vector<Point> &sites, const vector<Point> &users,
-    vector<int> &u2s, const Size &bounds)
+draw_cells (Mat img, const VoronoiDiagram<Tp_> &vd)
 {
-  // u2s maps user index to nearest facility index
-  voronoi_diagram vd;
-  boost::polygon::construct_voronoi(sites.begin(), sites.end(), &vd);
-  u2s = vector<int>(users.size(), -1);
-
-  // Helper for clipping infinite edges etc...
-  const voronoi_plane vp(sites, bounds);
-
-  // Construct an R-tree for range queries on the user points.
-  // We use this to efficiently find the user points that lie within each
-  // voronoi cell using its bounding box.
-  typedef pair<Point2d, int> rvalue_t;
-  vector<rvalue_t> uvals;
-  size_t user_idx = 0u;
-  for (auto user = users.begin(); user != users.end(); ++user, ++user_idx)
-    uvals.push_back(make_pair(Point2d(user->x, user->y), user_idx));
-  bgi::rtree<rvalue_t, bgi::quadratic<16> > utree(uvals.begin(), uvals.end());
-
-  for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
+  size_t site_idx = 0u;
+  for (auto cell_iter=vd.begin(); cell_iter!=vd.end(); ++cell_iter, ++site_idx)
   {
-    const cell_t &cell = *it;
-    Point2d cmin, cmax, v0, v1;
-    const edge_t *edge = cell.incident_edge();
-    const size_t cell_idx = cell.source_index();
-    //const Point &center = sites[cell_idx];
-
-    if (opts.drawEdges) {
-      vp.draw_cell(img, edge);
-      if (opts.debug) {
-        cv::imshow("output", img);
-        cv::waitKey(0);
-      }
-    }
-
-    // Get the cell bounding box for range query.
-    Rectd bbox = vp.boundingRect (edge);
-
-    // Map the users that lie inside our cell to this site.
-    vector<rvalue_t> query_users;
-    utree.query(bgi::within(bbox), back_inserter(query_users));
-    BOOST_FOREACH(rvalue_t const& v, query_users)
-    {
-      const Point2d &user = v.first;
-      int user_idx = v.second;
-      if (u2s[user_idx] == -1 && vp.is_inside(edge, user))
-        u2s[user_idx] = cell_idx;
+    Scalar color = colorKey(site_idx, vd.sites_size());
+    auto const& cell = *cell_iter;
+    for (auto edge_iter = vd.cell_begin(cell); edge_iter != vd.cell_end(cell);
+        ++edge_iter) {
+      auto edge = *edge_iter;
+      cv::line(img, edge.p0, edge.p1, color, 2);
     }
   }
 }
 
-#else // !CELLS_SLOW
-// This is a brute-force (slow) method for mapping user points to their cells
-// simply by associating each user to the site to which it is nearest.
-// This runs in O(m*n) for m sites and n users.
+template <class Tp_>
 static void
-voronoi_map_slow(Mat img,
-    const vector<Point> &sites, const vector<Point> &users,
-    vector<int> &u2s, const Size &bounds)
-{
-  u2s = vector<int>(users.size(), -1);
-  for (size_t user_idx = 0u; user_idx < users.size(); ++user_idx)
-  {
-    const Point &user = users[user_idx];
-    double mindist = std::numeric_limits<double>::infinity();
-    int closest_site_idx = -1;
-    for (size_t site_idx = 0u; site_idx < sites.size(); ++site_idx)
-    {
-      const Point &site = sites[site_idx];
-      double distance = cv::norm(site - user);
-      if (distance < mindist) {
-        mindist = distance;
-        closest_site_idx = static_cast<int>(site_idx);
-      }
-    }
-    u2s[user_idx] = closest_site_idx;
-  }
-}
-#endif // CELLS_SLOW
-
-static void
-voronoi_map(Mat img,
-    const vector<Point> &sites, const vector<Point> &users, vector<int> &u2s,
-    const Size &bounds)
-{
-#ifdef CELLS_SLOW
-  voronoi_map_slow(img, sites, users, u2s, bounds);
-#else
-  voronoi_map_efficient(img, sites, users, u2s, bounds);
-#endif
-}
-
-static void
-draw_sites(Mat img, const vector<Point> &sites, const vector<Point> &users,
-    vector<int> &u2s)
+draw_sites(Mat img, const VoronoiDiagram<Tp_> &vd)
 {
   // Fill sites
-  for (size_t site_idx = 0u; site_idx < sites.size(); ++site_idx) {
-    cv::circle(img, sites[site_idx], 10, colorKey(site_idx, sites.size()), -1);
+  for (size_t site_idx = 0u; site_idx < vd.sites_size(); ++site_idx) {
+    Scalar color = colorKey(site_idx, vd.sites_size());
+    cv::circle(img, vd.site(site_idx), 10, color, -1);
   }
 
   // Don't fill users
-  for (size_t user_idx = 0u; user_idx < users.size(); ++user_idx) {
-    cv::circle(img, users[user_idx], 5, colorKey(u2s[user_idx], sites.size()));
+  for (size_t user_idx = 0u; user_idx < vd.users_size(); ++user_idx) {
+    Scalar color = colorKey(vd.site_index(user_idx), vd.sites_size());
+    cv::circle(img, vd.user(user_idx), 5, color);
   }
 }
 
@@ -563,9 +367,15 @@ int main(int argc, char *argv[])
   // Flip vertical initially so text comes out up-right (since we flip later)
   cv::flip(img, img, 0);
 
-  vector<int> u2s;
-  voronoi_map(img, sites, users, u2s, resolution);
-  draw_sites(img, sites, users, u2s);
+  VoronoiDiagram<double> vd(
+      sites.begin(), sites.end(), users.begin(), users.end(),
+      resolution.width, resolution.height);
+  vd.build();
+
+  if (opts.drawEdges) {
+    draw_cells(img, vd);
+  }
+  draw_sites(img, vd);
 
   // Convert grayscale gradient to color gradient for plotting
   Mat colorimg;
