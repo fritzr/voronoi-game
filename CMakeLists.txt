@@ -56,6 +56,12 @@ set(PROG vgtest)
 
 add_executable(${PROG} vgtest.cc vgame.h )
 
+# use slow method for user/site mapping until we fix the fast method
+#add_definitions(-DCELLS_SLOW)
+
+# this is just annoying
+add_definitions(-Wno-parentheses)
+
 target_link_libraries(${PROG}
   ${OpenCV_LIBS}
   ${Boost_LIBRARIES}

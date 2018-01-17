@@ -298,13 +298,24 @@ readOrDie(const string &path, It out)
   try {
     errno = 0;
     readPoints(path, out);
-  } catch (exception) { // should be ios_base::failure; PR libstdc++/66145
+  } catch (exception&) { // should be ios_base::failure; PR libstdc++/66145
     if (errno) {
       cerr << "error opening file '" << path << "': ";
       perror(NULL);
       exit(2);
     }
   }
+}
+
+#ifndef CELLS_SLOW
+
+// Whether pq -> qr makes a left turn at q
+static inline bool
+leftTurn(Point2d p, Point2d q, Point2d r)
+{
+  Point2d pq = q - p;
+  Point2d w = r - p;
+  return cv::determinant(Mat(Matx<double, 2, 2>({pq.x, w.x, pq.y, w.y}))) > 0;
 }
 
 struct voronoi_plane
@@ -344,31 +355,32 @@ private:
     }
   }
 
-  void clip_line(const Point2d &inpt, const edge_t *clip, Point3d &line) const
-  {
-    // Get the endpoints of the vertex, which might be infinite.
-    Point2d v0, v1;
-    clip_infinite_edge(*clip, v0, v1);
-    using std::abs;
-    using std::numeric_limits;
-    if (abs(v0.x - v1.x) < numeric_limits<double>::epsilon()
-        && abs(v0.y - v1.y) < numeric_limits<double>::epsilon())
-    {
-      line = Point3d(0.0);
-      return;
-    }
-    line.x = -(v0.y - v1.y);
-    line.y = v0.x - v1.x;
-    line.z = (v0.y - v1.y) * v0.x - (v0.x - v1.x) * v0.y;
-    if (inpt.x * line.x + inpt.y * line.y + line.z > 0.0) {
-      line *= -1.0;
-    }
-  }
 
 public:
   voronoi_plane(const vector<Point> &sites, const Size &bounds)
     : sites_(sites), bounds_(bounds)
   {}
+
+  inline bool
+  is_inside(const edge_t *cell, const Point2d &pt) const
+  {
+    bool winding_known = false;
+    bool winding = true; // right
+    const edge_t *e = cell;
+    do {
+      Point2d v0, v1;
+      clip_infinite_edge(*e, v0, v1);
+      // Make sure all edges wind in the same direction towards pt.
+      // This works because the cell must be convex.
+      bool this_wind = leftTurn(v0, v1, pt);
+      if (winding_known && winding != this_wind)
+        return false;
+      winding = this_wind;
+      winding_known = true;
+    } while ((e = e->next()) != cell);
+
+    return true;
+  }
 
   Rectd boundingRect (const edge_t *const edges) const
   {
@@ -392,20 +404,6 @@ public:
     return bbox;
   }
 
-  void get_clip_lines (const Point &inside, const edge_t *const edges,
-      vector<Point3d> &clip_lines) const
-  {
-    const Point2d inpt(inside.x, inside.y);
-    const edge_t *e = edges;
-    do {
-      Point3d cline;
-      clip_line(inpt, e, cline);
-      if (cline.x >= std::numeric_limits<double>::epsilon ()
-          || abs(cline.y) >= std::numeric_limits<double>::epsilon ())
-        clip_lines.push_back(cline);
-    } while ((e = e->next()) != edges);
-  }
-
   void draw_cell (Mat img, const edge_t *const edges) const
   {
     size_t site_idx = edges->cell()->source_index();
@@ -419,21 +417,17 @@ public:
   }
 };
 
-static inline bool
-is_inside(const Point2d &pt, const vector<Point3d> &clips)
-{
-  // Use clip lines to determine whether the point lies inside the polygon
-  for (auto clip = clips.begin(); clip != clips.end(); ++clip)
-    if (pt.x * clip->x + pt.y * clip->y + clip->z >= 0.0)
-      return true;
-
-  return false;
-}
-
+// This is an efficient method for mapping user points to their cells using
+// voronoi cells and a range-tree to quickly find the site to which each user
+// point belongs.
+// This runs in O(m log m + n log n) for m sites and n users.
+// Currently this method doesn't work - the cell containment check using clip
+// lines is incomplete since some cells are infinite.
+// TODO use winding checks since Voronoi edge set is O(m) and cells are convex.
 static void
-voronoi_map(Mat img,
-    const vector<Point> &sites, const vector<Point> &users, vector<int> &u2s,
-    const Size &bounds)
+voronoi_map_efficient(Mat img,
+    const vector<Point> &sites, const vector<Point> &users,
+    vector<int> &u2s, const Size &bounds)
 {
   // u2s maps user index to nearest facility index
   voronoi_diagram vd;
@@ -459,7 +453,7 @@ voronoi_map(Mat img,
     Point2d cmin, cmax, v0, v1;
     const edge_t *edge = cell.incident_edge();
     const size_t cell_idx = cell.source_index();
-    const Point &center = sites[cell_idx];
+    //const Point &center = sites[cell_idx];
 
     if (opts.drawEdges) {
       vp.draw_cell(img, edge);
@@ -472,10 +466,6 @@ voronoi_map(Mat img,
     // Get the cell bounding box for range query.
     Rectd bbox = vp.boundingRect (edge);
 
-    // Generate clip lines.
-    vector<Point3d> clip_lines;
-    vp.get_clip_lines (center, edge, clip_lines);
-
     // Map the users that lie inside our cell to this site.
     vector<rvalue_t> query_users;
     utree.query(bgi::within(bbox), back_inserter(query_users));
@@ -483,10 +473,51 @@ voronoi_map(Mat img,
     {
       const Point2d &user = v.first;
       int user_idx = v.second;
-      if (u2s[user_idx] == -1 && is_inside(user, clip_lines))
+      if (u2s[user_idx] == -1 && vp.is_inside(edge, user))
         u2s[user_idx] = cell_idx;
     }
   }
+}
+
+#else // !CELLS_SLOW
+// This is a brute-force (slow) method for mapping user points to their cells
+// simply by associating each user to the site to which it is nearest.
+// This runs in O(m*n) for m sites and n users.
+static void
+voronoi_map_slow(Mat img,
+    const vector<Point> &sites, const vector<Point> &users,
+    vector<int> &u2s, const Size &bounds)
+{
+  u2s = vector<int>(users.size(), -1);
+  for (size_t user_idx = 0u; user_idx < users.size(); ++user_idx)
+  {
+    const Point &user = users[user_idx];
+    double mindist = std::numeric_limits<double>::infinity();
+    int closest_site_idx = -1;
+    for (size_t site_idx = 0u; site_idx < sites.size(); ++site_idx)
+    {
+      const Point &site = sites[site_idx];
+      double distance = cv::norm(site - user);
+      if (distance < mindist) {
+        mindist = distance;
+        closest_site_idx = static_cast<int>(site_idx);
+      }
+    }
+    u2s[user_idx] = closest_site_idx;
+  }
+}
+#endif // CELLS_SLOW
+
+static void
+voronoi_map(Mat img,
+    const vector<Point> &sites, const vector<Point> &users, vector<int> &u2s,
+    const Size &bounds)
+{
+#ifdef CELLS_SLOW
+  voronoi_map_slow(img, sites, users, u2s, bounds);
+#else
+  voronoi_map_efficient(img, sites, users, u2s, bounds);
+#endif
 }
 
 static void
