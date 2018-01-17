@@ -248,21 +248,21 @@ public:
   }
 
   // postfix
-  edge_iterator operator++(int) {
+  inline edge_iterator operator++(int) {
     edge_iterator it(parent, current);
     this->operator++();
     return it;
   }
 
   // prefix
-  edge_iterator& operator++(void) {
+  inline edge_iterator& operator++(void) {
     // If we reach the beginning again, set to NULL to identify the end
     if (current != NULL && (current = current->next()) == first)
       current = NULL;
     return *this;
   }
 
-  value_type operator*(void) {
+  inline value_type operator*(void) {
     value_type ret;
     if (current != NULL)
       parent.clip_infinite_edge(*current, ret.p0, ret.p1);
