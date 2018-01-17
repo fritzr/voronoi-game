@@ -107,7 +107,8 @@ usage(const char *prog, const char *errmsg)
 
 
 template <typename T>
-T getenum(int maxval, const char *instr, ostream &err, const char *errtype)
+static T
+getenum(int maxval, const char *instr, ostream &err, const char *errtype)
 {
   istringstream in(instr);
   int ival = -1;
