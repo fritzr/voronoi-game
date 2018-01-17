@@ -5,7 +5,7 @@ cmake_policy(PUSH)
 include(cotire)
 cmake_policy(POP)
 
-project(VDNative)
+project(voronoi-game)
 if(NOT WIN32 AND NOT WIN64)
   set(CMAKE_CXX_COMPILER "g++")
 endif()
@@ -30,13 +30,9 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -std=c++11")
 find_package(OpenCV REQUIRED)
 find_package(Boost REQUIRED)
 
-include_directories(
-  ${OpenCV_INCLUDE_DIRS}
-  ${Boost_INCLUDE_DIRS}
-  )
-
-if (OpenCV_VERSION VERSION_LESS 2.13)
-  add_definitions(-DOPENCV2_PRE13)
+# require boost 1.47.0 for polygon and geometry packages
+if (Boost_VERSION LESS 105200)
+  message (FATAL_ERROR "${PROJECT_NAME} requires boost 1.52.0")
 endif()
 
 set(CXX_STATIC "-static-libgcc -static-libstdc++ ")
@@ -50,6 +46,11 @@ endif()
 #foreach (_variableName ${_variableNames})
 #  message(STATUS "${_variableName}=${${_variableName}}")
 #endforeach()
+
+include_directories(
+  ${OpenCV_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
+  )
 
 set(PROG vgtest)
 

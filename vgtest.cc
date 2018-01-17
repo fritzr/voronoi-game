@@ -12,10 +12,14 @@
 #include <iterator>
 #include <cmath>
 
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/highgui.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
+
+#if !defined(CV_VERSION_MAJOR) || CV_VERSION_MAJOR < 3
+#include <opencv2/contrib/contrib.hpp>
 #include <opencv2/legacy/legacy.hpp>
+#endif
 
 #include <boost/range/join.hpp>
 #include <boost/foreach.hpp>

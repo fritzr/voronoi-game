@@ -1,6 +1,6 @@
-#include <opencv2/core.hpp>
+#include <opencv2/core/core.hpp>
 
-#ifndef OPENCV2_4_13
+#if CV_VERSION_MAJOR < 3 && !defined(OPENCV2_4_13)
 #include <opencv2/contrib/contrib.hpp>
 typedef int ColormapTypes;
 #endif
