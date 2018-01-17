@@ -62,13 +62,23 @@ struct inside_cell {
   }
 };
 
-// This is an efficient method for mapping user points to their cells using
-// voronoi cells and a range-tree to quickly find the site to which each user
-// point belongs.
-// This runs in O(m log m + n log n) for m sites and n users.
-// Currently this method doesn't work - the cell containment check using clip
-// lines is incomplete since some cells are infinite.
-// TODO use winding checks since Voronoi edge set is O(m) and cells are convex.
+// This is an efficient method for mapping user points to their nearest site,
+// using a voronoi diagram and range-tree.
+// This runs in O(m log m + (m + n) log n) on average for m sites and n users:
+//   O(m log m) worst-case to build the voronoi diagram;
+//   O(n log n) worst-case to build the user range tree;
+//   O(m log n) average-case to find user points in each cell (see below).
+// Since Voronoi cells are convex and the Voronoi edge set is O(m), we can
+// use the winding check for containment of a query point in amortized O(1)
+// time per cell.
+// Each containment check in the worst case must consider O(n) users.
+// We improve this to O(log n) on average by using a range tree to filter each
+// user query down to points which lie in the cell's bounding box. Of course
+// this only works when the cells and users are distributed randomly.
+// In the worst case, all Voronoi cells may share the same bounding box, and
+// all O(n) user points will be checked for all O(m) cells anyway. However, the
+// containment check is short-circuited for those users who have already been
+// assigned a cell yet, so the overhead is small for the extra comparisons.
 template<class Tp_>
 void
 VoronoiDiagram<Tp_>::build_fast(void)
