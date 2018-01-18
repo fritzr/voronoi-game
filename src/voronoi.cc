@@ -62,6 +62,28 @@ struct inside_cell {
   }
 };
 
+template<class Tp_>
+void
+VoronoiDiagram<Tp_>::map_knn(void)
+{
+  // Construct an R-tree for NN(1) queries on the sites.
+  // We use this to efficiently find the site that is nearest to each user.
+  typedef pair<point_type, int> rvalue_t;
+  vector<rvalue_t> svals;
+  int site_idx = 0;
+  for (auto site = sites.begin(); site != sites.end(); ++site, ++site_idx)
+    svals.push_back(make_pair(point_type(site->x, site->y), site_idx));
+  typedef typename bgi::rtree<rvalue_t, bgi::quadratic<16> > voronoi_tree;
+  voronoi_tree vtree(svals.begin(), svals.end());
+
+  // The nearest-neighbor is of course the voronoi cell.
+  for (size_t user_idx = 0u; user_idx < users.size(); user_idx++)
+  {
+    const point_type &user = users[user_idx];
+    u2s[user_idx] = vtree.qbegin(bgi::nearest(user, 1))->second;
+  }
+}
+
 // This is an efficient method for mapping user points to their nearest site,
 // using a voronoi diagram and range-tree.
 // This runs in O(m log m + (m + n) log n) on average for m sites and n users:
@@ -81,15 +103,8 @@ struct inside_cell {
 // assigned a cell yet, so the overhead is small for the extra comparisons.
 template<class Tp_>
 void
-VoronoiDiagram<Tp_>::build_fast(void)
+VoronoiDiagram<Tp_>::map_quick(void)
 {
-#ifdef CELLS_SLOW
-  throw runtime_error("Voronoi::build_fast(): method unimplmented");
-#else
-  // u2s maps user index to nearest facility index
-  boost::polygon::construct_voronoi(sites.begin(), sites.end(), &vd);
-  u2s = vector<int>(users.size(), -1);
-
   // Construct an R-tree for range queries on the user points.
   // We use this to efficiently find the user points that lie within each
   // voronoi cell using its bounding box.
@@ -117,7 +132,6 @@ VoronoiDiagram<Tp_>::build_fast(void)
       u2s[user_idx] = cell.source_index();
     }
   }
-#endif // !CELLS_SLOW
 }
 
 // This is a brute-force (slow) method for mapping user points to their cells
@@ -125,11 +139,8 @@ VoronoiDiagram<Tp_>::build_fast(void)
 // This runs in O(m*n) for m sites and n users.
 template<class Tp_>
 void
-VoronoiDiagram<Tp_>::build_slow(void)
+VoronoiDiagram<Tp_>::map_slow(void)
 {
-#ifndef CELLS_SLOW
-  throw runtime_error("Voronoi::build_fast(): method unimplmented");
-#else // CELLS_SLOW
   u2s = vector<int>(users.size(), -1);
   for (size_t user_idx = 0u; user_idx < users.size(); ++user_idx)
   {
@@ -147,18 +158,30 @@ VoronoiDiagram<Tp_>::build_slow(void)
     }
     u2s[user_idx] = closest_site_idx;
   }
-#endif // CELLS_SLOW
 }
 
 template<class Tp_>
 void
-VoronoiDiagram<Tp_>::build(void)
+VoronoiDiagram<Tp_>::build(SearchMethod sm)
 {
-#ifdef CELLS_SLOW
-  this->build_slow();
-#else
-  this->build_fast();
-#endif
+  // Always construct the voronoi diagram from the sites so we have edges.
+  boost::polygon::construct_voronoi(sites.begin(), sites.end(), &vd);
+
+  // u2s maps user index to nearest facility index
+  u2s = vector<int>(users.size(), -1);
+
+  // Now map users to their cells through whichever method we want.
+  switch (sm) {
+    case SearchMethod::Slow:
+      this->map_slow(); break;
+    case SearchMethod::Quick:
+      this->map_quick(); break;
+    case SearchMethod::KNN:
+    case SearchMethod::Default:
+      this->map_knn(); break;
+    default:
+      throw runtime_error("VoronoiDiagram::build(): bad SearchMethod!");
+  };
 }
 
 // Common instantiations.

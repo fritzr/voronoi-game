@@ -27,11 +27,8 @@ set(TEST_PROG vgtest)
 
 add_executable(${TEST_PROG} voronoi.h voronoi.cc main.h main.cc )
 
-# use slow method for user/site mapping until we fix the fast method
-#add_definitions(-DCELLS_SLOW)
-
-# this is just annoying
-add_definitions(-Wno-parentheses)
+# these are just annoying
+add_definitions(-Wno-parentheses -Wno-class-memaccess)
 
 target_link_libraries(${TEST_PROG}
   ${OpenCV_LIBS}

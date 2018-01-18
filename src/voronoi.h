@@ -131,8 +131,9 @@ private:
   }
 
   // Workhorse(s) for build() (only one of these is implemented at a time)
-  void build_fast(void);
-  void build_slow(void);
+  void map_knn(void);
+  void map_quick(void);
+  void map_slow(void);
 
 public:
   // Initialize a Voronoi diagram from the given input facilities
@@ -210,10 +211,26 @@ public:
     return true;
   }
 
-  // Actually build the Voronoi diagram and figure out which users belong to
-  // which sites.
-  // This process takes O(m log m + n log n) time for m sites and m users.
-  void build(void);
+  enum SearchMethod {
+    Default=0,
+    Slow,
+    Quick,
+    KNN,
+    SM_BAD,
+  };
+  // Build the Voronoi diagram and figure out which users belong to which
+  // sites. This method performs two steps. The first step is to build
+  // the Voronoi diagram out of the sites(), which takes O(m log m) time.
+  // The second step is to map users to their closest sites. How the nearest
+  // site is located depends on the SearchMethod parameter. The SearchMethod
+  // algorithms have different run-times:
+  // SearchMethod   Average case		Worst case
+  //   Slow	    O(m * n)			O(m * n)
+  //   Quick	    O((m + n) log n)		O(m * n)
+  //   KNN*	    O(n (log n + log m))	O(n (log n + log m))
+  // * The method marked with a '*' is the default.
+  // For implementation details, see source code of the map_* methods.
+  void build(SearchMethod method=Default);
 };
 
 template <class Tp_>

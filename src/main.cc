@@ -42,6 +42,8 @@ struct options_t {
   bool fill_inputs = false;
   int screenWidth = 1920;
   int screenHeight = 1080;
+  VoronoiDiagram<double>::SearchMethod queryType
+    =VoronoiDiagram<double>::Default;
 
   string sites_path;
   string users_path;
@@ -94,6 +96,9 @@ usage(const char *prog, const char *errmsg)
     << endl
     << "  -H SIZE		Max height of the display (default: 1080)"
     << endl
+    << "  -q TYPE		Query type for mapping users to sites:" << endl
+    << "    [0:default], 1:brute force, 2:range search, 3:NN(1) (fastest)"
+    << endl
     ;
   if (errno) {
     cerr << endl;
@@ -121,7 +126,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:";
+static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:";
 
 // Parses options and sets the global options structure.
 static void
@@ -163,6 +168,10 @@ get_options(int argc, char *argv[], options_t &o)
       break;
     case 'H':
       o.screenHeight = getenum<int>(INT_MAX, optarg, errstr, "screen height");
+      break;
+    case 'q':
+      o.queryType = getenum<VoronoiDiagram<double>::SearchMethod>(
+        VoronoiDiagram<double>::SM_BAD, optarg, errstr, "query type");
       break;
     case 'h':
       usage(argv[0]);
@@ -376,7 +385,7 @@ int main(int argc, char *argv[])
   VoronoiDiagram<double> vd(
       sites.begin(), sites.end(), users.begin(), users.end(),
       resolution.width, resolution.height);
-  vd.build();
+  vd.build(opts.queryType);
 
   if (opts.drawEdges) {
     draw_cells(img, vd);
