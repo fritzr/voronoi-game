@@ -26,6 +26,7 @@ include_directories(
 set(TEST_PROG vgtest)
 
 add_executable(${TEST_PROG} voronoi.h voronoi.cc main.h main.cc )
+add_executable(treetest treetest.cc tree.h )
 
 # these are just annoying
 add_definitions(-Wno-parentheses -Wno-class-memaccess)
@@ -35,9 +36,12 @@ target_link_libraries(${TEST_PROG}
   ${Boost_LIBRARIES}
   )
 
+target_link_libraries(treetest ${Boost_LIBRARIES} )
+
 set_target_properties(${TEST_PROG} PROPERTIES
   COTIRE_ENABLE_PRECOMPILED_HEADER TRUE
   )
 cotire(${TEST_PROG})
 
 install (TARGETS ${TEST_PROG} DESTINATION bin)
+install (TARGETS treetest DESTINATION bin)
