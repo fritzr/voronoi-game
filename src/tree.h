@@ -1,6 +1,10 @@
 #include <list>
 #include <iterator>
 
+#include <boost/intrusive/avltree.hpp>
+#include <boost/intrusive/rbtree.hpp>
+#include <boost/intrusive/splaytree.hpp>
+#include <boost/intrusive/treap.hpp>
 #include <boost/intrusive/avltree_algorithms.hpp>
 #include <boost/intrusive/rbtree_algorithms.hpp>
 #include <boost/intrusive/splaytree_algorithms.hpp>
@@ -14,7 +18,8 @@ namespace tree {
   typedef __VA_ARGS__ node_traits; \
   typedef typename node_traits::node node; \
   typedef typename node_traits::node_ptr node_ptr; \
-  typedef typename node_traits::const_node_ptr const_node_ptr
+  typedef typename node_traits::const_node_ptr const_node_ptr; \
+  typedef tree::node_value_traits<node_traits> value_traits
 
 #define DEFINE_NODE(...) \
   _DECLARE_TRAITS(__VA_ARGS__); \
@@ -34,6 +39,27 @@ namespace tree {
 namespace bi = boost::intrusive;
 
 /* Generic tree structures */
+
+template<class Nt_, bi::link_mode_type Link_t=bi::normal_link>
+struct node_value_traits
+{
+   typedef Nt_                                                 node_traits;
+   typedef typename node_traits::node_ptr                      node_ptr;
+   typedef typename node_traits::const_node_ptr                const_node_ptr;
+   typedef typename node_traits::node                          value_type;
+   typedef node_ptr                                            pointer;
+   typedef const_node_ptr                                      const_pointer;
+   static const bi::link_mode_type link_mode = Link_t;
+   static node_ptr to_node_ptr (value_type &value)
+     {  return node_ptr(&value); }
+   static const_node_ptr to_node_ptr (const value_type &value)
+     {  return const_node_ptr(&value); }
+   static pointer to_value_ptr(node_ptr n)
+     {  return pointer(n); }
+   static const_pointer to_value_ptr(const_node_ptr n)
+     {  return const_pointer(n); }
+};
+
 
 template<class Nt_, class Node_algorithms>
 class _node_iterator
@@ -184,37 +210,38 @@ public:
 };
 
 template<class Nt_, class Node_algorithms>
-  class _leaf_iterator : public _node_iterator<Nt_, Node_algorithms>
+  class _inorder_iterator : public _node_iterator<Nt_, Node_algorithms>
 {
 public:
   DECLARE_TRAITS(Nt_);
   typedef Node_algorithms node_algorithms;
 
-  _leaf_iterator(node_ptr header, node_ptr current)
+  _inorder_iterator(node_ptr header, node_ptr current)
     : _node_iterator<node_traits, node_algorithms>(header, current) { }
 
-  inline _leaf_iterator &operator++(void) {
+  inline _inorder_iterator &operator++(void) {
     if (this->current_ != this->header_)
       this->current_ = node_algorithms::next_node(this->current_);
     return *this;
   }
 
-  inline _leaf_iterator &operator--(void) {
+  inline _inorder_iterator &operator--(void) {
     if (this->current_ != this->header_)
       this->current_ = node_algorithms::prev_node(this->current_);
     return *this;
   }
 
-  inline _leaf_iterator operator++(int) { // post-fix
-    _leaf_iterator ret = *this;
+  inline _inorder_iterator operator++(int) { // post-fix
+    _inorder_iterator ret = *this;
     ++(*this);
     return ret;
   }
 };
 
-// Like the boost::intrusive::generictree, but templated on node type,
-// providing wrapper methods to invoke the boost::intrusive::generictree_algorithms
+// Like the boost::intrusive::*tree, but templated on node type,
+// providing wrapper methods to invoke the boost::intrusive::*tree_algorithms
 // capabilities which operate on nodes.
+// This is actually not needed with proper manipulation of value_traits.
 template<class Node_traits, class Node_compare, class Node_algorithms>
 class generic_tree
 {
@@ -226,10 +253,10 @@ public:
   // For iteration.
   typedef node_ptr value_type;
   typedef size_t size_type;
-  typedef _leaf_iterator<node_traits, node_algorithms> leaf_iterator;
+  typedef _inorder_iterator<node_traits, node_algorithms> inorder_iterator;
   typedef _dfs_iterator<node_traits, node_algorithms> dfs_iterator;
   typedef _bfs_iterator<node_traits, node_algorithms> bfs_iterator;
-  typedef leaf_iterator iterator;
+  typedef inorder_iterator iterator;
 
 private:
   // Header, needed for the algorithms methods.
@@ -261,10 +288,10 @@ public:
   // Node traversal (all iterators share a common 'end' iterator).
   // In-order traversal.
   inline iterator begin (void) {
-    return leaf_iterator(header_, node_algorithms::begin_node(header_));
+    return inorder_iterator(header_, node_algorithms::begin_node(header_));
   }
   inline iterator end (void) {
-    return leaf_iterator(header_, header_);
+    return inorder_iterator(header_, header_);
   }
   // Breadth-first traversal.
   inline bfs_iterator bfs_begin(void) {
@@ -382,6 +409,17 @@ public:
     return node_algorithms::insert_equal(header_, hint, n, cmp);
   }
 
+  // Manual insertions (without checking preconditions).
+  inline node_ptr insert_before(node_ptr const & pos, node_ptr const & n) {
+    return node_algorithms::insert_before(header_, pos, n);
+  }
+  inline void push_back(node_ptr const & n) {
+    return node_algorithms::push_back(header_, n);
+  }
+  inline void push_front(node_ptr const & n) {
+    return node_algorithms::push_front(header_, n);
+  }
+
   // Removal methods.
   inline void unlink(node_ptr const & n) {
     return node_algorithms::erase(header_, n);
@@ -394,22 +432,22 @@ public:
   inline size_type size(void) const {
     return node_algorithms::size(root()); // size of subtree at root (all)
   }
-  inline size_type size(node_ptr const & n) const {
+  inline static size_type size(node_ptr const & n) {
     return node_algorithms::size(n); // size of subtree at n
   }
-  inline size_type height(node_ptr const & n) const {
-    // Height of a subtree.
-    int height = 0;
-    node_ptr nl=n, nr=n;
-    while (nr || nl) {
-      ++height;
-      if (nl) nl = node_traits::get_left(nl);
-      if (nr) nr = node_traits::get_right(nr);
+  inline size_type depth(node_ptr const & n) const {
+    // Depth of a subtree (distance from root).
+    int depth = 0;
+    node_ptr cur = n;
+    while (cur != root()) {
+      ++depth;
+      cur = node_traits::get_parent(cur);
     }
-    return height;
+    return depth;
   }
-  inline size_type height(void) const {
-    return height(root());
+  inline static bool is_leaf(const_node_ptr n) {
+    return (node_traits::get_left(n) == nullptr)
+      && (node_traits::get_right(n) == nullptr);
   }
 };
 
@@ -460,6 +498,16 @@ struct avl_tree
   typedef generic_tree<node_traits, Node_compare, node_algorithms> type;
 };
 
+template<class Node>
+struct make_avltree
+{
+  typedef typename bi::value_traits<typename Node::value_traits> value_option;
+  typedef typename bi::compare<typename Node::compare> compare_option;
+  typedef typename bi::constant_time_size<false> size_option;
+  typedef typename bi::avltree<Node, value_option, compare_option, size_option>
+    type;
+};
+
 
 /* RB_TREE */
 
@@ -506,6 +554,16 @@ struct rb_tree
   typedef generic_tree<node_traits, Node_compare, node_algorithms> type;
 };
 
+template<class Node>
+struct make_rbtree
+{
+  typedef typename bi::value_traits<typename Node::value_traits> value_option;
+  typedef typename bi::compare<typename Node::compare> compare_option;
+  typedef typename bi::constant_time_size<false> size_option;
+  typedef typename bi::rbtree<Node, value_option, compare_option, size_option>
+    type;
+};
+
 
 /* SPLAY_TREE */
 
@@ -530,6 +588,16 @@ struct splay_tree
   typedef generic_tree<node_traits, Node_compare, node_algorithms> type;
 };
 
+template<class Node>
+struct make_splaytree
+{
+  typedef typename bi::value_traits<typename Node::value_traits> value_option;
+  typedef typename bi::compare<typename Node::compare> compare_option;
+  typedef typename bi::constant_time_size<false> size_option;
+  typedef typename bi::splaytree<Node, value_option, compare_option, size_option>
+    type;
+};
+
 
 /* TREAP_TREE */
 
@@ -552,6 +620,16 @@ struct treap
   typedef treap_node_traits<Node> node_traits;
   typedef typename bi::treap_algorithms<node_traits> node_algorithms;
   typedef generic_tree<node_traits, Node_compare, node_algorithms> type;
+};
+
+template<class Node>
+struct make_treap
+{
+  typedef typename bi::value_traits<typename Node::value_traits> value_option;
+  typedef typename bi::compare<typename Node::compare> compare_option;
+  typedef typename bi::constant_time_size<false> size_option;
+  typedef typename bi::treap<Node, value_option, compare_option, size_option>
+    type;
 };
 
 }; // namespace tree
