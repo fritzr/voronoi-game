@@ -24,9 +24,10 @@ struct Edge
 
   coordinate_type coord; // actual coordinate
   typename bp::direction_1d dir; // LOW or HIGH
-  size_t rect_index; // parent rectangle
+  int rect_index; // parent rectangle
 
-  Edge(coordinate_type const& c, bp::direction_1d const& d, size_t idx)
+  Edge() : coord(), dir(), rect_index(-1) {}
+  Edge(coordinate_type const& c, bp::direction_1d const& d, int idx)
     : coord(c), dir(d), rect_index(idx) {}
 };
 
@@ -74,6 +75,16 @@ struct EdgeCompare
   }
 };
 
+template<class Node_>
+struct depth_compare
+{
+  typedef Node_ node;
+  inline bool operator()(const node &d1, const node &d2) const
+  {
+    return d1.depth < d2.depth;
+  }
+};
+
 // Node to track 'cell depths'. These form the tree T(V_k) from the paper,
 // the leaves of which represent g_k[j]: the depth of the cell at position
 // j in the current sweep partition.
@@ -81,18 +92,24 @@ template<class Tp_>
 class DepthNode : public tree::avl_node<DepthNode<Tp_> >
 {
 public:
-  DECLARE_TRAITS(tree::avl_node_traits<DepthNode>);
-  typedef Edge<Tp_> edge_type;
+  typedef Tp_ coordinate_type;
+  typedef DepthNode<Tp_> my_type;
+  typedef tree::avl_node<my_type> base_type;
+  DECLARE_TRAITS(tree::avl_node_traits<my_type>);
+  typedef Edge<coordinate_type> edge_type;
+  typedef depth_compare<my_type> compare;
 
   // Internal depth value of the node.
-  size_t depth;
-  // Whether we are a leaf node.
-  bool leaf(void) const {
-    return (node_traits::get_left(this) == nullptr)
-      && (node_traits::get_right(this) == nullptr);
-  }
+  int depth;
   // If we are a leaf node, which X edge we correspond to.
   edge_type leaf_edge;
+
+  DepthNode() : base_type(), depth(0), leaf_edge() {}
+
+  // Whether we are a leaf node.
+  inline bool leaf(void) const {
+    return !node_traits::get_left(this) && !node_traits::get_right(this);
+  }
 };
 
 template<class Tp_>
@@ -111,15 +128,14 @@ public:
     edge_set;
   typedef std::priority_queue<edge_type, edge_container, edge_comparator>
     edge_queue;
-  /*
-  typedef typename tree::avl_tree<DepthNode, typename DepthNode::compare>
-    depth_tree; // T(V_k) from the paper
-  */
+  // T(V_k) from the paper
+  typedef typename tree::make_avltree<DepthNode<Tp_> >::type depth_tree_type;
 
 private:
   rect_container rects;
   edge_queue edges_y; // horizontal rect edges which are the sweep events
   edge_set edges_x;   // vertical rect edges within each sweep line event
+  depth_tree_type depth_tree;
 
   inline rect_type &rect(edge_type const& edge) {
     return rects[edge.rect_index];
