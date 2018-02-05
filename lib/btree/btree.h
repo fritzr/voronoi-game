@@ -1208,11 +1208,10 @@ class btree : public Params::key_compare {
     return (bytes_used() - size() * kValueSize) / double(size());
   }
 
- private:
-  // Internal accessor routines.
+ public:
+  // Expose access to the inner nodes.
   node_type* root() { return root_.data; }
   const node_type* root() const { return root_.data; }
-  node_type** mutable_root() { return &root_.data; }
 
   // The rightmost node is stored in the root node.
   node_type* rightmost() {
@@ -1221,11 +1220,14 @@ class btree : public Params::key_compare {
   const node_type* rightmost() const {
     return (!root() || root()->leaf()) ? root() : root()->rightmost();
   }
-  node_type** mutable_rightmost() { return root()->mutable_rightmost(); }
 
   // The leftmost node is stored as the parent of the root node.
   node_type* leftmost() { return root() ? root()->parent() : NULL; }
   const node_type* leftmost() const { return root() ? root()->parent() : NULL; }
+
+ private:
+  node_type** mutable_root() { return &root_.data; }
+  node_type** mutable_rightmost() { return root()->mutable_rightmost(); }
 
   // The size of the tree is stored in the root node.
   size_type* mutable_size() { return root()->mutable_size(); }
