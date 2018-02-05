@@ -18,9 +18,12 @@ endif()
 #  message(STATUS "${_variableName}=${${_variableName}}")
 #endforeach()
 
+set(LIB_INCLUDE "${CMAKE_SOURCE_DIR}")
+
 include_directories(
   ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
+  ${LIB_INCLUDE}
   )
 
 set(TEST_PROG vgtest)
