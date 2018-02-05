@@ -463,9 +463,10 @@ class btree_node {
   // If the key is an integral or floating point type, use linear search which
   // is faster than binary search for such types. Might be wise to also
   // configure linear search based on node-size.
+  // Edit: always use binary search type.
   typedef typename if_<
-    std::is_integral<key_type>::value ||
-    std::is_floating_point<key_type>::value,
+    false/*std::is_integral<key_type>::value ||
+    std::is_floating_point<key_type>::value*/,
     linear_search_type, binary_search_type>::type search_type;
 
   struct base_fields {
@@ -852,6 +853,7 @@ struct btree_internal_locate_compare_to {
 
 template <typename Params>
 class btree : public Params::key_compare {
+public:
   typedef btree<Params> self_type;
   typedef btree_node<Params> node_type;
   typedef typename node_type::base_fields base_fields;
@@ -930,7 +932,14 @@ class btree : public Params::key_compare {
 
  public:
   // Default constructor.
-  btree(const key_compare &comp, const allocator_type &alloc);
+  btree(const key_compare &comp=key_compare(),
+        const allocator_type &alloc=allocator_type());
+
+  // Insertion constructor.
+  template<typename InputIter>
+    btree(InputIter begin, InputIter end,
+        const key_compare &comp=key_compare(),
+        const allocator_type &alloc=allocator_type());
 
   // Copy constructor.
   btree(const self_type &x);
@@ -976,6 +985,19 @@ class btree : public Params::key_compare {
         internal_lower_bound(key, const_iterator(root(), 0)));
   }
 
+  // Traverse the nodes on the path to the first element
+  // whose key is not less than key.
+  template<typename FuncType>
+  iterator lower_traverse(const key_type &key, FuncType func) {
+    return internal_end(
+        internal_traverse_lower(key, iterator(root(), 0), func));
+  }
+  template<typename FuncType>
+  const_iterator lower_traverse(const key_type &key, FuncType func) const {
+    return internal_end(
+        internal_traverse_lower(key, const_iterator(root(), 0), func));
+  }
+
   // Finds the first element whose key is greater than key.
   iterator upper_bound(const key_type &key) {
     return internal_end(
@@ -984,6 +1006,19 @@ class btree : public Params::key_compare {
   const_iterator upper_bound(const key_type &key) const {
     return internal_end(
         internal_upper_bound(key, const_iterator(root(), 0)));
+  }
+
+  // Traverse the nodes on the path to the first element
+  // whose key is greater than key.
+  template<typename FuncType>
+  iterator upper_traverse(const key_type &key, FuncType func) {
+    return internal_end(
+        internal_traverse_upper(key, iterator(root(), 0), func));
+  }
+  template<typename FuncType>
+  const_iterator upper_traverse(const key_type &key, FuncType func) const {
+    return internal_end(
+        internal_traverse_upper(key, const_iterator(root(), 0), func));
   }
 
   // Finds the range of values which compare equal to key. The first member of
@@ -1338,10 +1373,20 @@ class btree : public Params::key_compare {
   IterType internal_lower_bound(
       const key_type &key, IterType iter) const;
 
+  // Internal routine which implements traverse_lower().
+  template <typename IterType, typename FuncType>
+  IterType internal_traverse_lower(
+      const key_type &key, IterType iter, FuncType func) const;
+
   // Internal routine which implements upper_bound().
   template <typename IterType>
   IterType internal_upper_bound(
       const key_type &key, IterType iter) const;
+
+  // Internal routine which implements traverse_upper().
+  template <typename IterType, typename FuncType>
+  IterType internal_traverse_upper(
+      const key_type &key, IterType iter, FuncType func) const;
 
   // Internal routine which implements find_unique().
   template <typename IterType>
@@ -1737,6 +1782,14 @@ btree<P>::btree(const self_type &x)
     : key_compare(x.key_comp()),
       root_(x.internal_allocator(), NULL) {
   assign(x);
+}
+
+template <typename P> template <typename InputIter>
+btree<P>::btree(InputIter begin, InputIter end,
+    const key_compare &comp, const allocator_type &alloc)
+  : key_compare(comp), root_(alloc, NULL)
+{
+  insert_unique(begin, end);
 }
 
 template <typename P> template <typename ValuePointer>
@@ -2280,6 +2333,26 @@ IterType btree<P>::internal_lower_bound(
   return iter;
 }
 
+template <typename P>
+template <typename IterType, typename FuncType>
+IterType btree<P>::internal_traverse_lower(
+    const key_type &key, IterType iter, FuncType func) const
+{
+  if (iter.node) {
+    for (;;) {
+      iter.position =
+          iter.node->lower_bound(key, key_comp()) & kMatchMask;
+      if (iter.node->leaf()) {
+        break;
+      }
+      func(iter);
+      iter.node = iter.node->child(iter.position);
+    }
+    iter = internal_last(iter);
+  }
+  return iter;
+}
+
 template <typename P> template <typename IterType>
 IterType btree<P>::internal_upper_bound(
     const key_type &key, IterType iter) const {
@@ -2289,6 +2362,25 @@ IterType btree<P>::internal_upper_bound(
       if (iter.node->leaf()) {
         break;
       }
+      iter.node = iter.node->child(iter.position);
+    }
+    iter = internal_last(iter);
+  }
+  return iter;
+}
+
+template <typename P>
+template <typename IterType, typename FuncType>
+IterType btree<P>::internal_traverse_upper(
+    const key_type &key, IterType iter, FuncType func) const
+{
+  if (iter.node) {
+    for (;;) {
+      iter.position = iter.node->upper_bound(key, key_comp());
+      if (iter.node->leaf()) {
+        break;
+      }
+      func(iter);
       iter.node = iter.node->child(iter.position);
     }
     iter = internal_last(iter);
