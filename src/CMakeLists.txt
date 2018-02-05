@@ -18,7 +18,7 @@ endif()
 #  message(STATUS "${_variableName}=${${_variableName}}")
 #endforeach()
 
-set(LIB_INCLUDE "${CMAKE_SOURCE_DIR}")
+set(LIB_INCLUDE "${CMAKE_SOURCE_DIR}/lib")
 
 include_directories(
   ${OpenCV_INCLUDE_DIRS}
