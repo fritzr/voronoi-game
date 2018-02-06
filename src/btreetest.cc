@@ -7,6 +7,7 @@
 #include <sstream>
 #include <fstream>
 #include <cstdlib>
+#include <cstdio>
 
 #include <boost/geometry.hpp>
 #include <boost/polygon/polygon.hpp>
@@ -58,15 +59,21 @@ struct KeyData
 struct LeafData
 {
   //int rect_idx; // parent rectangle
-  string name; // parent's name
+  int id; // parent's name
   bp::direction_1d dir; // left or right edge (LOW or HIGH)?
 
-  LeafData() : name("<null>"), dir(bp::LOW) {}
-  LeafData(const string& n, bp::direction_1d which)
-    : name(n), dir(which) {}
+  LeafData() : id(-1), dir(bp::LOW) {}
+  LeafData(int index, bp::direction_1d which)
+    : id(index), dir(which) {}
+
+  inline string name(void) const {
+    if (id >= 0)
+      return string("x") + to_string(id);
+    return string("<bad>");
+  }
 
   inline string str(void) const {
-    return name + d2s(dir);
+    return name() + d2s(dir);
   }
 
   inline friend ostream& operator<<(ostream& os, const LeafData& n) {
@@ -157,13 +164,15 @@ struct node_visitor
 
 template<typename Tree>
 int
-write_tree(const string& filename, const Tree& tree)
+write_tree(const string& base_filename, const Tree& tree)
 {
-  cout << "writing " << tree.nodes() << " nodes to " << filename << endl;
+  string gv_filename = base_filename + ".gv";
+  string ps_filename = base_filename + ".ps";
+  cout << "writing " << tree.nodes() << " nodes to " << ps_filename << endl;
   const typename Tree::node_type* root = tree.root();
 
   // BFS traversal
-  ofstream of(filename);
+  ofstream of(gv_filename);
   of << "digraph G {" << endl;
   list<const typename Tree::node_type*> queue;
   queue.push_front(root);
@@ -181,15 +190,45 @@ write_tree(const string& filename, const Tree& tree)
   of << "}" << endl;
   of.close();
 
-  // now run dot to generate PS file
-  string dot_cmd = string("dot -Tps -O ") + filename;
-  return system(dot_cmd.c_str());
+  // now run dot to generate PS file; cleanup the gv file on success
+  string dot_cmd = string("dot -Tps ") + gv_filename
+    + string(" > ") + ps_filename;
+  int ret = system(dot_cmd.c_str());
+  if (ret == 0)
+    remove(gv_filename.c_str());
+  return ret;
+}
+
+template<typename Tree>
+static void
+init_depths(Tree& t)
+{
+  typedef typename Tree::data_type data_type;
+  typedef typename Tree::key_type key_type;
+  typedef typename Tree::iterator iterator;
+  int depth = 0;
+  set<int> current;
+  for (iterator it = t.begin(); it != t.end(); ++it)
+  {
+    key_type& key = const_cast<key_type&>(it->first);
+    const data_type& data = it->second;
+    auto curid = current.find(data.id);
+    if (curid == current.end())
+    {
+      current.insert(data.id);
+      key.depth = ++depth;
+    }
+    else
+    {
+      current.erase(curid);
+      key.depth = depth--;
+    }
+  }
 }
 
 int main(int argc, char* argv[])
 {
   vector<Tree::value_type> nodes;
-  srand(time(NULL));
 
   int num_nodes = 10;
   if (argc > 1)
@@ -197,6 +236,9 @@ int main(int argc, char* argv[])
   // bad
   if (num_nodes <= 0)
     return 1;
+
+  if (argc > 2)
+    srand(atoi(argv[2]));
 
   // generate requested number of nodes
   const float fmax = 10.0f;
@@ -206,13 +248,14 @@ int main(int argc, char* argv[])
     float lowval = randf(0.0f, fmax);
     float highval = randf(lowval, fmax);
     nodes.push_back(make_pair(
-          KeyData(lowval, 0), LeafData(name, bp::LOW)));
+          KeyData(lowval, 0), LeafData(i, bp::LOW)));
     nodes.push_back(make_pair(
-          KeyData(highval, 0), LeafData(name, bp::HIGH)));
+          KeyData(highval, 0), LeafData(i, bp::HIGH)));
   }
 
   // create the tree by inserting the nodes
   Tree t(nodes.begin(), nodes.end());
+  init_depths(t);
   cout << "nodes: " << endl;
   for (auto it = t.begin(); it != t.end(); ++it)
     cout << node_string(it.node) << endl;
@@ -223,7 +266,13 @@ int main(int argc, char* argv[])
   node_visitor<Tree> v;
   v(t.lower_traverse(keyval, v));
 
+  if (argc > 3)
+  {
+    size_t rcount = atoi(argv[3]);
+    while (rcount--)
+      t.erase_unique(t.root()->key(0));
+  }
+
   // write nodes to a PS file
-  const string filename("btree.gv");
-  return write_tree(filename, t);
+  return write_tree("btree", t);
 }
