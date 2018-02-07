@@ -10,6 +10,8 @@
 
 #include <utility> // pair
 #include <array>
+#include <algorithm>
+#include <functional>
 
 namespace tree
 {
@@ -36,7 +38,6 @@ struct l23_default_params
 // Some forward class declarations.
 template<class Params> class l23_inode;
 template<class Params> class l23_lnode;
-template<class Params> class l23_rootnode;
 template<class Params> class l23_iterator;
 template<class Params> class l23_tree;
 
@@ -65,29 +66,14 @@ public:
 public:
   // Methods.
   inline inode_type* parent(void) const { return parent_; }
-  static inline size_type max_count(void) { return 3; }
+  static inline size_type max_count(void) { return 3u; }
+  static inline size_type max_keys(void) { return 2u; }
   // Number of internal child nodes. This will still return the number of leaf
   // children if our children are leaves. Always 0, 2, or 3 for non-leaves.
   inline size_type child_count(void) const { return child_count_; }
   // Get internal child i. Unchecked: valid only for 0 <= i < child_count().
   inline const inode_type* child(size_type i) const { return u_.children[i]; }
   inline inode_type* child(size_type i) { return u_.children[i]; }
-  inline bool add_child(inode_type *new_child)
-  {
-    if (child_count() < max_count())
-    {
-      u_.children[(child_count_++ - 1)] = new_child;
-      return true;
-    }
-    return false;
-  }
-  inline inode_type* set_child(size_type i, inode_type* new_child)
-  {
-    inode_type* old_child = u_.children[i];
-    u_.children[i] = new_child;
-    child_count_ = std::max(child_count_, i);
-    return old_child;
-  }
 
   inline inode_type* left_child(void) { return child(0); }
   inline inode_type* middle_child(void) { return child(1); }
@@ -100,7 +86,7 @@ public:
   inline bool has_leaves(void) const { return leaf_; }
   // Number of leaves. 0 unless has_leaves() returns true. At most 3.
   inline size_type leaf_count(void) const
-    { return has_leaves() ? child_count():0; }
+    { return has_leaves() ? child_count() : 0; }
   // Get leaf node i. Unchecked: valid only for 0 <= i < leaf_count().
   inline const lnode_type* leaf(size_type i) const
     { return static_cast<lnode_type*>(u_.children[i]); }
@@ -109,7 +95,7 @@ public:
 
   // Insert at leaf at the given index. MUST be in sorted order,
   // or the tree will be FUBAR.
-  inline bool insert_leaf(lnode_type* new_leaf, size_type index)
+  bool insert_leaf(lnode_type* new_leaf, size_type index)
   {
     if (full() || index >= max_count())
       return false;
@@ -117,13 +103,12 @@ public:
     // We MUST have a null pointer in the end slot which is overwritten
     // (checked by verifying we are not full() above).
     for (size_type lidx = max_count()-1; lidx > index; --lidx)
-      u_.leaves[lidx] = u_.leaves[lidx-1];
-    u_.leaves[index] = new_leaf;
+      set_leaf(lidx, leaf(lidx-1));
+    set_leaf(index, new_leaf);
     ++child_count_;
-    // Now fix the keys: key(i) is a copy of key(leaf(i)).
-    // If the insert index was 2, the caller will have to fix parent keys.
-    for (size_type kidx = 0u; kidx < key_count(); ++kidx)
-      keys_[kidx] = leaf(kidx)->key();
+    // Now fix the keys. Note if the insert index was 2,
+    // the caller will have to fix parent keys recursively.
+    fix_leaf_keys();
     return (leaves_ = true);
   }
   inline bool insert_leaf(const value_type& value, size_type index) {
@@ -133,17 +118,37 @@ public:
     return insert_leaf(new_leaf, index);
   }
 
+  // Append a leaf as the new middle or max leaf.
+  // Note that if it is the new max leaf, parent keys must be fixed by the
+  // caller.
   inline bool add_leaf(const value_type& value)
     { return insert_leaf(value, leaf_count()); }
   inline bool add_leaf(lnode_type *new_leaf)
     { return insert_leaf(new_leaf, leaf_count()); }
-  inline lnode_type* set_leaf(size_type i, lnode_type* new_leaf)
-  {
-    inode_type* old_child = u_.children[i];
-    u_.children[i] = new_child;
-    if (new_leaf != nullptr)
-      leaves_ = true;
-    return old_child;
+
+  // Remove and return the current max leaf. Updates count.
+  // Returns nullptr iff there are no leaves.
+  // Note that if there were only two leaves, the node is now invalidated
+  // (nodes should always have 2 or 3 children).
+  lnode_type* pop_leaf(void) {
+    if (leaf_count() == 0)
+      return nullptr;
+    return leaf(--child_count_);
+  }
+
+  // Swap out a leaf with a new one and fix the keys.
+  // You must ensure the sort invariant is maintained. Returns NULL for
+  // out-of-bounds index, or if the leaf at index was already null.
+  lnode_type* swap_leaf(size_type index, lnode_type* new_leaf) {
+    if (index >= max_count())
+      return nullptr;
+    lnode_type* old_leaf = leaf(index);
+    set_leaf(index, new_leaf);
+    // Unless we swapped the max key, we must fixup our internal keys.
+    // If we are a max key, parent keys must be fixed by the caller.
+    if (index != max_count()-1)
+      fix_leaf_keys();
+    return old_leaf;
   }
 
   inline inode_type* left_leaf(void) { return leaf(0); }
@@ -153,11 +158,27 @@ public:
   inline const inode_type* middle_leaf(void) const { return leaf(1); }
   inline const inode_type* right_leaf(void) const { return leaf(2); }
 
+private:
+  // Set child or leaf. No bounds checking, and size is not updated.
+  inline void set_child(size_type index, inode_type* node)
+    { u_.children[index] = node; }
+  inline void set_leaf(size_type index, lnode_type* node)
+    { u_.leaves[index] = node; }
+
+  // Fix our internal keys to match our leaf nodes' keys.
+  // Note that key(i) is a copy of key(leaf(i)).
+  inline void fix_leaf_keys(void) {
+    for (size_type kidx = 0u; kidx < key_count(); ++kidx)
+      keys_[kidx] = leaf(kidx)->key();
+  }
+
+public:
   // If we are full, we have no more room for another child.
   inline bool full(void) const { return child_count() == max_count(); }
 
   // Boundary keys. All nodes in child(i) are less than key(i).
-  // The special case child(2) is just not less than key(1). For key_count():
+  // Generally all nodes always have exactly two keys, and either two or three
+  // children. However, nodes which
   //   0 children    -> 0 keys;
   //   1, 2 children -> 1, 2 keys;
   //   3 children    -> 2 keys.
@@ -173,11 +194,18 @@ public:
 public:
   // Constructors.
   l23_inode()
-    : parent_(nullptr),
-      key_count(0), keys_({0}),
-      child_count(0), u_.children({0}),
+    : parent_(nullptr), keys_({0}),
+      child_count_(0), u_.children({0}),
       leaves_(false)
   {}
+
+  // Construct a leaf-container with two leaves in the given sorted order.
+  l23_inode(lnode_type* left, lnode_type* middle)
+    : parent_(nullptr), keys_(left->key(), middle->key()),
+      child_count_(2), u_.leaves({left, middle}),
+      leaves_(true)
+  {
+  }
 
 private:
   ////// Members.
@@ -203,34 +231,6 @@ private:
   bool leaves_;
 };
 
-template<class Params>
-class l23_rootnode : public l23_inode<Params>
-{
-public:
-  // Typedefs.
-  typedef typename Params::key_type key_type;
-  typedef typename Params::key_type data_type;
-  typedef typename Params::value_type value_type;
-  typedef typename Params::key_type key_compare;
-  typedef typename Params::size_type size_type;
-  typedef l23_inode<Params> inode_type;
-  typedef l23_lnode<Params> lnode_type;
-  typedef l23_tree<Params> tree_type;
-  friend class lnode_type;
-  friend class tree_type;
-
-public:
-  // Constructors.
-  l23_rootnode()
-    : inode_type(), leftmost(nullptr), rightmost(nullptr)
-  {}
-
-private:
-  // Members.
-  inode_type *leftmost, *rightmost;
-  size_type tree_size;
-};
-
 //! 2-3 tree (l)eaf node.
 template<class Params>
 class l23_lnode
@@ -248,15 +248,6 @@ public:
   friend class tree_type;
 
 public:
-  l23_lnode()
-    : parent_(nullptr), value_()
-  {}
-
-  template<ValueType>
-  l23_lnode(ValueType v)
-    : parent_(nullptr), value_(v)
-  {}
-
   inline inode_type* parent(void) { return parent_; }
   inline const inode_type* parent(void) const { return parent_; }
 
@@ -268,6 +259,17 @@ public:
 
   inline data_type& data(void) { return Params::data(value()); }
   inline const data_type& data(void) const { return Params::data(value()); }
+
+public:
+  // Constructors.
+  l23_lnode()
+    : parent_(nullptr), value_()
+  {}
+
+  template<ValueType>
+  l23_lnode(ValueType v)
+    : parent_(nullptr), value_(v)
+  {}
 
 private:
   // Members. A leaf node just has a value and a back-pointer to its parent.
@@ -287,7 +289,6 @@ public:
   typedef typename Params::size_type size_type;
   typedef l23_inode<Params> inode_type;
   typedef l23_lnode<Params> lnode_type;
-  typedef l23_rootnode<Params> root_type;
 
 public:
   // Constructors.
@@ -387,17 +388,16 @@ public:
   typedef typename Params::size_type size_type;
   typedef l23_inode<Params> inode_type;
   typedef l23_lnode<Params> lnode_type;
-  typedef l23_rootnode<Params> root_type;
   typedef l23_iterator<Params> iterator;
 
 public:
   // Constructors.
   template<class KeyCompare>
   l23_tree(KeyCompare kcmp=key_compare())
-    : root_(), compare_(kcmp)
+    : root_(nullptr), compare_(kcmp)
   {}
 
-  root_type* root(void) { return &root_; }
+  inode_type* root(void) { return root_; }
 
   // Iterators.
   iterator begin(void) { return iterator(root, 0); }
@@ -434,78 +434,128 @@ public:
   void erase(iterator it);
 
 private:
+  // Simple helpers for comparing without having to remember the STL
+  // comparators.
   template<class KeyType1, class KeyType2, class KeyCompare>
-  inline compare(KeyType1 k1, KeyType2 k2, KeyCompare kcmp) const {
-    return kcmp(k1, k2);
-  }
+  inline bool compare(KeyType1 k1, KeyType2 k2, KeyCompare kcmp) const
+    { return kcmp(k1, k2); }
   template<class KeyType1, class KeyType2>
-  inline compare(KeyType1 k1, KeyType2 k2) const {
-    return compare_(k1, k2);
-  }
+  inline bool compare(KeyType1 k1, KeyType2 k2) const
+    { return compare_(k1, k2); }
+  template<class KeyType1, class KeyType2, class KeyCompare>
+  inline bool equal(KeyType1 k1, KeyType2 k2, KeyCompare kcmp) const
+    { return compare(k1, k2, kcmp) && compare(k2, k1, kcmp); }
+  template<class KeyType1, class KeyType2>
+  inline bool equal(KeyType1 k1, KeyType2 k2) const
+    { return compare(k1, k2) && compare(k2, k1); }
+  template<class KeyType1, class KeyType2, class KeyCompare>
+  inline bool less_equal(KeyType1 k1, KeyType2 k2, KeyCompare kcmp) const
+    { return !compare(k2, k1, kcmp); }
+  template<class KeyType1, class KeyType2>
+  inline bool less_equal(KeyType1 k1, KeyType2 k2) const
+    { return !compare(k2, k1); }
+  template<class KeyType1, class KeyType2, class KeyCompare>
+  inline bool less(KeyType1 k1, KeyType2 k2, KeyCompare kcmp) const
+    { return compare(k1, k2, kcmp); }
+  template<class KeyType1, class KeyType2>
+  inline bool less(KeyType1 k1, KeyType2 k2) const
+    { return compare(k1, k2); }
+  template<class KeyType1, class KeyType2, class KeyCompare>
+  inline bool greater(KeyType1 k1, KeyType2 k2, KeyCompare kcmp) const
+    { return compare(k2, k1); }
+  template<class KeyType1, class KeyType2>
+  inline bool greater(KeyType1 k1, KeyType2 k2) const
+    { return compare(k2, k1); }
+  template<class KeyType1, class KeyType2, class KeyCompare>
+  inline bool greater_equal(KeyType1 k1, KeyType2 k2, KeyCompare kcmp) const
+    { return !compare(k1, k2); }
+  template<class KeyType1, class KeyType2>
+  inline bool greater_equal(KeyType1 k1, KeyType2 k2) const
+    { return !compare(k1, k2); }
 
   // Return where a new key should go in sorted order as a child of the given
   // node by comparing against its (at most) two key values.
   // This version uses a "less than or equal to" comparison.
-  template<class KeyType>
-  struct cle
+  template<class KeyType, class LessFunc>
+  struct cmp_adapter
   {
     inline size_type operator()(KeyType key, inode_type* node) const
     {
-      // Return the only node if we only have one node.
-      // Special behavior: return -1 if we have zero nodes.
-      if (node->count() == 0 || !compare(node->left_key(), k))
-        return 0u; // no left or k <= left: return left child
-      if (node->key_count() > 1 && compare(node->right_key(), k))
-        return 2u; // k > right: return right child
-      // left < k <= right or no right: return middle child
-      return 1u;
+      if (LessFunc(key, node->left_key()))
+        return 0u;
+      if (LessFunc(key, node->right_key()))
+        return 1u;
+      return 2u;
     }
   };
 
-  // Return where a new key should go in sorted order as a child of the given
-  // node by comparing against its (at most) two key values.
-  // This version uses a "strictly less than" comparison.
+  // XXX these probably don't work
+
+  // Internal lower bound function which handles degnerate root node.
+  template<class KeyType, class IndexFunctor>
+    iterator lb(KeyType k, IndexFunctor f) const;
+  // Wrappers to use < or <=.
   template<class KeyType>
-  struct clt
-  {
-    inline size_type operator()(KeyType key, inode_type* node) const
-    {
-      // Return the only node if we only have one node.
-      // Special behavior: return -1 if we have zero nodes.
-      if (node->count() == 0 || compare(k, node->left_key()))
-        return 0u; // no left or k < left: return left child
-      if (node->key_count() > 1 && compare(node->right_key(), k))
-        return 2u; // k > right: return right child
-      // left < k < right or no right: return middle child
-      return 1u;
-    }
-  };
+  iterator lb_lt(KeyType k) const
+    { return lb(k, cmp_adapter<KeyType, decltype(less)>()); }
+  template<class KeyType>
+  iterator lb_le(KeyType k) const
+    { return lb(k, cmp_adapter<KeyType, decltype(less_equal)>()); }
 
-  // IndexFunctor must be one of 'cle' or 'clt'.
-  template<class Params> template<class IndexFunctor, class KeyType>
-    iterator internal_lower_bound(IndexFunctor f, KeyType k) const;
+  // General lower bound function which assumes all nodes have 2 or 3 children.
+  template<class KeyType, class IndexFunctor>
+    iterator lb_gen(KeyType k, IndexFunctor f) const;
+  // Wrappers to use < or <=.
+  template<class KeyType>
+  iterator lb_gen_lt(KeyType k) const
+    { return lb_gen(k, cmp_adapter<KeyType, decltype(less)>()); }
+  template<class KeyType>
+  iterator lb_gen_le(KeyType k) const
+    { return lb_gen(k, cmp_adapter<KeyType, decltype(less_equal)>()); }
+
+  // Insert a leaf in the general case (all nodes have 2 or 3 nodes).
+  iterator insert_leaf(const value_type& v);
+  // Insert an internal node recursively.
+  void insert_internal(inode_type* parent, inode_type* new_node);
 
 private:
   // Members.
-  root_type root_;
+  inode_type* root_;
   key_compare compare_;
 };
 
 // Tree implementations.
 template<class Params> template<class IndexFunctor, class KeyType>
 typename l23_tree<Params>::iterator
-l23_tree<Params>::internal_lower_bound(IndexFunctor get_index, KeyType k) const
+l23_tree<Params>::lb(KeyType k, IndexFunctor get_index) const
 {
-  if (!root()->count())
+  // Special cases: no root or root has 1 child.
+  if (!root() || !root()->count())
     return end();
+  if (root()->count() == 1)
+  {
+    if (equal(k, root()->key(0)))
+      return iterator(root(), 0);
+    return end();
+  }
+
+  // Otherwise we can assume all nodes have 2 or 3 children.
+  return lb_gen(k, get_index);
+}
+
+template<class Params> template<class IndexFunctor, class KeyType>
+typename l23_tree<Params>::iterator
+l23_tree<Params>::lb_gen(KeyType k, IndexFunctor get_index) const
+{
   const inode_type* node = root();
   while (node && !node->has_leaves())
     node = node->child(get_index(k, node));
-  // We must have landed on a non-null node pointing to leaves.
   if (!node || !node->has_leaves())
     return end();
+  // Now we must have landed on a non-null node containing 2 or 3 leaves.
   // Return an iterator pointing to the appropriate lower-bound leaf node.
-  // Note that the child node may not actually exist.
+  // Note that the leaf itself may not actually exist, but will be the
+  // appropriate location for insertion of a value with key k.
   return iterator(node, get_index(k, node));
 }
 
@@ -513,7 +563,7 @@ template<class Params> template<class KeyType>
 typename l23_tree<Params>::iterator
 l23_tree<Params>::lower_bound(KeyType k) const
 {
-  iterator leafp = internal_lower_bound(cle(), k);
+  iterator leafp = lb_le(k);
   if (leafp.leaf() == nullptr)
     return end();
   return leafp;
@@ -523,7 +573,7 @@ template<class Params> template<class KeyType>
 typename l23_tree<Params>::iterator
 l23_tree<Params>::upper_bound(KeyType k) const
 {
-  iterator leafp = internal_lower_bound(cle(), k);
+  iterator leafp = lb_le(k);
   // Increment the iterator until we find a key value greater than k.
   while (leafp != end() && !compare(k, leafp.key()))
     ++leafp;
@@ -534,7 +584,7 @@ template<class Params> template<class KeyType>
 typename l23_tree<Params>::iterator
 l23_tree<Params>::find_unique(KeyType k)
 {
-  iterator leafp = internal_lower_bound(cle(), k);
+  iterator leafp = lb_le(k);
   if (leafp == end() || leafp.leaf() == nullptr)
     return end();
   // Only return the given node if its key is equal to the query key.
@@ -550,12 +600,14 @@ template<class Params>
 typename l23_tree<Params>::iterator
 l23_tree<Params>::insert_unique(const value_type& value)
 {
-  // Special case: root has fewer than two child leaves.
-  if (root()->count() == 0)
+  // Special case: root doesn't exist yet, or root has only one node.
+  // These cases only occur for the first two nodes.
+  if (!root())
   {
-    root()->add_leaf(value);
+    root_ = new inode_type(value);
     return iterator(root(), 0);
   }
+
   if (root()->count() == 1)
   {
     // Insert the node in the right spot.
@@ -565,15 +617,27 @@ l23_tree<Params>::insert_unique(const value_type& value)
     return iterator(root(), pos);
   }
 
-  // Now without loss of generality, every node has either 2 or 3 children.
+  // Handle the general case.
+  return internal_insert(value);
+}
+
+template<class Params>
+typename l23_tree<Params>::iterator
+l23_tree<Params>::insert_leaf(const value_type& value)
+{
+  // Without loss of generality, every node has either 2 or 3 children.
   // Find the proper parent node to contain the new leaf.
-  iterator leafp = internal_lower_bound(clt(), Params::key(value));
+  iterator leafp = lb_lt(Params::key(value));
   if (leafp == end())
     return end();
 
   // If the node is not full, we can just add the leaf directly.
   inode_type* parent = leafp.parent();
-  if (parent->insert_leaf(value, leafp.pos()))
+  lnode_type* new_leaf = new lnode_type(value);
+  inode_type* new_parent = parent;
+  int new_pos = leafp.pos();
+
+  if (parent->insert_leaf(new_leaf, leafp.pos()))
   {
     // But, if we added a new max leaf, we must fix our ancestors' keys
     // because the new upper bound for this subtree may be higher than the
@@ -584,7 +648,7 @@ l23_tree<Params>::insert_unique(const value_type& value)
       inode_type* pnode = parent->parent();
       while (pnode)
       {
-        if (pnode->key_count() > 1 && compare(pnode->key(1), new_key))
+        if (compare(pnode->key(1), new_key))
           pnode->set_key(1, new_key);
         pnode = pnode->parent();
       }
@@ -592,10 +656,48 @@ l23_tree<Params>::insert_unique(const value_type& value)
     return iterator(parent, leafp.pos());
   }
 
-  // Here the parent of the new leaf is full, so we must rebalance.
-  // TODO
+  // Here the immediate parent of the new leaf is full, so we must create a new
+  // node to hold the largest two children and push it upwards.
+
+  // One of the two max leaves must be the current max leaf.
+  inode_type* newnode_middle = parent->pop_leaf();
+  // The other max leaf is either:
+  // (1) the new leaf, in which case
+  lnode_type* newnode_left = nullptr;
+  if (compare(parent->right_key(), new_leaf->key()))
+  {
+    newnode_left = new_leaf;
+    new_parent = nullptr;
+  }
+  // or (2) the current middle leaf, in which case the new leaf becomes the
+  // middle leaf of this parent.
+  else
+    newnode_left = parent->swap_leaf((new_pos = 1), new_leaf);
+
+  // Construct the new node with the two new leaves in the right order.
+  if (compare(newnode_middle->key(), newnode_left->key()))
+  {
+    inode_type* tmp = newnode_left;
+    newnode_left = newnode_middle;
+    newnode_middle = tmp;
+  }
+  inode_type* new_node = new inode_type(newnode_left, newnode_middle);
+
+  // If we d
+  inode_type* new_parent = (newnode_left == new_leaf) ? new_node : parent;
+
+  // Insert the new node into the parent recursively,
+  // unless we are the root node.
+  if (parent != root())
+  {
+    insert_bubble(parent->parent(), new_node);
+    return iterator(new_parent, new_pos);
+  }
 }
 
-
+template<class Params> void
+l23_tree<Params>::insert_internal(inode_type* parent, inode_type* new_node)
+{
+}
 
 } // end namespace tree
