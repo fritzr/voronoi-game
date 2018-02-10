@@ -12,6 +12,11 @@ if (GCC_VERSION VERSION_GREATER 5.0 AND GCC_VERSION VERSION_LESS 5.4)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${CXX_STATIC}")
 endif()
 
+# annoying warnings embedded in boost library code for recent gcc
+if (GCC_VERSION VERSION_GREATER 7.0)
+  add_definitions(-Wno-class-memaccess)
+endif()
+
 # for debugging to dump cmake environment variables
 #get_cmake_property(_variableNames VARIABLES)
 #foreach (_variableName ${_variableNames})
@@ -34,7 +39,7 @@ add_executable(treetest treetest.cc tree.h )
 add_executable(btreetest btreetest.cc)
 
 # these are just annoying
-add_definitions(-Wno-parentheses -Wno-class-memaccess)
+add_definitions(-Wno-parentheses)
 
 target_link_libraries(${TEST_PROG}
   ${OpenCV_LIBS}

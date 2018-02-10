@@ -13,9 +13,48 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-#if !defined(CV_VERSION_MAJOR) || CV_VERSION_MAJOR < 3
+#if defined(CV_VERSION_EPOCH)
 #include <opencv2/contrib/contrib.hpp>
 #include <opencv2/legacy/legacy.hpp>
+#if CV_VERSION_MINOR < 13
+typedef int ColormapTypes;
+
+template <typename It, typename Pt>
+struct pointiter : public std::iterator<
+    typename std::iterator_traits<It>::iterator_category,
+    Pt>
+{
+  typedef typename std::iterator_traits<It> traits;
+  typedef std::iterator<
+    typename traits::iterator_category,
+    Pt> iterator;
+
+  typedef typename iterator::value_type value_type;
+  typedef typename iterator::reference reference;
+  typedef typename iterator::pointer pointer;
+  typedef typename iterator::difference_type difference_type;
+  typedef size_t size_type;
+
+  It it_;
+  pointiter(It it) : it_(it) {}
+
+  inline pointiter& operator++() { ++it_; return *this; }
+  inline pointiter operator++(int) { return pointiter(it_++); }
+  inline bool operator==(pointiter o) const { return it_ == o.it_; }
+  inline bool operator!=(pointiter o) const { return it_ != o.it_; }
+  inline bool operator<(pointiter o) const { return it_ < o.it_; }
+  inline pointiter& operator--() { --it_; return *this; }
+  inline pointiter operator--(int) { return pointiter(it_--); }
+  inline pointiter operator+(int i) { return pointiter(it_ + i); }
+  inline difference_type operator-(pointiter o) { return it_ - o.it_; }
+  inline pointiter& operator+=(int i) { it_ += i; return *this; }
+  inline pointiter& operator-=(int i) { it_ -= i; return *this; }
+  inline value_type operator*() const {
+    auto pt = *it_;
+    return Pt(pt.x, pt.y);
+  }
+};
+#endif
 #endif
 
 #include <boost/range/join.hpp>
@@ -382,8 +421,16 @@ int main(int argc, char *argv[])
   // Flip vertical initially so text comes out up-right (since we flip later)
   cv::flip(img, img, 0);
 
+  // With older OpenCV, you can't construct Point2d from Point
+#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
+  typedef pointiter<vector<Point>::iterator, Point2d> p2di;
+#else
+  typedef vector<Point>::iterator p2di;
+#endif
+
   VoronoiDiagram<double> vd(
-      sites.begin(), sites.end(), users.begin(), users.end(),
+      p2di(sites.begin()), p2di(sites.end()),
+      p2di(users.begin()), p2di(users.end()),
       resolution.width, resolution.height);
   vd.build(opts.queryType);
 
