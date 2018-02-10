@@ -149,7 +149,7 @@ public:
     if (leaf_count() == 0)
       return nullptr;
     lnode_type* l = leaf(--child_count_);
-    l->link(nullptr);
+    if (l) l->link(nullptr);
     set_leaf(child_count(), nullptr);
     return l;
   }
@@ -182,11 +182,11 @@ private:
   // Set child or leaf. No bounds checking, and size is not updated.
   // However, the new node's parent pointer/pos are updated.
   inline void set_child(size_type index, inode_type* node) {
-    node->link(this, index);
+    if (node) node->link(this, index);
     u_.children[index] = node;
   }
   inline void set_leaf(size_type index, lnode_type* node) {
-    node->link(this, index);
+    if (node) node->link(this, index);
     u_.leaves[index] = node;
   }
 
