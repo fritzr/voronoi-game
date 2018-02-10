@@ -215,7 +215,7 @@ public:
   //   1, 2 children -> 1, 2 keys;
   //   3 children    -> 2 keys.
   inline size_type key_count(void) const
-    { return std::max(child_count(), static_cast<size_type>(2)); }
+    { return std::min(child_count(), static_cast<size_type>(2)); }
   // Get key i. Unchecked: valid only for 0 <= i < key_count().
   inline key_type& key(size_type i) { return keys_[i]; }
   inline const key_type& key(size_type i) const { return keys_[i]; }
