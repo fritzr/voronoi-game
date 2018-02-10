@@ -42,7 +42,7 @@ struct l23_default_params
 // Some forward class declarations.
 template<class Params> class l23_inode;
 template<class Params> class l23_lnode;
-template<class Params> class l23_iterator;
+template<class Params, class Ptrs> class l23_iterator;
 template<class Params> class l23_tree;
 
 //! 2-3 tree (i)nternal node.
@@ -59,8 +59,8 @@ public:
   typedef l23_inode<Params> inode_type;
   typedef l23_lnode<Params> lnode_type;
   typedef l23_tree<Params> tree_type;
-  friend class lnode_type;
-  friend class tree_type;
+  friend class l23_lnode<Params>;
+  friend class l23_tree<Params>;
 
   // Various array types. We never hold more than 3 of anything.
   typedef std::array<key_type, 2> key_array; // key copies for indexing
@@ -99,7 +99,7 @@ public:
   inline const inode_type* right_child(void) const { return child(2); }
 
   // Whether our children are leaf nodes (true) or internal nodes (false).
-  inline bool has_leaves(void) const { return leaf_; }
+  inline bool has_leaves(void) const { return leaves_; }
   // Number of leaves. 0 unless has_leaves() returns true. At most 3.
   inline size_type leaf_count(void) const
     { return has_leaves() ? child_count() : 0; }
@@ -109,10 +109,10 @@ public:
 
   // Insert at leaf at the given index. MUST be in sorted order,
   // or the tree will be FUBAR.
-  bool insert_leaf(lnode_type* new_leaf, size_type index)
+  lnode_type* insert_leaf(lnode_type* new_leaf, size_type index)
   {
     if (full() || index >= max_count())
-      return false;
+      return nullptr;
     // Scoot over the nodes starting at index and insert the new leaf.
     // We MUST have a null pointer in the end slot which is overwritten
     // (checked by verifying we are not full() above).
@@ -123,11 +123,12 @@ public:
     // Now fix the keys. Note if the insert index was 2,
     // the caller will have to fix parent keys recursively.
     fix_leaf_keys();
-    return (leaves_ = true);
+    leaves_ = true;
+    return new_leaf;
   }
-  inline bool insert_leaf(const value_type& value, size_type index) {
+  inline lnode_type* insert_leaf(const value_type& value, size_type index) {
     if (full() || index >= max_count())
-      return false;
+      return nullptr;
     lnode_type *new_leaf = new lnode_type(value);
     return insert_leaf(new_leaf, index);
   }
@@ -135,9 +136,9 @@ public:
   // Append a leaf as the new middle or max leaf.
   // Note that if it is the new max leaf, parent keys must be fixed by the
   // caller.
-  inline bool add_leaf(const value_type& value)
+  inline lnode_type* add_leaf(const value_type& value)
     { return insert_leaf(value, leaf_count()); }
-  inline bool add_leaf(lnode_type *new_leaf)
+  inline lnode_type* add_leaf(lnode_type *new_leaf)
     { return insert_leaf(new_leaf, leaf_count()); }
 
   // Remove and return the current max leaf. Updates count.
@@ -213,7 +214,8 @@ public:
   //   0 children    -> 0 keys;
   //   1, 2 children -> 1, 2 keys;
   //   3 children    -> 2 keys.
-  inline size_type key_count(void) const { return std::max(child_count(), 2u); }
+  inline size_type key_count(void) const
+    { return std::max(child_count(), static_cast<size_type>(2)); }
   // Get key i. Unchecked: valid only for 0 <= i < key_count().
   inline key_type& key(size_type i) { return keys_[i]; }
   inline const key_type& key(size_type i) const { return keys_[i]; }
@@ -223,20 +225,22 @@ public:
   inline const key_type& right_key(void) const { return key(1); }
 
   // Unchecked.
-  inline void set_key(const key_type& k, size_type i) { keys_[i] = k; }
+  inline void set_key(size_type i, const key_type& k) { keys_[i] = k; }
 
 public:
   // Constructors.
   l23_inode()
-    : parent_(nullptr), keys_({0}),
-      u_.children({0}), ppos_(-1), leaves_(false), child_count_(0)
+    : parent_(nullptr), keys_(),
+      u_{.children={0}}, ppos_(-1), leaves_(false), child_count_(0)
   {}
 
   // Construct a leaf-container with two leaves in the given sorted order.
   l23_inode(lnode_type* left, lnode_type* middle)
-    : parent_(nullptr), keys_(left->key(), middle->key()),
-      u_.leaves({left, middle}), ppos_(-1), leaves_(true), child_count_(2)
+    : parent_(nullptr), keys_{left->key(), middle->key()},
+      u_{.leaves={left, middle}}, ppos_(-1), leaves_(true), child_count_(2)
   {
+    left->link(this, 0);
+    middle->link(this, 1);
   }
 
 private:
@@ -282,8 +286,8 @@ public:
   typedef l23_inode<Params> inode_type;
   typedef l23_lnode<Params> lnode_type;
   typedef l23_tree<Params> tree_type;
-  friend class inode_type;
-  friend class tree_type;
+  friend class l23_inode<Params>;
+  friend class l23_tree<Params>;
 
 public:
   inline inode_type* parent(void) { return parent_; }
@@ -322,7 +326,7 @@ public:
     : parent_(nullptr), value_()
   {}
 
-  template<ValueType>
+  template<typename ValueType>
   l23_lnode(ValueType v)
     : parent_(nullptr), value_(v)
   {}
@@ -377,6 +381,32 @@ public:
 */
 
 template<class Params>
+struct mptr
+{
+  typedef typename Params::key_type* key_ptr;
+  typedef typename Params::key_type& key_reference;
+  typedef typename Params::data_type* data_ptr;
+  typedef typename Params::data_type& data_reference;
+  typedef typename Params::value_type* value_ptr;
+  typedef typename Params::value_type& value_reference;
+  typedef typename l23_inode<Params>::inode_type* inode_ptr;
+  typedef typename l23_lnode<Params>::lnode_type* lnode_ptr;
+};
+
+template <class Params>
+struct cptr
+{
+  typedef const typename Params::key_type* key_ptr;
+  typedef const typename Params::key_type& key_reference;
+  typedef const typename Params::data_type* data_ptr;
+  typedef const typename Params::data_type& data_reference;
+  typedef const typename Params::value_type* value_ptr;
+  typedef const typename Params::value_type& value_reference;
+  typedef const typename l23_inode<Params>::inode_type* inode_ptr;
+  typedef const typename l23_lnode<Params>::lnode_type* lnode_ptr;
+};
+
+template<class Params, class Ptrs>
 class l23_iterator
 {
 public:
@@ -385,20 +415,26 @@ public:
   typedef typename Params::key_type data_type;
   typedef typename Params::key_type key_compare;
   typedef typename Params::size_type size_type;
-  typedef l23_inode<Params> inode_type;
-  typedef l23_lnode<Params> lnode_type;
 
-  typedef inode_type* value_type;
+  // Maybe-const, maybe not
+  typedef typename Ptrs::key_ptr key_ptr;
+  typedef typename Ptrs::key_reference key_reference;
+  typedef typename Ptrs::data_ptr data_ptr;
+  typedef typename Ptrs::data_reference data_reference;
+  typedef typename Ptrs::value_ptr value_ptr;
+  typedef typename Ptrs::value_reference value_reference;
+  typedef typename Ptrs::inode_ptr inode_ptr;
+  typedef typename Ptrs::lnode_ptr lnode_ptr;
 
 public:
   // Constructors.
 
   // Iterator pointing to an internal node.
-  l23_iterator(inode_type* nptr)
+  l23_iterator(inode_ptr nptr)
     : node_(nptr), lpos_(-1) {}
 
   // Iterator pointing to a leaf node.
-  l23_iterator(lnode_type* lptr)
+  l23_iterator(lnode_ptr lptr)
     : node_(lptr->parent()), lpos_(lptr->pos()) {}
 
   // Invalid iterator.
@@ -416,23 +452,23 @@ public:
   }
 
   // Only valid when is_leaf() is true.
-  inline lnode_type* leaf(void) { return node_->leaf(lpos_); }
-  inline value_type& value(void) { return leaf()->value(); }
-  inline key_type& key(void) { return leaf()->key(); }
+  inline lnode_ptr leaf(void) const { return node_->leaf(lpos_); }
+  inline value_reference value(void) const { return leaf()->value(); }
+  inline key_reference key(void) const { return leaf()->key(); }
   // Negative if is_leaf() is false, otherwise index of current leaf.
   inline int pos(void) const { return lpos_; }
 
   // Return the internal node pointed to by this iterator (if any).
   // Only valid when leaf() is false.
-  inline inode_type* node(void) { return node_; }
+  inline inode_ptr node(void) { return node_; }
   // Return the parent of node().
-  inline inode_type* parent(void) { return node_->parent(); }
+  inline inode_ptr parent(void) { return node_->parent(); }
 
   // Whether this points to a valid node (false for tree.end()).
   inline operator bool(void) const { return node_ != nullptr; }
 
   // pre-fix
-  iterator& operator++(void)
+  l23_iterator& operator++(void)
   {
     // Short-circuit the null case.
     if (!*this)
@@ -467,30 +503,31 @@ public:
   }
 
   // post-fix
-  inline iterator operator++(int)
+  inline l23_iterator operator++(int)
   {
-    iterator it(*this);
+    l23_iterator it(*this);
     ++(*this);
     return it;
   }
 
-  inline inode_type* operator*(void) const {
+  inline inode_ptr operator*(void) const {
     if (!node()) throw std::runtime_error("l23_iterator: null dereference");
     return node();
   }
 
-  inline bool operator==(const iterator& other) const
-    { return (pos_ == other.pos_ && node_ == other.node_); }
-  inline bool operator!=(const iterator& other) const
+  inline bool operator==(const l23_iterator& other) const
+    { return (lpos_ == other.lpos_ && node_ == other.node_); }
+  inline bool operator!=(const l23_iterator& other) const
     { return !(*this == other); }
 
 private:
   // Members.
-  inode_type* node_;
-  // If pos is negative, points to node (which is the root node).
-  int pos_;
+  // Current node, or parent of current leaf node.
+  inode_ptr node_;
+  // Current leaf position, or -1 for internal nodes.
+  int lpos_;
   // Node queue for BFS traversal.
-  std::list<inode_type*> q;
+  std::list<inode_ptr> q;
 };
 
 //! 2-3 tree with data in the leaves.
@@ -500,13 +537,14 @@ class l23_tree
 public:
   // Typedefs.
   typedef typename Params::key_type key_type;
-  typedef typename Params::key_type data_type;
+  typedef typename Params::data_type data_type;
   typedef typename Params::value_type value_type;
-  typedef typename Params::key_type key_compare;
+  typedef typename Params::key_compare key_compare;
   typedef typename Params::size_type size_type;
   typedef l23_inode<Params> inode_type;
   typedef l23_lnode<Params> lnode_type;
-  typedef l23_iterator<Params> iterator;
+  typedef l23_iterator<Params, cptr<Params> > const_iterator;
+  typedef l23_iterator<Params, mptr<Params> > iterator;
 
 public:
   // Constructors.
@@ -515,7 +553,7 @@ public:
     : root_(nullptr), compare_(kcmp)
   {}
 
-  template<typename InputIter>
+  template<typename InputIter, typename KeyCompare=key_compare>
   l23_tree(InputIter begin, InputIter end, KeyCompare kcmp=key_compare())
     : root_(nullptr), compare_(kcmp)
   {
@@ -524,28 +562,31 @@ public:
   }
 
   inode_type* root(void) { return root_; }
+  const inode_type* root(void) const { return root_; }
 
   // Iterators.
-  iterator begin(void) { return iterator(root, 0); }
-  iterator end(void) { return iterator(nullptr, 0); }
+  iterator begin(void) { return iterator(root()); }
+  iterator end(void) { return iterator(); }
+  const_iterator begin(void) const { return const_iterator(root()); }
+  const_iterator end(void) const { return const_iterator(); }
 
   // Lookup.
 public:
   template<class KeyType=const key_type&>
-    iterator lower_bound(KeyType k);
-  inline iterator lower_bound(const value_type& v) {
+    const_iterator lower_bound(KeyType k) const;
+  inline const_iterator lower_bound(const value_type& v) const {
     return lower_bound(Params::key(v));
   }
 
   template<class KeyType=const key_type&>
-    iterator upper_bound(KeyType k);
-  inline iterator upper_bound(const value_type& v) {
+    const_iterator upper_bound(KeyType k) const;
+  inline const_iterator upper_bound(const value_type& v) const {
     return upper_bound(Params::key(v));
   }
 
   template<class KeyType=const key_type&>
-    iterator find_unique(KeyType k);
-  inline iterator find_unique(const value_type& v) {
+    const_iterator find_unique(KeyType k) const;
+  inline const_iterator find_unique(const value_type& v) const {
     return find_unique(Params::key(v));
   }
 
@@ -601,16 +642,16 @@ private:
 
   // Lower bound helpers.
   template<class KeyType>
-    iterator lower_bound_checked(KeyType k) const;
+    const_iterator lower_bound_checked(KeyType k) const;
   template<class KeyType>
-    iterator lower_bound_generic(KeyType k) const;
+    const_iterator lower_bound_generic(KeyType k) const;
   template<class KeyType>
-    iterator lower_bound_insert(KeyType k) const;
+    iterator lower_bound_insert(KeyType k);
 
   template<class KeyType>
-    inode_type* child_index_generic(inode_type* node, KeyType k) const;
+    int child_index_generic(const inode_type* node, KeyType k) const;
   template<class KeyType>
-    inode_type* child_index_insert(inode_type* node, KeyType k) const;
+    int child_index_insert(const inode_type* node, KeyType k) const;
 
   // Insert a leaf in the general case (all nodes have 2 or 3 nodes).
   iterator insert_leaf(const value_type& v);
@@ -628,16 +669,16 @@ private:
 
 // Tree implementations.
 template<class Params> template<class KeyType>
-typename l23_tree<Params>::iterator
+typename l23_tree<Params>::const_iterator
 l23_tree<Params>::lower_bound_checked(KeyType k) const
 {
   // Special cases: no root or root has 1 child.
-  if (!root() || !root()->count())
+  if (!root() || !root()->child_count())
     return end();
-  if (root()->count() == 1)
+  if (root()->child_count() == 1)
   {
     if (equal(k, root()->key(0)))
-      return iterator(root(), 0);
+      return const_iterator(root(), 0);
     return end();
   }
 
@@ -646,10 +687,10 @@ l23_tree<Params>::lower_bound_checked(KeyType k) const
 }
 
 template<class Params> template<class KeyType>
-typename l23_tree<Params>::inode_type*
-l23_tree<Params>::child_index_generic(inode_type* node, KeyType k) const
+int
+l23_tree<Params>::child_index_generic(const inode_type* node, KeyType k) const
 {
-  inode_type::size_type i = 0;
+  typename inode_type::size_type i = 0;
   for (; i < inode_type::max_count(); ++i)
     if (less_equal(k, node->key(i)))
       break;
@@ -657,10 +698,10 @@ l23_tree<Params>::child_index_generic(inode_type* node, KeyType k) const
 }
 
 template<class Params> template<class KeyType>
-typename l23_tree<Params>::inode_type*
-l23_tree<Params>::child_index_insert(inode_type* node, KeyType k) const
+int
+l23_tree<Params>::child_index_insert(const inode_type* node, KeyType k) const
 {
-  inode_type::size_type i = 0;
+  typename inode_type::size_type i = 0;
   for (; i < node->child_count(); ++i)
     if (less(k, node->key(i)))
       break;
@@ -668,7 +709,7 @@ l23_tree<Params>::child_index_insert(inode_type* node, KeyType k) const
 }
 
 template<class Params> template<class KeyType>
-typename l23_tree<Params>::iterator
+typename l23_tree<Params>::const_iterator
 l23_tree<Params>::lower_bound_generic(KeyType k) const
 {
   const inode_type* node = root();
@@ -679,24 +720,24 @@ l23_tree<Params>::lower_bound_generic(KeyType k) const
   // Now we must have landed on a non-null node containing 2 or 3 leaves.
   // Return an iterator pointing to the appropriate lower-bound leaf node.
   // Note that the leaf itself may not actually exist.
-  return iterator(node->leaf(child_index_generic(node, k)));
+  return const_iterator(node->leaf(child_index_generic(node, k)));
 }
 
 template<class Params> template<class KeyType>
-typename l23_tree<Params>::iterator
+typename l23_tree<Params>::const_iterator
 l23_tree<Params>::lower_bound(KeyType k) const
 {
-  iterator leafp = lower_bound_checked(k);
+  const_iterator leafp = lower_bound_checked(k);
   if (leafp.leaf() == nullptr)
     return end();
   return leafp;
 }
 
 template<class Params> template<class KeyType>
-typename l23_tree<Params>::iterator
+typename l23_tree<Params>::const_iterator
 l23_tree<Params>::upper_bound(KeyType k) const
 {
-  iterator leafp = lower_bound_checked(k);
+  const_iterator leafp = lower_bound_checked(k);
   // Increment the iterator until we find a key value greater than k.
   while (leafp != end() && !compare(k, leafp.key()))
     ++leafp;
@@ -704,10 +745,10 @@ l23_tree<Params>::upper_bound(KeyType k) const
 }
 
 template<class Params> template<class KeyType>
-typename l23_tree<Params>::iterator
-l23_tree<Params>::find_unique(KeyType k)
+typename l23_tree<Params>::const_iterator
+l23_tree<Params>::find_unique(KeyType k) const
 {
-  iterator leafp = lower_bound_checked(k);
+  const_iterator leafp = lower_bound_checked(k);
   if (leafp == end() || leafp.leaf() == nullptr)
     return end();
   // Only return the given node if its key is equal to the query key.
@@ -715,15 +756,15 @@ l23_tree<Params>::find_unique(KeyType k)
   // lower_bound (k NOT < leaf). If the converse is false we have equality
   // by STL convention.
   if (!compare(leafp.key(), k))
-    return iterator(node, leaf_idx);
+    return leafp;
   return end();
 }
 
-template<class Params>
+template<class Params> template<typename KeyType>
 typename l23_tree<Params>::iterator
-l23_tree<Params>::lower_bound_insert(const key_type& k)
+l23_tree<Params>::lower_bound_insert(KeyType k)
 {
-  const inode_type* node = root();
+  inode_type* node = root();
   while (node && !node->has_leaves())
     node = node->child(child_index_insert(node, k));
   if (!node || !node->has_leaves())
@@ -742,21 +783,20 @@ l23_tree<Params>::insert_unique(const value_type& value)
   // These cases only occur for the first two nodes.
   if (!root())
   {
-    root_ = new inode_type(value);
-    return iterator(root(), 0);
+    root_ = new inode_type();
+    return iterator(root_->add_leaf(value));
   }
 
-  if (root()->count() == 1)
+  if (root()->child_count() == 1)
   {
     // Insert the node in the right spot.
     const key_type& key = Params::key(value);
     size_t pos = compare(key, root()->leaf(0)->key()) ? 0 : 1;
-    root()->insert_leaf(value, pos);
-    return iterator(root(), pos);
+    return iterator(root()->insert_leaf(value, pos));
   }
 
   // Handle the general case.
-  return insert_internal(value);
+  return insert_leaf(value);
 }
 
 template<class Params>
@@ -784,7 +824,6 @@ l23_tree<Params>::insert_leaf(const value_type& value)
   // If the node is not full, we can just add the leaf directly.
   inode_type* parent = leafp.parent();
   lnode_type* new_leaf = new lnode_type(value);
-  inode_type* new_parent = parent;
   int new_pos = leafp.pos();
 
   if (parent->insert_leaf(new_leaf, leafp.pos()))
@@ -793,25 +832,20 @@ l23_tree<Params>::insert_leaf(const value_type& value)
     // because the new upper bound for this subtree may be higher than the
     // upper bound key from our parent.
     if (leafp.pos() == inode_type::max_count() - 1)
-    {
       fix_branch(Params::key(value), parent->parent());
-    }
-    return iterator(parent, leafp.pos());
+    return iterator(leafp.leaf());
   }
 
   // Here the immediate parent of the new leaf is full, so we must create a new
   // node to hold the largest two children and push it upwards.
 
   // One of the two max leaves must be the current max leaf.
-  inode_type* newnode_middle = parent->pop_leaf();
+  lnode_type* newnode_middle = parent->pop_leaf();
   // The other max leaf is either:
   // (1) the new leaf, in which case
   lnode_type* newnode_left = nullptr;
   if (greater(new_leaf->key(), parent->right_key()))
-  {
     newnode_left = new_leaf;
-    new_parent = nullptr;
-  }
   // or (2) the current middle leaf, in which case the new leaf becomes the
   // middle leaf of this parent.
   else
@@ -820,7 +854,7 @@ l23_tree<Params>::insert_leaf(const value_type& value)
   // Construct the new node with the two new leaves in the right order.
   if (greater(newnode_left->key(), newnode_middle->key()))
   {
-    inode_type* tmp = newnode_left;
+    lnode_type* tmp = newnode_left;
     newnode_left = newnode_middle;
     newnode_middle = tmp;
   }
@@ -831,7 +865,7 @@ l23_tree<Params>::insert_leaf(const value_type& value)
 
   // Insert the new node into the parent recursively.
   insert_internal(parent->parent(), new_node);
-  return iterator(new_parent, new_pos);
+  return iterator(new_parent->child(new_pos));
 }
 
 template<class Params> void

@@ -54,6 +54,8 @@ struct KeyData
         << flt() << x << "(" << depth << ")").str();
   }
 
+  inline bool operator<(const KeyData& o) const { return x < o.x; }
+
   inline friend ostream& operator<<(ostream& os, const KeyData& n) {
     return os << n.str();
   }
@@ -92,7 +94,8 @@ struct make_tree_params
   typedef KeyData<Tp_> key_type;
   typedef typename key_type::compare compare_type;
 
-  typedef tree::l23_default_params<key_type, data_type, compare_type>::type;
+  typedef typename tree::l23_default_params<key_type, data_type, compare_type>
+    type;
 };
 
 typedef make_tree_params<float>::type TreeParams;
@@ -226,18 +229,19 @@ int main(int argc, char* argv[])
     float lowval = randf(0.0f, fmax);
     float highval = randf(lowval, fmax);
     nodes.push_back(make_pair(
-          KeyData(lowval, 0), LeafData(i, bp::LOW)));
+          Tree::key_type(lowval, 0), Tree::data_type(i, bp::LOW)));
     nodes.push_back(make_pair(
-          KeyData(highval, 0), LeafData(i, bp::HIGH)));
+          Tree::key_type(highval, 0), Tree::data_type(i, bp::HIGH)));
   }
 
   // create the tree by inserting the nodes
   Tree t(nodes.begin(), nodes.end());
   cout << "nodes: " << endl;
-  for (auto it = t.begin(); it != t.end(); ++it)
-    cout << node_string(*it) << endl;
+  //for (auto it = t.begin(); it != t.end(); ++it)
+    //cout << node_string(*it) << endl;
 
   // test path
+  /*
   float keyval = 3.33;
   cout << "path to " << flt() << keyval << ":" << endl;
   node_visitor<Tree> v;
@@ -252,4 +256,5 @@ int main(int argc, char* argv[])
 
   // write nodes to a PS file
   return write_tree("btree", t);
+  */
 }
