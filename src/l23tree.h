@@ -20,6 +20,33 @@
 namespace tree
 {
 
+  // Pointer helpers.
+template<class Params>
+struct mptr
+{
+  typedef typename Params::key_type* key_ptr;
+  typedef typename Params::key_type& key_reference;
+  typedef typename Params::data_type* data_ptr;
+  typedef typename Params::data_type& data_reference;
+  typedef typename Params::value_type* value_ptr;
+  typedef typename Params::value_type& value_reference;
+  typedef typename l23_inode<Params>::inode_type* inode_ptr;
+  typedef typename l23_lnode<Params>::lnode_type* lnode_ptr;
+};
+
+template <class Params>
+struct cptr
+{
+  typedef const typename Params::key_type* key_ptr;
+  typedef const typename Params::key_type& key_reference;
+  typedef const typename Params::data_type* data_ptr;
+  typedef const typename Params::data_type& data_reference;
+  typedef const typename Params::value_type* value_ptr;
+  typedef const typename Params::value_type& value_reference;
+  typedef const typename l23_inode<Params>::inode_type* inode_ptr;
+  typedef const typename l23_lnode<Params>::lnode_type* lnode_ptr;
+};
+
 //! Tree parameters. You can make your own, but they should contain the members
 //  that the base one here contains at least.
 template<class Key, class Data, class KeyCompare,
@@ -45,12 +72,148 @@ template<class Params> class l23_lnode;
 template<class Params, class Ptrs> class l23_iterator;
 template<class Params> class l23_tree;
 
+// Common node operations which operate equivalently for internal nodes with
+// leaf children and internal nodes with internal children.
+template<class Child_node_type, class Ptrs=mptr>
+class l23_node_operations
+{
+public:
+  // Typedefs.
+  typedef typename node_type::parameters parameters;
+  typedef typename parameters::key_type key_type;
+  typedef typename parameters::key_type data_type;
+  typedef typename parameters::value_type value_type;
+  typedef typename parameters::key_type key_compare;
+  typedef typename parameters::size_type size_type;
+  typedef l23_inode<parameters> inode_type;
+  typedef l23_lnode<parameters> lnode_type;
+  typedef Child_node_type node_type;
+  typedef node_type* node_ptr;
+  typedef const node_type* cnode_ptr;
+
+  typedef std::is_same<node_type, lnode_type> is_leaf;
+
+  // Maybe-const, maybe not
+  typedef typename Ptrs ptr;
+  typedef typename ptr::key_ptr key_ptr;
+  typedef typename ptr::key_reference key_reference;
+  typedef typename ptr::data_ptr data_ptr;
+  typedef typename ptr::data_reference data_reference;
+  typedef typename ptr::value_ptr value_ptr;
+  typedef typename ptr::value_reference value_reference;
+  typedef typename ptr::inode_ptr inode_ptr;
+  typedef typename ptr::lnode_ptr lnode_ptr;
+
+  // Static helper methods.
+  static inline inode_ptr toi(node_ptr p)
+    { return reinterpret_cast<inode_ptr>(p); }
+  static inline const inode_ptr toi(cnode_ptr p)
+    { return reinterpret_cast<inode_ptr>(p); }
+  static inline lnode_ptr tol(node_ptr p)
+    { return reinterpret_cast<lnode_ptr>(p); }
+  static inline const lnode_ptr tol(cnode_ptr p)
+    { return reinterpret_cast<lnode_ptr>(p); }
+  template<typename nptr>
+    static inline node_ptr ton(nptr p)
+      { return reinterpret_cast<node_ptr>(p); }
+  template<typename nptr>
+    static inline cnode_ptr ton(const nptr p)
+      { return reinterpret_cast<cnode_ptr>(p); }
+
+  static inline void set(inode_ptr parent, size_type index, lnode_ptr leaf)
+    { parent->set_leaf(index, child); parent->leaves_ = true; }
+  static inline void set(inode_ptr parent, size_type index, inode_ptr child)
+    { parent->set_child(index, child); }
+
+  static inline node_type child(inode_ptr parent, size_type index)
+    { return ton(parent->child(index)); }
+
+  static inline key_reference key(const lnode_ptr n) { return n->key(); }
+  static inline key_reference key(const inode_ptr n) { return n->right_key(); }
+
+  static inline void fix_keys(inode_ptr parent) {
+    for (size_type kidx = 0u; kidx < parent->key_count(); ++kidx)
+      keys_[kidx] = key(child(parent, kidx));
+  }
+
+  // Insert node at the given index. MUST be in sorted order,
+  // or the tree will be FUBAR.
+  static node_ptr insert(inode_ptr parent, node_ptr node, size_type index)
+  {
+    if (parent->full() || index >= inode_type::max_count())
+      return nullptr;
+    // Scoot over the nodes starting at index and insert the new leaf.
+    // We MUST have a null pointer in the end slot which is overwritten
+    // (checked by verifying we are not full() above).
+    for (size_type idx = inode_type::max_count()-1; idx > index; --idx)
+      set(parent, idx, child(parent, idx-1));
+    set(parent, index, node);
+    ++(parent->child_count_);
+    // Now fix the keys. Note if the insert index was 2,
+    // the caller will have to fix parent keys recursively.
+    fix_keys(parent);
+    return node;
+  }
+
+  static inline
+  std::enable_if<is_leaf, node_ptr>::type
+    insert(inode_ptr parent, size_type index, value_reference value)
+  {
+    if (parent->full() || index >= inode_type::max_count())
+      return nullptr;
+    node_type node = new node_type(value);
+    return insert(parent, index, node);
+  }
+
+  // Append a leaf as the new middle or max leaf.
+  // Note that if it is the new max leaf, parent keys must be fixed by the
+  // caller.
+  static inline node_type append(inode_ptr parent, node_ptr node)
+    { return insert(parent, parent->child_count(), node); }
+  static inline lnode_type* append(inode_ptr parent, value_reference value)
+    { return insert(parent, parent->child_count(), value); }
+
+  // Remove and return the current max leaf. Updates count.
+  // Returns nullptr iff there are no leaves.
+  // Note that if there were only two leaves, the node is now invalidated
+  // (nodes should always have 2 or 3 children).
+  static node_ptr pop(inode_ptr parent)
+  {
+    if (parent->child_count() == 0)
+      return nullptr;
+    node_ptr n = child(parent, --(parent->child_count_));
+    if (n) n->link(nullptr);
+    set(parent, parent->child_count(), nullptr);
+    return n;
+  }
+
+  // Swap out a node with a new one and fix the keys.
+  // You must ensure the sort invariant is maintained. Returns NULL for
+  // out-of-bounds index, or if the leaf at index was already null.
+  static node_ptr swap(inode_ptr parent, size_type index, node_ptr node)
+  {
+    if (index >= inode_type::max_count())
+      return nullptr;
+    node_ptr old = child(parent, index);
+    set(parent, index, node);
+    if (node->parent())
+      set(node->parent(), index, old);
+    // Unless we swapped the max key, we must fixup our internal keys.
+    // If we are a max key, parent keys must be fixed by the caller.
+    if (index != inode_type::max_count()-1)
+      fix_keys();
+    return old;
+  }
+
+};
+
 //! 2-3 tree (i)nternal node.
 template<class Params>
 class l23_inode
 {
 public:
   // Typedefs.
+  typedef Params parameters;
   typedef typename Params::key_type key_type;
   typedef typename Params::key_type data_type;
   typedef typename Params::value_type value_type;
@@ -58,9 +221,12 @@ public:
   typedef typename Params::size_type size_type;
   typedef l23_inode<Params> inode_type;
   typedef l23_lnode<Params> lnode_type;
-  typedef l23_tree<Params> tree_type;
+  typedef l23_node_operations<inode_type> iops;
+  typedef l23_node_operations<lnode_type> lops;
   friend class l23_lnode<Params>;
   friend class l23_tree<Params>;
+  friend class l23_node_operations<inode_type>;
+  friend class l23_node_operations<lnode_type>;
 
   // Various array types. We never hold more than 3 of anything.
   typedef std::array<key_type, 2> key_array; // key copies for indexing
@@ -107,70 +273,6 @@ public:
   inline const lnode_type* leaf(size_type i) const { return u_.leaves[i]; }
   inline lnode_type* leaf(size_type i) { return u_.leaves[i]; }
 
-  // Insert at leaf at the given index. MUST be in sorted order,
-  // or the tree will be FUBAR.
-  lnode_type* insert_leaf(lnode_type* new_leaf, size_type index)
-  {
-    if (full() || index >= max_count())
-      return nullptr;
-    // Scoot over the nodes starting at index and insert the new leaf.
-    // We MUST have a null pointer in the end slot which is overwritten
-    // (checked by verifying we are not full() above).
-    for (size_type lidx = max_count()-1; lidx > index; --lidx)
-      set_leaf(lidx, leaf(lidx-1));
-    set_leaf(index, new_leaf);
-    ++child_count_;
-    // Now fix the keys. Note if the insert index was 2,
-    // the caller will have to fix parent keys recursively.
-    fix_leaf_keys();
-    leaves_ = true;
-    return new_leaf;
-  }
-  inline lnode_type* insert_leaf(const value_type& value, size_type index) {
-    if (full() || index >= max_count())
-      return nullptr;
-    lnode_type *new_leaf = new lnode_type(value);
-    return insert_leaf(new_leaf, index);
-  }
-
-  // Append a leaf as the new middle or max leaf.
-  // Note that if it is the new max leaf, parent keys must be fixed by the
-  // caller.
-  inline lnode_type* add_leaf(const value_type& value)
-    { return insert_leaf(value, leaf_count()); }
-  inline lnode_type* add_leaf(lnode_type *new_leaf)
-    { return insert_leaf(new_leaf, leaf_count()); }
-
-  // Remove and return the current max leaf. Updates count.
-  // Returns nullptr iff there are no leaves.
-  // Note that if there were only two leaves, the node is now invalidated
-  // (nodes should always have 2 or 3 children).
-  lnode_type* pop_leaf(void) {
-    if (leaf_count() == 0)
-      return nullptr;
-    lnode_type* l = leaf(--child_count_);
-    if (l) l->link(nullptr);
-    set_leaf(child_count(), nullptr);
-    return l;
-  }
-
-  // Swap out a leaf with a new one and fix the keys.
-  // You must ensure the sort invariant is maintained. Returns NULL for
-  // out-of-bounds index, or if the leaf at index was already null.
-  lnode_type* swap_leaf(size_type index, lnode_type* new_leaf) {
-    if (index >= max_count())
-      return nullptr;
-    lnode_type* old_leaf = leaf(index);
-    set_leaf(index, new_leaf);
-    if (new_leaf->parent())
-      new_leaf->parent()->set_leaf(index, old_leaf);
-    // Unless we swapped the max key, we must fixup our internal keys.
-    // If we are a max key, parent keys must be fixed by the caller.
-    if (index != max_count()-1)
-      fix_leaf_keys();
-    return old_leaf;
-  }
-
   inline inode_type* left_leaf(void) { return leaf(0); }
   inline inode_type* middle_leaf(void) { return leaf(1); }
   inline inode_type* right_leaf(void) { return leaf(2); }
@@ -188,13 +290,6 @@ private:
   inline void set_leaf(size_type index, lnode_type* node) {
     if (node) node->link(this, index);
     u_.leaves[index] = node;
-  }
-
-  // Fix our internal keys to match our leaf nodes' keys.
-  // Note that key(i) is a copy of key(leaf(i)).
-  inline void fix_leaf_keys(void) {
-    for (size_type kidx = 0u; kidx < key_count(); ++kidx)
-      keys_[kidx] = leaf(kidx)->key();
   }
 
 public:
@@ -380,32 +475,6 @@ public:
 };
 */
 
-template<class Params>
-struct mptr
-{
-  typedef typename Params::key_type* key_ptr;
-  typedef typename Params::key_type& key_reference;
-  typedef typename Params::data_type* data_ptr;
-  typedef typename Params::data_type& data_reference;
-  typedef typename Params::value_type* value_ptr;
-  typedef typename Params::value_type& value_reference;
-  typedef typename l23_inode<Params>::inode_type* inode_ptr;
-  typedef typename l23_lnode<Params>::lnode_type* lnode_ptr;
-};
-
-template <class Params>
-struct cptr
-{
-  typedef const typename Params::key_type* key_ptr;
-  typedef const typename Params::key_type& key_reference;
-  typedef const typename Params::data_type* data_ptr;
-  typedef const typename Params::data_type& data_reference;
-  typedef const typename Params::value_type* value_ptr;
-  typedef const typename Params::value_type& value_reference;
-  typedef const typename l23_inode<Params>::inode_type* inode_ptr;
-  typedef const typename l23_lnode<Params>::lnode_type* lnode_ptr;
-};
-
 template<class Params, class Ptrs>
 class l23_iterator
 {
@@ -545,6 +614,8 @@ public:
   typedef l23_lnode<Params> lnode_type;
   typedef l23_iterator<Params, cptr<Params> > const_iterator;
   typedef l23_iterator<Params, mptr<Params> > iterator;
+  typedef l23_node_operations<inode_type> iops;
+  typedef l23_node_operations<lnode_type> lops;
 
 public:
   // Constructors.
@@ -656,7 +727,8 @@ private:
   // Insert a leaf in the general case (all nodes have 2 or 3 nodes).
   iterator insert_leaf(const value_type& v);
   // Insert an internal node recursively.
-  void insert_internal(inode_type* parent, inode_type* new_node);
+  template<class Ops>
+  void insert_internal(inode_type* parent, typename Ops::node_ptr new_node);
 
   // Fix keys along a branch from a new max key insertion.
   void fix_branch(const key_type& max_key, inode_type* pnode);
@@ -784,15 +856,15 @@ l23_tree<Params>::insert_unique(const value_type& value)
   if (!root())
   {
     root_ = new inode_type();
-    return iterator(root_->add_leaf(value));
+    return iterator(lops::append(root_, new lnode_type(value)));
   }
 
   if (root()->child_count() == 1)
   {
     // Insert the node in the right spot.
     const key_type& key = Params::key(value);
-    size_t pos = compare(key, root()->leaf(0)->key()) ? 0 : 1;
-    return iterator(root()->insert_leaf(value, pos));
+    size_t pos = less(key, root()->left_leaf()->key()) ? 0 : 1;
+    return iterator(lops::insert(root(), pos, value));
   }
 
   // Handle the general case.
@@ -821,56 +893,51 @@ l23_tree<Params>::insert_leaf(const value_type& value)
   if (leafp == end())
     return end();
 
-  // If the node is not full, we can just add the leaf directly.
-  inode_type* parent = leafp.parent();
-  lnode_type* new_leaf = new lnode_type(value);
-  int new_pos = leafp.pos();
+  return insert_internal<lops>(leafp.node(), new lnode_type(value));
+}
 
-  if (parent->insert_leaf(new_leaf, leafp.pos()))
+template<class Params> template<class Ops>
+void
+l23_tree<Params>::insert_internal(inode_type* parent,
+    typename Ops::node_ptr new_node)
+{
+  // If the node is not full, we can just add the node directly.
+  int pos = child_index_insert(parent, Ops::key(new_node));
+  if (Ops::insert(parent, pos, new_node))
   {
-    // But, if we added a new max leaf, we must fix our ancestors' keys
+    // But, if we added a new max node, we must fix our ancestors' keys
     // because the new upper bound for this subtree may be higher than the
     // upper bound key from our parent.
-    if (leafp.pos() == inode_type::max_count() - 1)
-      fix_branch(Params::key(value), parent->parent());
-    return iterator(leafp.leaf());
+    if (pos == inode_type::max_count() - 1)
+      fix_branch(Ops::key(new_node), parent->parent());
+    return iterator(new_node);
   }
 
-  // Here the immediate parent of the new leaf is full, so we must create a new
+  // Here the immediate parent of the new node is full, so we must create a new
   // node to hold the largest two children and push it upwards.
 
-  // One of the two max leaves must be the current max leaf.
-  lnode_type* newnode_middle = parent->pop_leaf();
-  // The other max leaf is either:
-  // (1) the new leaf, in which case
-  lnode_type* newnode_left = nullptr;
-  if (greater(new_leaf->key(), parent->right_key()))
+  // One of the two max nodes must be the current max node.
+  node_ptr newnode_middle = Ops::pop(parent);
+  // The other max node is either: (1) the new node,
+  node_ptr newnode_left = nullptr;
+  if (pos == inode_type::max_count()-1)
     newnode_left = new_leaf;
-  // or (2) the current middle leaf, in which case the new leaf becomes the
-  // middle leaf of this parent.
+  // or (2) the current middle node, in which case the new node becomes the
+  // middle node of this parent and we detach the original right two nodes.
   else
-    newnode_left = parent->swap_leaf((new_pos = 1), new_leaf);
+    newnode_left = Ops::swap(parent, (pos = 1), new_node);
 
   // Construct the new node with the two new leaves in the right order.
   if (greater(newnode_left->key(), newnode_middle->key()))
   {
-    lnode_type* tmp = newnode_left;
+    node_ptr tmp = newnode_left;
     newnode_left = newnode_middle;
     newnode_middle = tmp;
   }
-  inode_type* new_node = new inode_type(newnode_left, newnode_middle);
-
-  // If we d
-  inode_type* new_parent = (newnode_left == new_leaf) ? new_node : parent;
+  inode_ptr new_parent = new inode_type(newnode_left, newnode_middle);
 
   // Insert the new node into the parent recursively.
-  insert_internal(parent->parent(), new_node);
-  return iterator(new_parent->child(new_pos));
-}
-
-template<class Params> void
-l23_tree<Params>::insert_internal(inode_type* parent, inode_type* new_node)
-{
+  insert_internal<iopt>(parent->parent(), new_parent);
 }
 
 } // end namespace tree
