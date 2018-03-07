@@ -16,10 +16,6 @@
 #include <boost/geometry/geometries/register/box.hpp>
 #include <boost/geometry/geometries/adapted/boost_polygon.hpp>
 
-namespace bp = boost::polygon;
-namespace bg = boost::geometry;
-namespace bgi = boost::geometry::index;
-
 #ifndef BOOST_POLY_REGISTER_POINT
 #define BOOST_POLY_REGISTER_POINT(ptype, ctype) \
 namespace boost { namespace polygon { \
@@ -49,6 +45,13 @@ BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point, int, cs::cartesian, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point2f, float, cs::cartesian, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point2d, double, cs::cartesian, x, y);
 
+namespace voronoi
+{
+
+namespace bp = boost::polygon;
+namespace bg = boost::geometry;
+namespace bgi = boost::geometry::index;
+
 template<class Tp_> class edge_iterator;
 
 // A simple edge wrapper, consisting of two finite points.
@@ -73,6 +76,7 @@ public:
   typedef typename voronoi_diagram::vertex_type vertex_type;
   typedef typename voronoi_diagram::coordinate_type coordinate_type;
   typedef typename bp::rectangle_data<Tp_> rect_type;
+  typedef typename rect_type::interval_type interval_type;
   typedef Edge<Tp_> finite_edge_type;
 
   typedef cell_type value_type;
@@ -183,6 +187,29 @@ public:
   inline point_type const& user(size_t user_index) const {
     return users.at(user_index); // bounds-checked
   }
+  inline point_type nearest_site(size_t user_index) const {
+    return sites.at(site_index(user_index));
+  }
+  inline point_type nearest_site(point_iterator user_pt) const {
+    return sites.at(site_index(user_pt));
+  }
+
+  // Build L1-distance rectangles for each user. The output iterator must
+  // support users_size() operations.
+  template<class OutputIter>
+    void build_rects(OutputIter out) {
+      point_iterator uit = users_begin();
+      while (uit != users_end())
+      {
+        point_type site = nearest_site(uit);
+        point_type user = *uit;
+        coordinate_type width = std::abs(site.x - user.x);
+        coordinate_type height = std::abs(site.y - user.y);
+        interval_type hi = interval_type(user.x - width/2,  user.x + width/2);
+        interval_type vi = interval_type(user.y - height/2, user.y + height/2);
+        *out++ = rect_type(hi, vi);
+      }
+    }
 
   // Iterate through finite points of the edges of a cell.
   inline finite_edge_iterator cell_begin(const cell_type &cell) const {
@@ -289,3 +316,5 @@ public:
 
 // Common instantiations.
 extern template class VoronoiDiagram<double>;
+
+} // end namespace voronoi

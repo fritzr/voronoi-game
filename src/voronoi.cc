@@ -5,6 +5,9 @@
 using namespace std;
 using namespace cv;
 
+namespace voronoi
+{
+
 template<class Tp_>
 void
 VoronoiDiagram<Tp_>::clip_infinite_edge(const edge_type& edge,
@@ -186,3 +189,5 @@ VoronoiDiagram<Tp_>::build(SearchMethod sm)
 
 // Common instantiations.
 template class VoronoiDiagram<double>;
+
+}

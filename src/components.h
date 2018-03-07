@@ -11,8 +11,37 @@
 #include <boost/polygon/rectangle_concept.hpp>
 #include <boost/geometry.hpp>
 
+#include <boost/graph/adjacency_list.hpp>
+
 #include "tree.h"
 
+template <class Container>
+  class push_insert_iterator:
+    public std::iterator<std::output_iterator_tag,void,void,void,void>
+{
+protected:
+  Container* container;
+
+public:
+  typedef Container container_type;
+  explicit push_insert_iterator(Container& x) : container(&x) {}
+  push_insert_iterator<Container>& operator=(
+      typename Container::const_reference value)
+    { container->push(value); return *this; }
+  push_insert_iterator<Container>& operator* (){ return *this; }
+  push_insert_iterator<Container>& operator++ (){ return *this; }
+  push_insert_iterator<Container> operator++ (int){ return *this; }
+};
+
+template<typename Container>
+push_insert_iterator<Container> push_inserter(Container container){
+  return push_insert_iterator<Container>(container);
+}
+
+namespace components
+{
+
+namespace b  = boost;
 namespace bp = boost::polygon;
 namespace bg = boost::geometry;
 
@@ -39,13 +68,13 @@ struct RectComponent : bp::rectangle_data<Tp_>
   typedef Edge<Tp_> edge_type;
 
   size_t index;
-  int component; // ID of the component to which this rect belongs.
+  //int component; // ID of the component to which this rect belongs.
 
   template <class HInterval, class VInterval>
     RectComponent(const HInterval& hrange, const VInterval& vrange, size_t idx)
-      : super_type(hrange, vrange), index(idx), component(-1) {}
+      : super_type(hrange, vrange), index(idx)/*, component(-1)*/ {}
 
-  inline edge_type edge(bp::orientation_2d orient, bp::direction_1d dir)
+  inline edge_type edge(bp::orientation_2d orient, bp::direction_1d dir) const
   {
     return edge_type(bp::get(*this, orient, dir), dir, index);
   };
@@ -57,12 +86,16 @@ struct RectComponent : bp::rectangle_data<Tp_>
     }
 };
 
+} // we interrupt your regularly scheduled components namespace to bring you...
+
 namespace boost { namespace polygon {
-  template <typename Tp_> struct geometry_concept<RectComponent<Tp_> > {
-    typedef rectangle_concept type;
-  };
+  template <typename Tp_>
+    struct geometry_concept<components::RectComponent<Tp_> >
+      { typedef rectangle_concept type; };
 }}
 
+namespace components
+{
 
 template<class Tp_>
 struct EdgeCompare
@@ -112,6 +145,13 @@ public:
   }
 };
 
+template<class Iter1, class Iter2>
+Iter1 sync_iters(Iter1 begin1, Iter2 begin2, Iter2 end2) {
+  while (begin2++ != end2)
+    ++begin1;
+  return begin1;
+}
+
 template<class Tp_>
 class ConnectedComponents
 {
@@ -128,18 +168,44 @@ public:
     edge_set;
   typedef std::priority_queue<edge_type, edge_container, edge_comparator>
     edge_queue;
-  // T(V_k) from the paper
-  typedef typename tree::make_avltree<DepthNode<Tp_> >::type depth_tree_type;
+  // T(V_k) from the paper - TODO
+  //typedef typename tree::make_avltree<DepthNode<Tp_> >::type depth_tree_type;
+  // for now we take a short-cut and keep the entire array gk[j]
+  typedef std::list<int> depth_list;
+
+  // Vertexes are rect_type objects.
+  typedef typename b::property<b::vertex_index_t, int> VertexProps;
+  typedef typename b::adjacency_list<
+      b::hash_setS, b::listS, b::undirectedS, VertexProps
+    > components_graph;
+  typedef typename b::graph_traits<components_graph>::vertex_descriptor
+    vertex_descriptor;
+  typedef typename b::property_map<components_graph, b::vertex_index_t>::type
+    id_map;
+  typedef typename std::vector<vertex_descriptor> descriptor_list;
 
 private:
   rect_container rects;
   edge_queue edges_y; // horizontal rect edges which are the sweep events
   edge_set edges_x;   // vertical rect edges within each sweep line event
-  depth_tree_type depth_tree;
+  //depth_tree_type depth_tree;
+  depth_list depths;
+  components_graph graph;
+  id_map component_ids;
+  descriptor_list vertexes;
+  int max_depth = -1;
+
+  inline vertex_descriptor vd(int idx) const { return vertexes[idx]; }
 
   inline rect_type &rect(edge_type const& edge) {
     return rects[edge.rect_index];
   }
+
+  template<typename EdgeSetIter>
+    void check_max_depth(rect_type const& r, EdgeSetIter edge_lb, int depth);
+
+  void insert_rect(rect_type const& r);
+  void remove_rect(rect_type const& r);
 
 public:
   // No inputs yet.
@@ -147,15 +213,41 @@ public:
 
   // Construct from a list of input rectangles (may be in no particular order).
   template<class RectIter>
-    ConnectedComponents(RectIter begin, RectIter end);
+    ConnectedComponents(RectIter begin, RectIter end)
+    : rects(), edges_y(), edges_x(), graph(),
+      component_ids(b::get(b::vertex_index_t(), graph))
+    {
+      add_rects(begin, end);
+    }
 
   // Add rectangles. Same as the constructor form, if you're lazy and want to
   // do it sometime after construction.
   template<class RectIter>
-    void add_rects(RectIter begin, RectIter end);
+    void add_rects(RectIter begin, RectIter end)
+    {
+      size_t idx = rects.size();
+      while (begin != end)
+      {
+        // Construct our custom rectangle wrappers.
+        //vertex_descriptor vd = b::add_vertex(graph);
+        vertexes.push_back(b::add_vertex(graph));
+        b::put(component_ids, vd(idx), b::vertex_index_t(idx));
+        rects.emplace_back(
+            bp::get(*begin, bp::HORIZONTAL),
+            bp::get(*begin, bp::VERTICAL),
+            idx++);
+        ++begin;
+        // Queue up the horizontal edges. Vertical edges go in at each event.
+        rects.back().add_edges(push_inserter(edges_y), bp::HORIZONTAL);
+      }
+    }
 
   // Run the algorithm and compute the connected components.
   void compute(void);
+
+  int depth(void) const { return max_depth; }
 };
 
 extern template class ConnectedComponents<double>;
+
+} // end namespace components

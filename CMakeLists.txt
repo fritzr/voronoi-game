@@ -25,7 +25,7 @@ else()
   message (FATAL_ERROR "${CMAKE_CXX_COMPILER} does not appear to support C++11")
 endif()
 
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -std=c++11")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -std=c++11 -O3")
 
 set(CXX_STATIC "-static-libgcc -static-libstdc++ ")
 if (GCC_VERSION VERSION_GREATER 5.0 AND GCC_VERSION VERSION_LESS 5.4)

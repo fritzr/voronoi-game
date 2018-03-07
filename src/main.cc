@@ -62,12 +62,14 @@ struct pointiter : public std::iterator<
 
 #include "main.h"
 #include "voronoi.h"
+#include "components.h"
 
 #define i2f(...) static_cast<float>(__VA_ARGS__)
 #define i2u(...) static_cast<unsigned int>(__VA_ARGS__)
 
 using namespace std;
 using namespace cv;
+using namespace voronoi;
 
 struct options_t {
   // Global configurable options
@@ -81,6 +83,7 @@ struct options_t {
   bool fill_inputs = false;
   int screenWidth = 1920;
   int screenHeight = 1080;
+  bool computeComponents = false;
   VoronoiDiagram<double>::SearchMethod queryType
     =VoronoiDiagram<double>::Default;
 
@@ -137,6 +140,7 @@ usage(const char *prog, const char *errmsg)
     << endl
     << "  -q TYPE		Query type for mapping users to sites:" << endl
     << "    [0:default], 1:brute force, 2:range search, 3:NN(1) (fastest)"
+    << "  -c			Compute connected components:" << endl
     << endl
     ;
   if (errno) {
@@ -165,7 +169,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:";
+static const char *sopts = "FcC:X:Y:T:eEgGlLdW:H:hs:u:q:";
 
 // Parses options and sets the global options structure.
 static void
@@ -183,6 +187,8 @@ get_options(int argc, char *argv[], options_t &o)
     case 'C':
       o.colormap = getenum<ColormapTypes>(13, optarg, errstr, "colormap");
       break;
+    case 'c':
+      o.computeComponents = true; break;
     case 'X':
       o.ngridx = getenum<int>(INT_MAX, optarg, errstr, "X grid lines"); break;
     case 'Y':
@@ -393,6 +399,46 @@ draw_sites(Mat img, const VoronoiDiagram<Tp_> &vd)
   }
 }
 
+template<class OutputRectIter>
+static void
+build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
+    Size const& resolution, OutputRectIter rects_out)
+{
+  // With older OpenCV, you can't construct Point2d from Point
+#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
+  typedef pointiter<vector<Point>::iterator, Point2d> p2di;
+#else
+  typedef vector<Point>::iterator p2di;typename 
+#endif
+
+  VoronoiDiagram<double> vd(
+      p2di(sites.begin()), p2di(sites.end()),
+      p2di(users.begin()), p2di(users.end()),
+      resolution.width, resolution.height);
+  vd.build(opts.queryType);
+
+  if (opts.drawEdges) {
+    draw_cells(img, vd);
+  }
+  draw_sites(img, vd);
+  vd.build_rects(rects_out);
+
+  // Convert grayscale gradient to color gradient for plotting
+  Mat colorimg;
+  auto pts = boost::join(sites, users);
+  Rect bbox = boundingRect(vector<Point>(pts.begin(), pts.end()));
+  // squash to screen size, maintaining aspect ratio
+  if ((bbox.width > 0 || bbox.height > 0)
+      && (bbox.height > opts.screenHeight || bbox.width > opts.screenWidth)) {
+    img = resizeToFit(img, img, bbox, resolution);
+  }
+  cv::flip(img, colorimg, 0); // flip vertical
+  applyColorMap(colorimg, colorimg, opts.colormap);
+
+  imshow("output", colorimg);
+  waitKey(0);
+}
+
 int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
@@ -421,38 +467,18 @@ int main(int argc, char *argv[])
   // Flip vertical initially so text comes out up-right (since we flip later)
   cv::flip(img, img, 0);
 
-  // With older OpenCV, you can't construct Point2d from Point
-#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
-  typedef pointiter<vector<Point>::iterator, Point2d> p2di;
-#else
-  typedef vector<Point>::iterator p2di;
-#endif
+  typedef typename components::ConnectedComponents<double> CComp;
+  typedef typename CComp::coordinate_type coordinate_type;
+  typedef typename bp::rectangle_data<coordinate_type> rect_type;
+  vector<rect_type> rects;
+  build_rects(img, sites, users, resolution, back_inserter(rects));
 
-  VoronoiDiagram<double> vd(
-      p2di(sites.begin()), p2di(sites.end()),
-      p2di(users.begin()), p2di(users.end()),
-      resolution.width, resolution.height);
-  vd.build(opts.queryType);
-
-  if (opts.drawEdges) {
-    draw_cells(img, vd);
+  if (opts.computeComponents)
+  {
+    CComp comp(rects.begin(), rects.end());
+    comp.compute();
+    cout << "maximal depth: " << comp.depth() << endl;
   }
-  draw_sites(img, vd);
-
-  // Convert grayscale gradient to color gradient for plotting
-  Mat colorimg;
-  auto pts = boost::join(sites, users);
-  Rect bbox = boundingRect(vector<Point>(pts.begin(), pts.end()));
-  // squash to screen size, maintaining aspect ratio
-  if ((bbox.width > 0 || bbox.height > 0)
-      && (bbox.height > opts.screenHeight || bbox.width > opts.screenWidth)) {
-    img = resizeToFit(img, img, bbox, resolution);
-  }
-  cv::flip(img, colorimg, 0); // flip vertical
-  applyColorMap(colorimg, colorimg, opts.colormap);
-
-  imshow("output", colorimg);
-  waitKey(0);
 
   return 0;
 }
