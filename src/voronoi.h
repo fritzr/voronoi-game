@@ -208,6 +208,7 @@ public:
         interval_type hi = interval_type(user.x - width/2,  user.x + width/2);
         interval_type vi = interval_type(user.y - height/2, user.y + height/2);
         *out++ = rect_type(hi, vi);
+        ++uit;
       }
     }
 
