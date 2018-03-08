@@ -57,6 +57,13 @@ struct pointiter : public std::iterator<
 #endif
 #endif
 
+// With older OpenCV, you can't construct Point2d from Point
+#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
+typedef pointiter<typename std::vector<cv::Point>::iterator, cv::Point2d> p2di;
+#else
+typedef typename std::vector<cv::Point>::iterator p2di;
+#endif
+
 #include <boost/range/join.hpp>
 #include <boost/foreach.hpp>
 
@@ -84,6 +91,7 @@ struct options_t {
   int screenWidth = 1920;
   int screenHeight = 1080;
   bool computeComponents = false;
+  bool drawRects = true;
   VoronoiDiagram<double>::SearchMethod queryType
     =VoronoiDiagram<double>::Default;
 
@@ -140,7 +148,10 @@ usage(const char *prog, const char *errmsg)
     << endl
     << "  -q TYPE		Query type for mapping users to sites:" << endl
     << "    [0:default], 1:brute force, 2:range search, 3:NN(1) (fastest)"
+    << endl
     << "  -c			Compute connected components:" << endl
+    << "  -r			Draw rects (default)" << endl
+    << "  -R			Do no draw rects (default: draw rects)" << endl
     << endl
     ;
   if (errno) {
@@ -169,7 +180,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FcC:X:Y:T:eEgGlLdW:H:hs:u:q:";
+static const char *sopts = "FcC:X:Y:T:eEgGlLdW:H:hs:u:q:rR";
 
 // Parses options and sets the global options structure.
 static void
@@ -218,6 +229,10 @@ get_options(int argc, char *argv[], options_t &o)
       o.queryType = getenum<VoronoiDiagram<double>::SearchMethod>(
         VoronoiDiagram<double>::SM_BAD, optarg, errstr, "query type");
       break;
+    case 'r':
+      o.drawRects = true; break;
+    case 'R':
+      o.drawRects = false; break;
     case 'h':
       usage(argv[0]);
     case ':':
@@ -399,17 +414,38 @@ draw_sites(Mat img, const VoronoiDiagram<Tp_> &vd)
   }
 }
 
-template<class OutputRectIter>
+template<class rect_type>
+static void
+draw_rect(Mat img, rect_type rect, Scalar color, int thickness=2)
+{
+  auto width  = bp::get(rect, bp::HORIZONTAL, bp::HIGH)
+              - bp::get(rect, bp::HORIZONTAL, bp::LOW);
+  Point2f center;
+  bp::center(center, rect);
+  Size2f size(width, width);
+  RotatedRect rr(center, size, 45.0f);
+  std::array<Point2f, 4> pts;
+  rr.points(pts.begin());
+  for (unsigned int i = 0u; i < pts.size(); ++i)
+    cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thickness);
+}
+
+template<class Tp_, class RectIter>
+static void
+draw_user_rects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rectp)
+{
+  for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp)
+  {
+    Scalar color = colorKey(vd.site_index(userp), vd.sites_size());
+    draw_rect(img, *rectp++, color);
+  }
+}
+
+template<class rect_type>
 static void
 build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
-    Size const& resolution, OutputRectIter rects_out)
+    Size const& resolution, vector<rect_type> &rects_out)
 {
-  // With older OpenCV, you can't construct Point2d from Point
-#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
-  typedef pointiter<vector<Point>::iterator, Point2d> p2di;
-#else
-  typedef vector<Point>::iterator p2di;typename 
-#endif
 
   VoronoiDiagram<double> vd(
       p2di(sites.begin()), p2di(sites.end()),
@@ -421,16 +457,18 @@ build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
     draw_cells(img, vd);
   }
   draw_sites(img, vd);
-  vd.build_rects(rects_out);
+  vd.build_rects(back_inserter(rects_out));
 
   if (opts.drawRects) {
-    draw_rects(img, rects.begin(), rects.end());
+    draw_user_rects(img, vd, rects_out.begin());
   }
+}
 
+static void
+finish_img(Mat img, Rect const& bbox, Size const& resolution)
+{
   // Convert grayscale gradient to color gradient for plotting
   Mat colorimg;
-  auto pts = boost::join(sites, users);
-  Rect bbox = boundingRect(vector<Point>(pts.begin(), pts.end()));
   // squash to screen size, maintaining aspect ratio
   if ((bbox.width > 0 || bbox.height > 0)
       && (bbox.height > opts.screenHeight || bbox.width > opts.screenWidth)) {
@@ -441,12 +479,6 @@ build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
 
   imshow("output", colorimg);
   waitKey(0);
-}
-
-template<class InputIter>
-static void
-draw_rects(InputIter begin, InputIter end)
-{
 }
 
 int main(int argc, char *argv[])
@@ -481,7 +513,7 @@ int main(int argc, char *argv[])
   typedef typename CComp::coordinate_type coordinate_type;
   typedef typename bp::rectangle_data<coordinate_type> rect_type;
   vector<rect_type> rects;
-  build_rects(img, sites, users, resolution, back_inserter(rects));
+  build_rects(img, sites, users, resolution, rects);
 
   if (opts.computeComponents)
   {
@@ -489,6 +521,10 @@ int main(int argc, char *argv[])
     comp.compute();
     cout << "maximal depth: " << comp.depth() << endl;
   }
+
+  auto pts = boost::join(sites, users);
+  Rect bbox = boundingRect(vector<Point>(pts.begin(), pts.end()));
+  finish_img(img, bbox, resolution);
 
   return 0;
 }

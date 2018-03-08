@@ -36,10 +36,54 @@ point_traits<ptype> \
 }} // end namespace boost::polygon
 #endif
 
+#ifndef BOOST_POLY_REGISTER_POINT
+#define BOOST_POLY_REGISTER_POINT(ptype, ctype) \
+namespace boost { namespace polygon { \
+template <> struct \
+geometry_concept<ptype> \
+{ \
+  typedef point_concept type; \
+}; \
+template <> struct \
+point_traits<ptype> \
+{ \
+  typedef ctype coordinate_type; \
+  static inline coordinate_type get(const ptype &pt, orientation_2d orient) \
+  { \
+    return (orient == HORIZONTAL) ? pt.x : pt.y; \
+  } \
+}; \
+}} // end namespace boost::polygon
+#endif
+
+#define _EXPAND(...) __VA_ARGS__
+
+#ifndef BOOST_POLY_REGISTER_MPOINT
+#define BOOST_POLY_REGISTER_MPOINT(ptype, ctype) \
+_EXPAND(BOOST_POLY_REGISTER_POINT(ptype, ctype)) \
+namespace boost { namespace polygon { \
+template <> struct \
+point_mutable_traits<ptype> \
+{ \
+  typedef ctype coordinate_type; \
+  static inline void set(ptype& point, orientation_2d orient, \
+      coordinate_type value) \
+  { \
+    switch(orient.to_int()) { \
+    case VERTICAL: point.y = value; break; \
+    case HORIZONTAL: default: point.x = value; break; \
+    } \
+  } \
+  static inline ptype construct(coordinate_type xval, coordinate_type yval) \
+    { return ptype(xval, yval); } \
+}; \
+}} // end namespace boost::polygon
+#endif
+
 // Tell boost about cv points
-BOOST_POLY_REGISTER_POINT(cv::Point, int);
-BOOST_POLY_REGISTER_POINT(cv::Point2f, float);
-BOOST_POLY_REGISTER_POINT(cv::Point2d, double);
+BOOST_POLY_REGISTER_MPOINT(cv::Point, int);
+BOOST_POLY_REGISTER_MPOINT(cv::Point2f, float);
+BOOST_POLY_REGISTER_MPOINT(cv::Point2d, double);
 
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point, int, cs::cartesian, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point2f, float, cs::cartesian, x, y);
@@ -203,10 +247,11 @@ public:
       {
         point_type site = nearest_site(uit);
         point_type user = *uit;
-        coordinate_type width = std::abs(site.x - user.x);
-        coordinate_type height = std::abs(site.y - user.y);
-        interval_type hi = interval_type(user.x - width/2,  user.x + width/2);
-        interval_type vi = interval_type(user.y - height/2, user.y + height/2);
+        coordinate_type l1d = std::abs(site.x - user.x)
+                            + std::abs(site.y - user.y);
+        coordinate_type l1r = (l1d * sqrt(2))/2;
+        interval_type hi = interval_type(user.x - l1r, user.x + l1r);
+        interval_type vi = interval_type(user.y - l1r, user.y + l1r);
         *out++ = rect_type(hi, vi);
         ++uit;
       }
