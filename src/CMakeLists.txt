@@ -54,7 +54,7 @@ target_link_libraries(${TEST_PROG}
 #target_link_libraries(btreetest ${Boost_LIBRARIES} )
 #target_link_libraries(l23test ${Boost_LIBRARIES} )
 
-cotire(${TEST_PROG})
+#cotire(${TEST_PROG})
 
 install (TARGETS ${TEST_PROG} DESTINATION bin)
 #install (TARGETS treetest DESTINATION bin)
