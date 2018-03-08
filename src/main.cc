@@ -414,20 +414,16 @@ draw_sites(Mat img, const VoronoiDiagram<Tp_> &vd)
   }
 }
 
-template<class rect_type>
+template<class Tp_>
 static void
-draw_rect(Mat img, rect_type rect, Scalar color, int thickness=2)
+draw_l1_rball(Mat img, Point2f center, Tp_ radius, Scalar color, int thicc=2)
 {
-  auto width  = bp::get(rect, bp::HORIZONTAL, bp::HIGH)
-              - bp::get(rect, bp::HORIZONTAL, bp::LOW);
-  Point2f center;
-  bp::center(center, rect);
-  Size2f size(width, width);
+  Size2f size(radius, radius);
   RotatedRect rr(center, size, 45.0f);
   std::array<Point2f, 4> pts;
   rr.points(pts.begin());
   for (unsigned int i = 0u; i < pts.size(); ++i)
-    cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thickness);
+    cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
 }
 
 template<class Tp_, class RectIter>
@@ -436,8 +432,14 @@ draw_user_rects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rectp)
 {
   for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp)
   {
+    const auto rect = *rectp;
     Scalar color = colorKey(vd.site_index(userp), vd.sites_size());
-    draw_rect(img, *rectp++, color);
+    auto radius = bp::get(rect, bp::HORIZONTAL, bp::HIGH)
+                - bp::get(rect, bp::HORIZONTAL, bp::LOW);
+    Point2f center;
+    bp::center(center, rect);
+    draw_l1_rball(img, center, radius, color);
+    ++rectp;
   }
 }
 
