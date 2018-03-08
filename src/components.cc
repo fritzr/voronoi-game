@@ -59,8 +59,8 @@ template<class Tp_>
 void ConnectedComponents<Tp_>::
 remove_rect(rect_type const& r)
 {
-  auto lb = edges_x.find(r.edge(bp::VERTICAL, bp::LOW));
-  auto ub = edges_x.find(r.edge(bp::VERTICAL, bp::HIGH));
+  auto lb = edges_x.find(r.edge(bp::VERTICAL, bp::HIGH));
+  auto ub = edges_x.find(r.edge(bp::VERTICAL, bp::LOW));
   assert(lb != edges_x.end() && ub != edges_x.end());
   // Find the first location in our depth list to remove
   // and remove the corresponding depth and lower bound.
@@ -91,12 +91,12 @@ compute(void)
 
     switch (edge.dir.to_int())
     {
-    case bp::LOW:
+    case bp::HIGH:
       // When we first encounter a rectangle, insert its vertical edges in the
       // sweep status.
       insert_rect(rect(edge));
       break;
-    case bp::HIGH:
+    case bp::LOW:
       // When we encounter the top of a rectangle, we can remove its vertical
       // edges from our sweep status.
       remove_rect(rect(edge));
