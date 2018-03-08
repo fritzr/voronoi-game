@@ -13,7 +13,7 @@
 
 #include <boost/graph/adjacency_list.hpp>
 
-#include "tree.h"
+//#include "tree.h"
 
 template <class Container>
   class push_insert_iterator:
@@ -121,6 +121,7 @@ struct depth_compare
 // Node to track 'cell depths'. These form the tree T(V_k) from the paper,
 // the leaves of which represent g_k[j]: the depth of the cell at position
 // j in the current sweep partition.
+/*
 template<class Tp_>
 class DepthNode : public tree::avl_node<DepthNode<Tp_> >
 {
@@ -144,6 +145,7 @@ public:
     return !node_traits::get_left(this) && !node_traits::get_right(this);
   }
 };
+*/
 
 template<class Iter1, class Iter2>
 Iter1 sync_iters(Iter1 begin1, Iter2 begin2, Iter2 end2) {

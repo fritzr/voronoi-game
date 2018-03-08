@@ -64,6 +64,12 @@ typedef pointiter<typename std::vector<cv::Point>::iterator, cv::Point2d> p2di;
 typedef typename std::vector<cv::Point>::iterator p2di;
 #endif
 
+// Point order from RotatedRect::points()
+#define RRBL 0
+#define RRTL 1
+#define RRTR 2
+#define RRBR 3
+
 #include <boost/range/join.hpp>
 #include <boost/foreach.hpp>
 
@@ -78,6 +84,14 @@ using namespace std;
 using namespace cv;
 using namespace voronoi;
 
+enum DrawRects {
+  RECTS_NONE = 0,
+  RECTS_ROTATED = 1,
+  RECTS_UPRIGHT = 2,
+  RECTS_BOTH = 3,
+  RECTS_BAD = 4,
+};
+
 struct options_t {
   // Global configurable options
   bool drawEdges=true;
@@ -91,7 +105,7 @@ struct options_t {
   int screenWidth = 1920;
   int screenHeight = 1080;
   bool computeComponents = false;
-  bool drawRects = true;
+  int drawRects = true;
   VoronoiDiagram<double>::SearchMethod queryType
     =VoronoiDiagram<double>::Default;
 
@@ -149,9 +163,9 @@ usage(const char *prog, const char *errmsg)
     << "  -q TYPE		Query type for mapping users to sites:" << endl
     << "    [0:default], 1:brute force, 2:range search, 3:NN(1) (fastest)"
     << endl
-    << "  -c			Compute connected components:" << endl
-    << "  -r			Draw rects (default)" << endl
-    << "  -R			Do no draw rects (default: draw rects)" << endl
+    << "  -c			Compute connected components." << endl
+    << "  -r			Draw rects (default: none):" << endl
+    << "    [0:none], 1:rotated, 2:upright, 3:both" << endl
     << endl
     ;
   if (errno) {
@@ -180,7 +194,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FcC:X:Y:T:eEgGlLdW:H:hs:u:q:rR";
+static const char *sopts = "FcC:X:Y:T:eEgGlLdW:H:hs:u:q:r:";
 
 // Parses options and sets the global options structure.
 static void
@@ -230,9 +244,8 @@ get_options(int argc, char *argv[], options_t &o)
         VoronoiDiagram<double>::SM_BAD, optarg, errstr, "query type");
       break;
     case 'r':
-      o.drawRects = true; break;
-    case 'R':
-      o.drawRects = false; break;
+      o.drawRects = getenum<DrawRects>(RECTS_BAD, optarg, errstr, "rect type");
+      break;
     case 'h':
       usage(argv[0]);
     case ':':
@@ -370,6 +383,54 @@ readOrDie(const string &path, It out)
   }
 }
 
+template<typename T>
+static inline T deg2rad(T deg) {
+  return (deg * static_cast<T>(M_PI)) / static_cast<T>(180.0);
+}
+template<typename T>
+static inline T rad2deg(T rad) {
+  return (rad * static_cast<T>(180.0)) / static_cast<T>(M_PI);
+}
+
+// Pre-computed 45-deg Euler rotation matrices
+static const float ANGLE_DEG = 45.0f;
+static const float pangle = deg2rad(ANGLE_DEG);
+static const float nangle = deg2rad(-ANGLE_DEG);
+static const Mat rotZn = Mat(Matx22f({
+  cosf(nangle), -sinf(nangle), /* 0, */
+  sinf(nangle),  cosf(nangle), /* 0, */
+  /*         0,             0,    1, */
+}));
+static const Mat rotZp = Mat(Matx22f({
+  cosf(pangle), -sinf(pangle), /* 0, */
+  sinf(pangle),  cosf(pangle), /* 0, */
+  /*         0,             0,    1, */
+}));
+
+static inline Point2f rotateZ2f_neg(Point2f pt) {
+  Mat ans = Mat(Matx12f({pt.x, pt.y})) * rotZn;
+  return Point2f(ans.at<float>(0u, 0u), ans.at<float>(0u, 1u));
+}
+
+static inline Point2f rotateZ2f_pos(Point2f pt) {
+  Mat ans = Mat(Matx12f({pt.x, pt.y})) * rotZp;
+  return Point2f(ans.at<float>(0u, 0u), ans.at<float>(0u, 1u));
+}
+
+static Point2f bias;
+
+template<class pt>
+static inline pt rot(pt p)
+{
+  return rotateZ2f_pos(p) - bias;
+}
+
+template<class pt>
+static inline pt check_rot(pt p)
+{
+  return (opts.drawRects == RECTS_UPRIGHT) ? rot(p) : p;
+}
+
 static inline Scalar
 colorKey(int i, int imax) {
   return Scalar(((i+1) * double(maxcolor))/ (imax+1));
@@ -387,7 +448,7 @@ draw_cells (Mat img, const VoronoiDiagram<Tp_> &vd)
     for (auto edge_iter = vd.cell_begin(cell); edge_iter != vd.cell_end(cell);
         ++edge_iter) {
       auto edge = *edge_iter;
-      cv::line(img, edge.p0, edge.p1, color, 2);
+      cv::line(img, check_rot(edge.p0), check_rot(edge.p1), color, 2);
     }
     // With debug, show each cell's borders as it is drawn
     if (opts.debug) {
@@ -404,66 +465,118 @@ draw_sites(Mat img, const VoronoiDiagram<Tp_> &vd)
   // Fill sites
   for (size_t site_idx = 0u; site_idx < vd.sites_size(); ++site_idx) {
     Scalar color = colorKey(site_idx, vd.sites_size());
-    cv::circle(img, vd.site(site_idx), 10, color, -1);
+    cv::circle(img, check_rot(vd.site(site_idx)), 10, color, -1);
   }
 
   // Don't fill users
   for (size_t user_idx = 0u; user_idx < vd.users_size(); ++user_idx) {
     Scalar color = colorKey(vd.site_index(user_idx), vd.sites_size());
-    cv::circle(img, vd.user(user_idx), 5, color);
+    cv::circle(img, check_rot(vd.user(user_idx)), 5, color);
   }
 }
 
-template<class Tp_>
-static void
-draw_l1_rball(Mat img, Point2f center, Tp_ radius, Scalar color, int thicc=2)
+// rotated rect bounding box as rectangle data
+static bp::rectangle_data<float>
+getRRBBox(RotatedRect const& rr)
 {
-  Size2f size(radius, radius);
-  RotatedRect rr(center, size, 45.0f);
-  std::array<Point2f, 4> pts;
-  rr.points(pts.begin());
-  for (unsigned int i = 0u; i < pts.size(); ++i)
-    cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
+  Rect_<float> brect = rr.boundingRect2f();
+  bp::rectangle_data<float> ret;
+  bp::set_points(ret, brect.tl(), brect.br());
+  return ret;
+}
+
+// rotated rect bounding box as rectangle data
+template<class RRectIter>
+static bp::rectangle_data<float>
+getRRBBox(RRectIter begin, RRectIter end)
+{
+  auto bbox = getRRBBox(*begin++); // assumes non-empty iterator
+  while (begin != end)
+  {
+    RotatedRect const& rr = *begin++;
+    std::array<Point2f, 4> pts;
+    rr.points(pts.begin());
+    for (unsigned int i = 0u; i < 4; ++i)
+      bp::encompass(bbox, pts[i]);
+  }
+  return bbox;
 }
 
 template<class Tp_, class RectIter>
 static void
-draw_user_rects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rectp)
+draw_rotrects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rrectp,
+    int thicc=2)
 {
   for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp)
   {
-    const auto rect = *rectp;
+    const RotatedRect& rrect = *rrectp;
+    std::array<Point2f, 4> pts;
+    rrect.points(pts.begin());
     Scalar color = colorKey(vd.site_index(userp), vd.sites_size());
-    auto radius = bp::get(rect, bp::HORIZONTAL, bp::HIGH)
-                - bp::get(rect, bp::HORIZONTAL, bp::LOW);
-    Point2f center;
-    bp::center(center, rect);
-    draw_l1_rball(img, center, radius, color);
-    ++rectp;
+    for (unsigned int i = 0u; i < pts.size(); ++i)
+      cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
+    ++rrectp;
   }
 }
 
-template<class rect_type>
+template<class rect_type, class RectIter>
 static void
 build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
-    Size const& resolution, vector<rect_type> &rects_out)
+    Size const& resolution, RectIter rects_out)
 {
-
   VoronoiDiagram<double> vd(
       p2di(sites.begin()), p2di(sites.end()),
       p2di(users.begin()), p2di(users.end()),
       resolution.width, resolution.height);
   vd.build(opts.queryType);
 
+  // First build the L1 rotated rects.
+  vector<RotatedRect> rotrects;
+  vd.build_rects(back_inserter(rotrects));
+
+  // Draw rotated rects if we want.
+  if (opts.drawRects & RECTS_ROTATED)
+    draw_rotrects(img, vd, rotrects.begin());
+
+  // Get the center of the rotated rect-space.
+  auto bbox = getRRBBox(rotrects.begin(), rotrects.end());
+  Point2f center;
+  bp::center(center, bbox);
+  //cv::circle(img, center, 10, fillColor);
+  // set the global bias position so points appear back near the center
+  bias = rotateZ2f_pos(center) - center;
+
+  // Now rotate the entire space to output axis-up rectangles,
+  // biased by the center point.
+  size_t user_idx = 0u;
+  for (auto rrectp = rotrects.begin(); rrectp != rotrects.end(); ++rrectp)
+  {
+    const RotatedRect& rrect = *rrectp;
+    array<Point2f, 4> pts;
+    rrect.points(pts.begin());
+    for (auto pp = pts.begin(); pp != pts.end(); ++pp)
+      *pp = rot(*pp); // rotate and bias
+
+    // Write the axis-up rectangles to the output array.
+     // BL, TL, TR, BR -> xl, yl, xh, yh
+    *rects_out++ = bp::construct<rect_type>(
+        pts[RRBL].x, pts[RRBL].y, pts[RRTR].x, pts[RRTR].y);
+
+    // Draw the axis-up rects if we want.
+    if (opts.drawRects & RECTS_UPRIGHT)
+    {
+      Scalar color = colorKey(vd.site_index(user_idx), vd.sites_size());
+      cv::rectangle(img, Rect(pts[RRTL], pts[RRBR]), color, 2);
+    }
+
+    ++user_idx;
+  }
+
+  // Draw cells/sites now that we know the proper bias.
   if (opts.drawEdges) {
     draw_cells(img, vd);
   }
   draw_sites(img, vd);
-  vd.build_rects(back_inserter(rects_out));
-
-  if (opts.drawRects) {
-    draw_user_rects(img, vd, rects_out.begin());
-  }
 }
 
 static void
@@ -515,7 +628,7 @@ int main(int argc, char *argv[])
   typedef typename CComp::coordinate_type coordinate_type;
   typedef typename bp::rectangle_data<coordinate_type> rect_type;
   vector<rect_type> rects;
-  build_rects(img, sites, users, resolution, rects);
+  build_rects<rect_type>(img, sites, users, resolution, back_inserter(rects));
 
   if (opts.computeComponents)
   {

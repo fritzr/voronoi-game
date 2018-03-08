@@ -239,7 +239,9 @@ public:
   }
 
   // Build L1-distance rectangles for each user. The output iterator must
-  // support users_size() operations.
+  // support users_size() operations. Note that the boost::rectangle concept
+  // requires these to be axis-up, but to be correct they should be rotated
+  // 45 degrees. Just remember that when you use them... ;)
   template<class OutputIter>
     void build_rects(OutputIter out) {
       point_iterator uit = users_begin();
@@ -247,12 +249,9 @@ public:
       {
         point_type site = nearest_site(uit);
         point_type user = *uit;
-        coordinate_type l1d = std::abs(site.x - user.x)
-                            + std::abs(site.y - user.y);
-        coordinate_type l1r = (l1d * sqrt(2))/2;
-        interval_type hi = interval_type(user.x - l1r, user.x + l1r);
-        interval_type vi = interval_type(user.y - l1r, user.y + l1r);
-        *out++ = rect_type(hi, vi);
+        coordinate_type l1d = sqrt(2)
+          * (std::abs(site.x - user.x) + std::abs(site.y - user.y));
+        *out++ = cv::RotatedRect(user, cv::Size(l1d, l1d), 45.0f);
         ++uit;
       }
     }
