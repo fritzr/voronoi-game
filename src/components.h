@@ -34,7 +34,7 @@ public:
 };
 
 template<typename Container>
-push_insert_iterator<Container> push_inserter(Container container){
+push_insert_iterator<Container> push_inserter(Container& container){
   return push_insert_iterator<Container>(container);
 }
 
