@@ -3,6 +3,12 @@
 #include <set>
 #include <queue>
 #include <vector>
+#include <unordered_set>
+
+#ifdef DEBUG
+#include <iostream>
+#include <iomanip>
+#endif
 
 #include <opencv2/core/core.hpp>
 
@@ -54,10 +60,21 @@ struct Edge
   coordinate_type coord; // actual coordinate
   typename bp::direction_1d dir; // LOW or HIGH
   int rect_index; // parent rectangle
+  mutable int depth; // does not affect sorting
 
-  Edge() : coord(), dir(), rect_index(-1) {}
+  Edge() : coord(), dir(), rect_index(-1), depth(-1) {}
   Edge(coordinate_type const& c, bp::direction_1d const& d, int idx)
-    : coord(c), dir(d), rect_index(idx) {}
+    : coord(c), dir(d), rect_index(idx), depth(-1) {}
+
+#ifdef DEBUG
+  template<typename U>
+    friend std::ostream& operator<<(std::ostream& os, Edge<U> const& e) {
+      os << "<d=" << e.depth << " " << (e.dir == bp::LOW ? "LOW " : "HIGH")
+         << " [" << std::setw(2) << std::setfill(' ') << e.rect_index
+         << "] " << e.coord << ">";
+      return os;
+    }
+#endif
 };
 
 template<class Tp_>
@@ -81,8 +98,8 @@ struct RectComponent : bp::rectangle_data<Tp_>
 
   template<class OutIter> void
     add_edges(OutIter out, bp::orientation_2d orient) {
-      *out++ = edge(orient, bp::LOW);
       *out++ = edge(orient, bp::HIGH);
+      *out++ = edge(orient, bp::LOW);
     }
 };
 
@@ -93,6 +110,45 @@ namespace boost { namespace polygon {
     struct geometry_concept<components::RectComponent<Tp_> >
       { typedef rectangle_concept type; };
 }}
+
+#ifdef DEBUG
+  template<typename T, typename C>
+    std::ostream& operator<<(std::ostream& os, std::set<T, C> const& s) {
+      os << "set< ";
+      for (auto it = s.begin(); it != s.end(); ++it)
+        os << *it << ", ";
+      os << " >";
+      return os;
+    }
+
+  template<typename T>
+    std::ostream& operator<<(std::ostream& os, std::unordered_set<T> const& s) {
+      os << "set{ ";
+      for (auto it = s.begin(); it != s.end(); ++it)
+        os << *it << ", ";
+      os << " }";
+      return os;
+    }
+
+  template<typename T>
+    std::ostream& operator<<(std::ostream& os, std::vector<T> const& v) {
+      os << "[ ";
+      for (auto it = v.begin(); it != v.end(); ++it)
+        os << *it << ", ";
+      os << " ]";
+      return os;
+    }
+
+  template<typename T>
+    std::ostream& operator<<(std::ostream& os, std::list<T> const& l) {
+      os << "[ ";
+      for (auto it = l.begin(); it != l.end(); ++it)
+        os << *it << ", ";
+      os << " ]";
+      return os;
+    }
+#endif
+
 
 namespace components
 {
@@ -154,6 +210,13 @@ Iter1 sync_iters(Iter1 begin1, Iter2 begin2, Iter2 end2) {
   return begin1;
 }
 
+template<class Iter1, class Iter2>
+Iter1 rsync_iters(Iter1 end1, Iter2 end2, Iter2 begin2) {
+  while (end2-- != begin2)
+    --end1;
+  return end1;
+}
+
 template<class Tp_>
 class ConnectedComponents
 {
@@ -173,7 +236,6 @@ public:
   // T(V_k) from the paper - TODO
   //typedef typename tree::make_avltree<DepthNode<Tp_> >::type depth_tree_type;
   // for now we take a short-cut and keep the entire array gk[j]
-  typedef std::list<int> depth_list;
 
   // Vertexes are rect_type objects.
   typedef typename b::property<b::vertex_index_t, int> VertexProps;
@@ -186,16 +248,20 @@ public:
     id_map;
   typedef typename std::vector<vertex_descriptor> descriptor_list;
 
+  typedef typename edge_set::iterator edge_iterator;
+
 private:
   rect_container rects;
   edge_queue edges_y; // horizontal rect edges which are the sweep events
   edge_set edges_x;   // vertical rect edges within each sweep line event
   //depth_tree_type depth_tree;
-  depth_list depths;
   components_graph graph;
   id_map component_ids;
   descriptor_list vertexes;
   int max_depth = -1;
+  bool max_flag = false;
+  // indexes of rects which form the maximal intersection
+  std::unordered_set<size_t> max_rects;
 
   inline vertex_descriptor vd(int idx) const { return vertexes[idx]; }
 
@@ -204,7 +270,7 @@ private:
   }
 
   template<typename EdgeSetIter>
-    void check_max_depth(rect_type const& r, EdgeSetIter edge_lb, int depth);
+    int check_max_depth(rect_type const& r, EdgeSetIter edge_lb, int depth);
 
   void insert_rect(rect_type const& r);
   void remove_rect(rect_type const& r);

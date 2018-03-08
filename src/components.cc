@@ -2,6 +2,11 @@
 #include <algorithm>
 #include <functional>
 
+#ifdef DEBUG
+#include <iostream>
+#include <iomanip>
+#endif
+
 #include "components.h"
 
 using namespace std;
@@ -18,66 +23,107 @@ ConnectedComponents<Tp_>::ConnectedComponents(void)
 
 template<class Tp_>
 template<class EdgeSetIter>
-void ConnectedComponents<Tp_>::
+int ConnectedComponents<Tp_>::
 check_max_depth(rect_type const& r, EdgeSetIter edge_lb, int new_depth)
 {
   if (new_depth <= max_depth)
-    return;
+    return new_depth;
   max_depth = new_depth;
+  max_flag = true;
   // TODO - once we find a max-depth... then what
+  max_rects.clear();
+  max_rects.insert(r.index);
+  max_rects.insert(edge_lb->rect_index);
+  ++edge_lb;
+  max_rects.insert(edge_lb->rect_index);
+  return new_depth;
 }
+
+#ifdef DEBUG
+template<class Iter>
+static unsigned int iter_index(Iter begin, Iter end)
+{
+  unsigned int i = 0u;
+  while (begin++ != end)
+    ++i;
+  return i;
+}
+#endif
 
 template<class Tp_>
 void ConnectedComponents<Tp_>::
 insert_rect(rect_type const& r)
 {
+#ifdef DEBUG
+  cerr << "inserting" << endl;
+#endif
   // Insert edges in-place.
-  auto lb = edges_x.insert(r.edge(bp::VERTICAL, bp::LOW)).first;
-  auto ub = edges_x.insert(r.edge(bp::VERTICAL, bp::HIGH)).first;
-  // Find the equivalent location in the depth list to insert
-  // and insert the depth of the left edge, which is one more than before.
-  int prev_depth = 0;
-  auto depthit = sync_iters(depths.begin(), edges_x.begin(), lb);
-  if (depthit != depths.end())
-    prev_depth = *depthit++;
-  depthit = ++depths.insert(depthit, prev_depth+1);
-  // Now increment all depths covered by the rect.
-  // TODO - the efficient way to do this is to use the tree T(V_k).
-  // For now we are skipping the tree and using a list to avoid the work of
-  // writing the custom 2-3 tree data-structure.
-  while (depthit != depths.end() && lb != ub) {
-    check_max_depth(r, lb, ++(*depthit++));
-    b::add_edge(vd(r.index), vd((*lb).rect_index), graph);
-    ++lb;
+  edge_iterator elb = edges_x.insert(r.edge(bp::VERTICAL, bp::HIGH)).first;
+  edge_iterator ebefore = --edge_iterator(elb);
+  edge_iterator eub = edges_x.insert(r.edge(bp::VERTICAL, bp::LOW)).first;
+
+  int depth = 0;
+  if (elb != edges_x.begin())
+  {
+    depth = ebefore->depth;
+    // If we were not inserted after a left edge, decrement depth
+    // since we will erroneously increment it in the loop below.
+    if (ebefore->dir != bp::HIGH)
+      --depth;
   }
-  // Now insert the depth of the right edge.
-  // The depth of all unvisited edges to the right are unchanged.
-  depths.insert(depthit, prev_depth+1);
+  elb->depth = ++depth;
+  ebefore = elb++;
+
+  // Now increment depths of all edges inside us.
+  while (elb != eub)
+  {
+    depth = ++(elb->depth);
+    elb->depth = check_max_depth(r, elb, depth);
+    // Mark that the rectangles intersect.
+    b::add_edge(vd(r.index), vd((*elb).rect_index), graph);
+    ++elb;
+    ++ebefore;
+  }
+
+  // End edge gets the last depth. Decrement if we are after a right edge.
+  if (ebefore->dir != bp::HIGH)
+    --depth;
+  eub->depth = depth;
+
+#ifdef DEBUG
+  cerr << "inserted edges, status: " << edges_x << endl;
+#endif
 }
 
 template<class Tp_>
 void ConnectedComponents<Tp_>::
 remove_rect(rect_type const& r)
 {
+#ifdef DEBUG
+  cerr << "removing" << endl;
+#endif
+
   auto lb = edges_x.find(r.edge(bp::VERTICAL, bp::HIGH));
   auto ub = edges_x.find(r.edge(bp::VERTICAL, bp::LOW));
   assert(lb != edges_x.end() && ub != edges_x.end());
+
   // Find the first location in our depth list to remove
   // and remove the corresponding depth and lower bound.
-  auto depthit = sync_iters(depths.begin(), edges_x.begin(), lb);
-  depths.erase(depthit++);
   edges_x.erase(lb++);
   // Now subtract one from all depths until the end.
   // Again, this should really be done by manipulating internal tree nodes.
   while (lb != ub)
   {
-    --(*depthit++);
-    // ??? b::add_edge(vd(r.index), vd((*eit).rect_index), graph);
+    --(lb->depth);
     ++lb;
+    // ??? b::add_edge(vd(r.index), vd((*eit).rect_index), graph);
   }
-  // Now erase the right-edges.
-  depths.erase(depthit);
+  // Now erase the right edge.
   edges_x.erase(ub);
+
+#ifdef DEBUG
+  cerr << "removed edges, status: " << edges_x << endl;
+#endif
 }
 
 template<class Tp_>
@@ -88,6 +134,14 @@ compute(void)
   while (!edges_y.empty())
   {
     typename edge_queue::const_reference edge = edges_y.top();
+#ifdef DEBUG
+    cerr << "reading edge " << edge << endl;
+#endif
+    if (max_flag)
+    {
+      max_rects.insert(edge.rect_index);
+      max_flag = false;
+    }
 
     switch (edge.dir.to_int())
     {
@@ -107,6 +161,10 @@ compute(void)
 
     edges_y.pop();
   }
+
+#ifdef DEBUG
+  cerr << "max rects are: " << max_rects << endl;
+#endif
 }
 
 template class ConnectedComponents<double>;
