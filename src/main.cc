@@ -423,6 +423,10 @@ build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
   draw_sites(img, vd);
   vd.build_rects(rects_out);
 
+  if (opts.drawRects) {
+    draw_rects(img, rects.begin(), rects.end());
+  }
+
   // Convert grayscale gradient to color gradient for plotting
   Mat colorimg;
   auto pts = boost::join(sites, users);
@@ -437,6 +441,12 @@ build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
 
   imshow("output", colorimg);
   waitKey(0);
+}
+
+template<class InputIter>
+static void
+draw_rects(InputIter begin, InputIter end)
+{
 }
 
 int main(int argc, char *argv[])
