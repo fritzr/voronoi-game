@@ -30,7 +30,6 @@ check_max_depth(rect_type const& r, EdgeSetIter edge_lb, int new_depth)
     return new_depth;
   max_depth = new_depth;
   max_flag = true;
-  // TODO - once we find a max-depth... then what
   max_rects.clear();
   max_rects.insert(r.index);
   max_rects.insert(edge_lb->rect_index);
@@ -58,9 +57,9 @@ insert_rect(rect_type const& r)
   cerr << "inserting" << endl;
 #endif
   // Insert edges in-place.
-  edge_iterator elb = edges_x.insert(r.edge(bp::VERTICAL, bp::HIGH)).first;
+  edge_iterator elb = edges_x.insert(r.edge(bp::VERTICAL, bp::LOW)).first;
   edge_iterator ebefore = --edge_iterator(elb);
-  edge_iterator eub = edges_x.insert(r.edge(bp::VERTICAL, bp::LOW)).first;
+  edge_iterator eub = edges_x.insert(r.edge(bp::VERTICAL, bp::HIGH)).first;
 
   int depth = 0;
   if (elb != edges_x.begin())
@@ -68,7 +67,7 @@ insert_rect(rect_type const& r)
     depth = ebefore->depth;
     // If we were not inserted after a left edge, decrement depth
     // since we will erroneously increment it in the loop below.
-    if (ebefore->dir != bp::HIGH)
+    if (ebefore->dir != bp::LOW)
       --depth;
   }
   elb->depth = ++depth;
@@ -86,7 +85,7 @@ insert_rect(rect_type const& r)
   }
 
   // End edge gets the last depth. Decrement if we are after a right edge.
-  if (ebefore->dir != bp::HIGH)
+  if (ebefore->dir != bp::LOW)
     --depth;
   eub->depth = depth;
 
@@ -103,8 +102,8 @@ remove_rect(rect_type const& r)
   cerr << "removing" << endl;
 #endif
 
-  auto lb = edges_x.find(r.edge(bp::VERTICAL, bp::HIGH));
-  auto ub = edges_x.find(r.edge(bp::VERTICAL, bp::LOW));
+  auto lb = edges_x.find(r.edge(bp::VERTICAL, bp::LOW));
+  auto ub = edges_x.find(r.edge(bp::VERTICAL, bp::HIGH));
   assert(lb != edges_x.end() && ub != edges_x.end());
 
   // Find the first location in our depth list to remove
@@ -137,11 +136,11 @@ compute(void)
 #ifdef DEBUG
     cerr << "reading edge " << edge << endl;
 #endif
-    if (max_flag)
-    {
-      max_rects.insert(edge.rect_index);
-      max_flag = false;
-    }
+    //if (max_flag)
+    //{
+      //max_rects.insert(edge.rect_index);
+      //max_flag = false;
+    //}
 
     switch (edge.dir.to_int())
     {
@@ -162,8 +161,22 @@ compute(void)
     edges_y.pop();
   }
 
+  // Now if we found any max intersections, close them.
+  if (!max_rects.empty())
+  {
+    auto rit = max_rects.begin();
+    int idx = *rit++;
+    max_rect = rects[idx];
+    while (rit != max_rects.end())
+    {
+      idx = *rit++;
+      /*assert(*/bp::intersect(max_rect, rects[idx])/*)*/;
+    }
+  }
+
 #ifdef DEBUG
   cerr << "max rects are: " << max_rects << endl;
+  cerr << "max cell is: " << max_rect << endl;
 #endif
 }
 

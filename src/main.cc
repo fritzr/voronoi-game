@@ -60,15 +60,22 @@ struct pointiter : public std::iterator<
 // With older OpenCV, you can't construct Point2d from Point
 #if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
 typedef pointiter<typename std::vector<cv::Point>::iterator, cv::Point2d> p2di;
+
+// Point order from RotatedRect::points()
+#define RRBL 1
+#define RRTL 0
+#define RRTR 3
+#define RRBR 2
+
 #else
 typedef typename std::vector<cv::Point>::iterator p2di;
-#endif
 
 // Point order from RotatedRect::points()
 #define RRBL 0
 #define RRTL 1
 #define RRTR 2
 #define RRBR 3
+#endif
 
 #include <boost/range/join.hpp>
 #include <boost/foreach.hpp>
@@ -126,6 +133,8 @@ static const int FONT = FONT_HERSHEY_SCRIPT_SIMPLEX;
 static const double FONT_SCALE = 0.5;
 static const int FONT_THICKNESS = 1;
 static const Scalar FONT_COLOR(Scalar::all(255));
+const int FONT_XSPACE = 10;
+const int FONT_YSPACE = 10;
 
 static void usage(const char *prog, const char *errmsg=NULL)
 #ifndef _MSC_VER
@@ -285,8 +294,6 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
   const Size sz(img.size());
   const unsigned int dx = sz.width / nx;
   const unsigned int dy = sz.height / ny;
-  const int xspace = 15;
-  const int yspace = 15;
 
   // Vertical lines.
   for (unsigned int xpos=0; xpos < i2u(sz.width); xpos += dx) {
@@ -294,7 +301,7 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
     // Label the grid lines.
     if (labels) {
       ostringstream ss; ss << xpos;
-      putText(img, ss.str(), Point(xpos + xspace, sz.height - yspace),
+      putText(img, ss.str(), Point(xpos + FONT_XSPACE, sz.height - FONT_YSPACE),
           FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
     }
   }
@@ -305,7 +312,7 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
     // Label the grid lines.
     if (labels) {
       ostringstream ss; ss << (sz.height - ypos - dy);
-      putText(img, ss.str(), Point(xspace, ypos + dy - yspace),
+      putText(img, ss.str(), Point(FONT_XSPACE, ypos + dy - FONT_YSPACE),
           FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
     }
   }
@@ -479,7 +486,12 @@ draw_sites(Mat img, const VoronoiDiagram<Tp_> &vd)
 static bp::rectangle_data<float>
 getRRBBox(RotatedRect const& rr)
 {
+  // Older OpenCV doesn't have floating-point bounding rects
+#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
+  Rect brect = rr.boundingRect();
+#else
   Rect_<float> brect = rr.boundingRect2f();
+#endif
   bp::rectangle_data<float> ret;
   bp::set_points(ret, brect.tl(), brect.br());
   return ret;
@@ -507,6 +519,7 @@ static void
 draw_rotrects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rrectp,
     int thicc=2)
 {
+  unsigned int rectidx = 0u;
   for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp)
   {
     const RotatedRect& rrect = *rrectp;
@@ -516,6 +529,10 @@ draw_rotrects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rrectp,
     for (unsigned int i = 0u; i < pts.size(); ++i)
       cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
     ++rrectp;
+
+    putText(img, to_string(rectidx++),
+        Point(rrect.center.x + FONT_XSPACE, rrect.center.y - FONT_YSPACE),
+        FONT, FONT_SCALE, color, FONT_THICKNESS);
   }
 }
 
@@ -579,7 +596,7 @@ build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
   draw_sites(img, vd);
 }
 
-static void
+static Mat
 finish_img(Mat img, Rect const& bbox, Size const& resolution)
 {
   // Convert grayscale gradient to color gradient for plotting
@@ -587,13 +604,11 @@ finish_img(Mat img, Rect const& bbox, Size const& resolution)
   // squash to screen size, maintaining aspect ratio
   if ((bbox.width > 0 || bbox.height > 0)
       && (bbox.height > opts.screenHeight || bbox.width > opts.screenWidth)) {
-    img = resizeToFit(img, img, bbox, resolution);
+    //img = resizeToFit(img, img, bbox, resolution);
   }
   cv::flip(img, colorimg, 0); // flip vertical
   applyColorMap(colorimg, colorimg, opts.colormap);
-
-  imshow("output", colorimg);
-  waitKey(0);
+  return colorimg;
 }
 
 int main(int argc, char *argv[])
@@ -635,11 +650,39 @@ int main(int argc, char *argv[])
     CComp comp(rects.begin(), rects.end());
     comp.compute();
     cout << "maximal depth: " << comp.depth() << endl;
+
+    cout << "maximal intersections from: ";
+    for (auto it = comp.begin(); it != comp.end(); ++it)
+      cout << *it << ", ";
+    cout << endl;
+
+    auto maxrect = comp.max();
+    cout << "maximal rect:  " << maxrect << endl;
+    Point tl, br;
+    bp::assign(tl, bp::ul(maxrect));
+    bp::assign(br, bp::lr(maxrect));
+    Rect r(tl, br);
+    cv::rectangle(img, r, fillColor, CV_FILLED);
   }
 
   auto pts = boost::join(sites, users);
   Rect bbox = boundingRect(vector<Point>(pts.begin(), pts.end()));
-  finish_img(img, bbox, resolution);
+  img = finish_img(img, bbox, resolution);
+
+  // Now that we've flipped the image draw the user point labels
+  // so they are upright.
+  unsigned int user_idx = 0u;
+  for (auto uit = users.begin(); uit != users.end(); ++uit)
+  {
+    Point up = check_rot(*uit);
+    up.y = resolution.height - up.y;
+    putText(img, to_string(user_idx++),
+        Point(up.x + FONT_XSPACE, up.y - FONT_YSPACE),
+        FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
+  }
+
+  imshow("output", img);
+  waitKey(0);
 
   return 0;
 }

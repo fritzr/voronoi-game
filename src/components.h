@@ -112,42 +112,53 @@ namespace boost { namespace polygon {
 }}
 
 #ifdef DEBUG
-  template<typename T, typename C>
-    std::ostream& operator<<(std::ostream& os, std::set<T, C> const& s) {
-      os << "set< ";
-      for (auto it = s.begin(); it != s.end(); ++it)
-        os << *it << ", ";
-      os << " >";
-      return os;
-    }
+template<typename T, typename C>
+  std::ostream& operator<<(std::ostream& os, std::set<T, C> const& s) {
+    os << "set< ";
+    for (auto it = s.begin(); it != s.end(); ++it)
+      os << *it << ", ";
+    os << " >";
+    return os;
+  }
 
-  template<typename T>
-    std::ostream& operator<<(std::ostream& os, std::unordered_set<T> const& s) {
-      os << "set{ ";
-      for (auto it = s.begin(); it != s.end(); ++it)
-        os << *it << ", ";
-      os << " }";
-      return os;
-    }
+template<typename T>
+  std::ostream& operator<<(std::ostream& os, std::unordered_set<T> const& s) {
+    os << "set{ ";
+    for (auto it = s.begin(); it != s.end(); ++it)
+      os << *it << ", ";
+    os << " }";
+    return os;
+  }
 
-  template<typename T>
-    std::ostream& operator<<(std::ostream& os, std::vector<T> const& v) {
-      os << "[ ";
-      for (auto it = v.begin(); it != v.end(); ++it)
-        os << *it << ", ";
-      os << " ]";
-      return os;
-    }
+template<typename T>
+  std::ostream& operator<<(std::ostream& os, std::vector<T> const& v) {
+    os << "[ ";
+    for (auto it = v.begin(); it != v.end(); ++it)
+      os << *it << ", ";
+    os << " ]";
+    return os;
+  }
 
-  template<typename T>
-    std::ostream& operator<<(std::ostream& os, std::list<T> const& l) {
-      os << "[ ";
-      for (auto it = l.begin(); it != l.end(); ++it)
-        os << *it << ", ";
-      os << " ]";
-      return os;
-    }
+template<typename T>
+  std::ostream& operator<<(std::ostream& os, std::list<T> const& l) {
+    os << "[ ";
+    for (auto it = l.begin(); it != l.end(); ++it)
+      os << *it << ", ";
+    os << " ]";
+    return os;
+  }
 #endif
+
+template<typename Tp_>
+std::ostream& operator<<(std::ostream& os,
+    boost::polygon::rectangle_data<Tp_> const& r)
+{
+  namespace bp = boost::polygon;
+  os << "|" << bp::get(r, bp::HORIZONTAL, bp::LOW) << ","
+            << bp::get(r, bp::VERTICAL, bp::HIGH)
+     << "|";
+  return os;
+}
 
 
 namespace components
@@ -224,6 +235,7 @@ public:
   typedef Tp_ coordinate_type;
   typedef typename cv::Point_<Tp_> point_type;
   typedef RectComponent<Tp_> rect_type;
+  typedef typename rect_type::super_type pure_rect_type;
   typedef Edge<Tp_> edge_type;
   typedef EdgeCompare<Tp_> edge_comparator;
 
@@ -248,6 +260,9 @@ public:
     id_map;
   typedef typename std::vector<vertex_descriptor> descriptor_list;
 
+  typedef typename std::unordered_set<size_t> index_set;
+  typedef typename index_set::const_iterator index_iterator;
+
   typedef typename edge_set::iterator edge_iterator;
 
 private:
@@ -261,7 +276,8 @@ private:
   int max_depth = -1;
   bool max_flag = false;
   // indexes of rects which form the maximal intersection
-  std::unordered_set<size_t> max_rects;
+  index_set max_rects;
+  pure_rect_type max_rect;
 
   inline vertex_descriptor vd(int idx) const { return vertexes[idx]; }
 
@@ -300,10 +316,15 @@ public:
         //vertex_descriptor vd = b::add_vertex(graph);
         vertexes.push_back(b::add_vertex(graph));
         b::put(component_ids, vd(idx), b::vertex_index_t(idx));
-        rects.emplace_back(
-            bp::get(*begin, bp::HORIZONTAL),
-            bp::get(*begin, bp::VERTICAL),
-            idx++);
+        // Make sure our intervals are in the proper order, otherwise
+        // the algorithm WILL fail.
+        auto hivl = bp::get(*begin, bp::HORIZONTAL);
+        auto hl = bp::get(hivl, bp::LOW), hh = bp::get(hivl, bp::HIGH);
+        auto vivl = bp::get(*begin, bp::VERTICAL);
+        auto vl = bp::get(vivl, bp::LOW), vh = bp::get(vivl, bp::HIGH);
+        hivl = bp::construct<decltype(hivl)>(std::min(hl,hh), std::max(hl,hh));
+        vivl = bp::construct<decltype(vivl)>(std::min(vl,vh), std::max(vl,vh));
+        rects.emplace_back(hivl, vivl, idx++);
         ++begin;
         // Queue up the horizontal edges. Vertical edges go in at each event.
         rects.back().add_edges(push_inserter(edges_y), bp::HORIZONTAL);
@@ -313,7 +334,13 @@ public:
   // Run the algorithm and compute the connected components.
   void compute(void);
 
-  int depth(void) const { return max_depth; }
+  inline int depth(void) const { return max_depth; }
+
+  // Return the rectangle with maximal depth.
+  inline pure_rect_type max(void) const { return max_rect; }
+
+  inline index_iterator begin(void) const { return max_rects.cbegin(); }
+  inline index_iterator end(void) const { return max_rects.cend(); }
 };
 
 extern template class ConnectedComponents<double>;
