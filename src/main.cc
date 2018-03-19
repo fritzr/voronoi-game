@@ -663,6 +663,19 @@ int main(int argc, char *argv[])
     bp::assign(br, bp::lr(maxrect));
     Rect r(tl, br);
     cv::rectangle(img, r, fillColor, CV_FILLED);
+
+    auto graph = comp.adj_graph();
+    //size_t i = 0u, nedges = boost::num_edges(graph);
+    auto itpair = boost::edges(graph);
+    auto eit = itpair.first;
+    auto end = itpair.second;
+    cout << "connected rects: " << endl;
+    while (eit != end)
+    {
+      cout << "  " << comp.index(boost::source(*eit, graph))
+        << " <-> " << comp.index(boost::target(*eit, graph)) << endl;
+      ++eit;
+    }
   }
 
   auto pts = boost::join(sites, users);

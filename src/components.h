@@ -295,6 +295,10 @@ public:
   // No inputs yet.
   ConnectedComponents();
 
+  inline int index(vertex_descriptor v) const {
+    return b::get(component_ids, v);
+  }
+
   // Construct from a list of input rectangles (may be in no particular order).
   template<class RectIter>
     ConnectedComponents(RectIter begin, RectIter end)
@@ -303,6 +307,8 @@ public:
     {
       add_rects(begin, end);
     }
+
+  components_graph const& adj_graph(void) const { return graph; }
 
   // Add rectangles. Same as the constructor form, if you're lazy and want to
   // do it sometime after construction.
