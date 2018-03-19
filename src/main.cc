@@ -318,6 +318,7 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
   }
 }
 
+#if 0
 static Mat
 translate(Mat img, float transx, float transy)
 {
@@ -349,6 +350,7 @@ resizeToFit(Mat img, Mat out, const Rect &bbox, const Size &screen)
   cv::resize(img, out, nsz);
   return out;
 }
+#endif
 
 // Read points from a file (one point per line) and write to out.
 template <class It>
