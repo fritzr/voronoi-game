@@ -214,7 +214,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "Fc:C:X:Y:T:eEgGlLdW:H:hs:u:q:r:";
+static const char *sopts = "Fc:C:X:Y:T:eEgGlLdW:H:hs:u:q:r:j";
 
 // Parses options and sets the global options structure.
 static void
