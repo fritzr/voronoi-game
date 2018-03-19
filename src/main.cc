@@ -99,7 +99,16 @@ enum DrawRects {
   RECTS_BAD = 4,
 };
 
-struct options_t {
+enum DrawCell {
+  CELL_NONE = 0,
+  CELL_ROTATED = 1,
+  CELL_UPRIGHT = 2,
+  CELL_BOTH = 3,
+  CELL_BAD = 4,
+};
+
+struct options_t
+{
   // Global configurable options
   bool drawEdges=true;
   bool dogrid=false;
@@ -111,8 +120,9 @@ struct options_t {
   bool fill_inputs = false;
   int screenWidth = 1920;
   int screenHeight = 1080;
-  bool computeComponents = false;
+  DrawCell computeCell = CELL_NONE;
   int drawRects = true;
+  bool dumpGraph = false; // adjacency graph
   VoronoiDiagram<double>::SearchMethod queryType
     =VoronoiDiagram<double>::Default;
 
@@ -175,6 +185,7 @@ usage(const char *prog, const char *errmsg)
     << "  -c			Compute connected components." << endl
     << "  -r			Draw rects (default: none):" << endl
     << "    [0:none], 1:rotated, 2:upright, 3:both" << endl
+    << "  -j			Dump adJacency list (default: no)" << endl
     << endl
     ;
   if (errno) {
@@ -203,7 +214,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FcC:X:Y:T:eEgGlLdW:H:hs:u:q:r:";
+static const char *sopts = "Fc:C:X:Y:T:eEgGlLdW:H:hs:u:q:r:";
 
 // Parses options and sets the global options structure.
 static void
@@ -221,8 +232,6 @@ get_options(int argc, char *argv[], options_t &o)
     case 'C':
       o.colormap = getenum<ColormapTypes>(13, optarg, errstr, "colormap");
       break;
-    case 'c':
-      o.computeComponents = true; break;
     case 'X':
       o.ngridx = getenum<int>(INT_MAX, optarg, errstr, "X grid lines"); break;
     case 'Y':
@@ -255,6 +264,11 @@ get_options(int argc, char *argv[], options_t &o)
     case 'r':
       o.drawRects = getenum<DrawRects>(RECTS_BAD, optarg, errstr, "rect type");
       break;
+    case 'c':
+      o.computeCell = getenum<DrawCell>(CELL_BAD, optarg, errstr, "cell type");
+      break;
+    case 'j':
+      o.dumpGraph = true; break;
     case 'h':
       usage(argv[0]);
     case ':':
@@ -404,7 +418,7 @@ static inline T rad2deg(T rad) {
 // Pre-computed 45-deg Euler rotation matrices
 static const float ANGLE_DEG = 45.0f;
 static const float pangle = deg2rad(ANGLE_DEG);
-static const float nangle = deg2rad(-ANGLE_DEG);
+static const float nangle = -pangle;
 static const Mat rotZn = Mat(Matx22f({
   cosf(nangle), -sinf(nangle), /* 0, */
   sinf(nangle),  cosf(nangle), /* 0, */
@@ -426,18 +440,24 @@ static inline Point2f rotateZ2f_pos(Point2f pt) {
   return Point2f(ans.at<float>(0u, 0u), ans.at<float>(0u, 1u));
 }
 
-static Point2f bias;
+static Point2f pbias, nbias;
 
 template<class pt>
-static inline pt rot(pt p)
+static inline pt rotp(pt p)
 {
-  return rotateZ2f_pos(p) - bias;
+  return rotateZ2f_pos(p) - pbias;
+}
+
+template<class pt>
+static inline pt rotn(pt p)
+{
+  return rotateZ2f_neg(p) - nbias;
 }
 
 template<class pt>
 static inline pt check_rot(pt p)
 {
-  return (opts.drawRects == RECTS_UPRIGHT) ? rot(p) : p;
+  return (opts.drawRects == RECTS_UPRIGHT) ? rotp(p) : p;
 }
 
 static inline Scalar
@@ -516,6 +536,22 @@ getRRBBox(RRectIter begin, RRectIter end)
   return bbox;
 }
 
+static void
+draw_rotrect(Mat img, RotatedRect const& rrect, Scalar const& color,
+    int thicc=2)
+{
+  std::array<Point2f, 4> pts;
+  rrect.points(pts.begin());
+  if (thicc < 0) {
+    std::array<Point, 4> ipts;
+    std::copy(pts.begin(), pts.end(), ipts.begin());
+    cv::fillConvexPoly(img, ipts.begin(), ipts.size(), color);
+  }
+  else
+    for (unsigned int i = 0u; i < pts.size(); ++i)
+      cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
+}
+
 template<class Tp_, class RectIter>
 static void
 draw_rotrects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rrectp,
@@ -524,14 +560,9 @@ draw_rotrects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rrectp,
   unsigned int rectidx = 0u;
   for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp)
   {
-    const RotatedRect& rrect = *rrectp;
-    std::array<Point2f, 4> pts;
-    rrect.points(pts.begin());
     Scalar color = colorKey(vd.site_index(userp), vd.sites_size());
-    for (unsigned int i = 0u; i < pts.size(); ++i)
-      cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
-    ++rrectp;
-
+    const RotatedRect& rrect = *rrectp++;
+    draw_rotrect(img, rrect, color, thicc);
     putText(img, to_string(rectidx++),
         Point(rrect.center.x + FONT_XSPACE, rrect.center.y - FONT_YSPACE),
         FONT, FONT_SCALE, color, FONT_THICKNESS);
@@ -563,7 +594,8 @@ build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
   bp::center(center, bbox);
   //cv::circle(img, center, 10, fillColor);
   // set the global bias position so points appear back near the center
-  bias = rotateZ2f_pos(center) - center;
+  pbias = rotateZ2f_pos(center) - center;
+  nbias = rotateZ2f_neg(center) - center;
 
   // Now rotate the entire space to output axis-up rectangles,
   // biased by the center point.
@@ -574,7 +606,7 @@ build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
     array<Point2f, 4> pts;
     rrect.points(pts.begin());
     for (auto pp = pts.begin(); pp != pts.end(); ++pp)
-      *pp = rot(*pp); // rotate and bias
+      *pp = rotp(*pp); // rotate and bias
 
     // Write the axis-up rectangles to the output array.
      // BL, TL, TR, BR -> xl, yl, xh, yh
@@ -647,7 +679,7 @@ int main(int argc, char *argv[])
   vector<rect_type> rects;
   build_rects<rect_type>(img, sites, users, resolution, back_inserter(rects));
 
-  if (opts.computeComponents)
+  if (opts.computeCell)
   {
     CComp comp(rects.begin(), rects.end());
     comp.compute();
@@ -663,20 +695,35 @@ int main(int argc, char *argv[])
     Point tl, br;
     bp::assign(tl, bp::ul(maxrect));
     bp::assign(br, bp::lr(maxrect));
-    Rect r(tl, br);
-    cv::rectangle(img, r, fillColor, CV_FILLED);
-
-    auto graph = comp.adj_graph();
-    //size_t i = 0u, nedges = boost::num_edges(graph);
-    auto itpair = boost::edges(graph);
-    auto eit = itpair.first;
-    auto end = itpair.second;
-    cout << "connected rects: " << endl;
-    while (eit != end)
+    if (opts.computeCell & CELL_UPRIGHT)
     {
-      cout << "  " << comp.index(boost::source(*eit, graph))
-        << " <-> " << comp.index(boost::target(*eit, graph)) << endl;
-      ++eit;
+      Rect r(tl, br);
+      cv::rectangle(img, r, fillColor, CV_FILLED);
+    }
+    if (opts.computeCell & CELL_ROTATED)
+    {
+      Point2f center((tl.x + br.x)/2.0f, (tl.y + br.y)/2.0f);
+      center = rotn(center);
+      Size2f size(br.x - tl.x, tl.y - br.y);
+      RotatedRect rrect(center, size, ANGLE_DEG);
+      draw_rotrect(img, rrect, fillColor, CV_FILLED);
+    }
+
+    if (opts.dumpGraph)
+    {
+      /* Dump adjacency list */
+      auto graph = comp.adj_graph();
+      //size_t i = 0u, nedges = boost::num_edges(graph);
+      auto itpair = boost::edges(graph);
+      auto eit = itpair.first;
+      auto end = itpair.second;
+      cout << "connected rects: " << endl;
+      while (eit != end)
+      {
+        cout << "  " << comp.index(boost::source(*eit, graph))
+          << " <-> " << comp.index(boost::target(*eit, graph)) << endl;
+        ++eit;
+      }
     }
   }
 
