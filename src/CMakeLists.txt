@@ -35,8 +35,8 @@ set(TEST_PROG vgtest)
 
 add_executable(${TEST_PROG}
   voronoi.h voronoi.cc
-  main.h main.cc 
   components.h components.cc
+  main.h main.cc 
 )
 #add_executable(treetest treetest.cc tree.h )
 #add_executable(btreetest btreetest.cc)
