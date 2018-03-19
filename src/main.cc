@@ -128,7 +128,7 @@ struct options_t
 
   string sites_path;
   string users_path;
-} options;
+};
 
 static options_t opts;
 
