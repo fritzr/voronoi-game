@@ -330,10 +330,17 @@ public:
         auto vl = bp::get(vivl, bp::LOW), vh = bp::get(vivl, bp::HIGH);
         hivl = bp::construct<decltype(hivl)>(std::min(hl,hh), std::max(hl,hh));
         vivl = bp::construct<decltype(vivl)>(std::min(vl,vh), std::max(vl,vh));
+#ifdef DEBUG
+        std::cerr << "ADD [" << idx << "]"
+          << " h(" << bp::get(hivl, bp::LOW) << "," << bp::get(hivl, bp::HIGH)
+          << ")"
+          << " v(" << bp::get(vivl, bp::LOW) << "," << bp::get(vivl, bp::HIGH)
+          << ")" << std::endl;
+#endif
         rects.emplace_back(hivl, vivl, idx++);
         ++begin;
         // Queue up the horizontal edges. Vertical edges go in at each event.
-        rects.back().add_edges(push_inserter(edges_y), bp::HORIZONTAL);
+        rects.back().add_edges(push_inserter(edges_y), bp::VERTICAL);
       }
     }
 

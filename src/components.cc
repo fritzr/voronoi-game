@@ -56,9 +56,9 @@ insert_rect(rect_type const& r)
   cerr << "inserting" << endl;
 #endif
   // Insert edges in-place.
-  edge_iterator elb = edges_x.insert(r.edge(bp::VERTICAL, bp::LOW)).first;
+  edge_iterator elb = edges_x.insert(r.edge(bp::HORIZONTAL, bp::LOW)).first;
   edge_iterator ebefore = --edge_iterator(elb);
-  edge_iterator eub = edges_x.insert(r.edge(bp::VERTICAL, bp::HIGH)).first;
+  edge_iterator eub = edges_x.insert(r.edge(bp::HORIZONTAL, bp::HIGH)).first;
 
   int depth = 0;
   if (elb != edges_x.begin())
@@ -101,8 +101,8 @@ remove_rect(rect_type const& r)
   cerr << "removing" << endl;
 #endif
 
-  auto lb = edges_x.find(r.edge(bp::VERTICAL, bp::LOW));
-  auto ub = edges_x.find(r.edge(bp::VERTICAL, bp::HIGH));
+  auto lb = edges_x.find(r.edge(bp::HORIZONTAL, bp::LOW));
+  auto ub = edges_x.find(r.edge(bp::HORIZONTAL, bp::HIGH));
   assert(lb != edges_x.end() && ub != edges_x.end());
 
   // Find the first location in our depth list to remove
