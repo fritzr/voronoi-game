@@ -33,21 +33,20 @@ check_max_depth(rect_type const& r, EdgeSetIter edge_lb, int new_depth)
   max_rects.clear();
   max_rects.insert(r.index);
   max_rects.insert(edge_lb->rect_index);
+#ifdef DEBUG
+  cerr << "new max from rect " << r.index
+    << " and edges: " << edge_lb->rect_index
+    << (edge_lb->dir == bp::LOW ? "-" : "+");
+#endif
   ++edge_lb;
   max_rects.insert(edge_lb->rect_index);
+#ifdef DEBUG
+  cerr << " and " << edge_lb->rect_index
+    << (edge_lb->dir == bp::LOW ? "-" : "+");
+  cerr << endl;
+#endif
   return new_depth;
 }
-
-#ifdef DEBUG
-template<class Iter>
-static unsigned int iter_index(Iter begin, Iter end)
-{
-  unsigned int i = 0u;
-  while (begin++ != end)
-    ++i;
-  return i;
-}
-#endif
 
 template<class Tp_>
 void ConnectedComponents<Tp_>::
