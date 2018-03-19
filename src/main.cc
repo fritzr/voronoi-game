@@ -120,8 +120,8 @@ struct options_t
   bool fill_inputs = false;
   int screenWidth = 1920;
   int screenHeight = 1080;
-  DrawCell computeCell = CELL_NONE;
-  int drawRects = true;
+  DrawCell computeCell = CELL_ROTATED;
+  DrawRects drawRects = RECTS_NONE;
   bool dumpGraph = false; // adjacency graph
   VoronoiDiagram<double>::SearchMethod queryType
     =VoronoiDiagram<double>::Default;
