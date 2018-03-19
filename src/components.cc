@@ -31,18 +31,21 @@ check_max_depth(rect_type const& r, EdgeSetIter edge_lb, int new_depth)
   max_depth = new_depth;
   max_flag = true;
   max_rects.clear();
+  max_bottom_rect = -1;
   max_rects.insert(r.index);
-  max_rects.insert(edge_lb->rect_index);
+  max_left = *edge_lb;
+  max_rects.insert(max_left.rect_index);
 #ifdef DEBUG
   cerr << "new max from rect " << r.index
-    << " and edges: " << edge_lb->rect_index
-    << (edge_lb->dir == bp::LOW ? "-" : "+");
+    << " and edges: " << max_left.rect_index
+    << (max_left.dir == bp::LOW ? "-" : "+");
 #endif
   ++edge_lb;
-  max_rects.insert(edge_lb->rect_index);
+  max_right = *edge_lb;
+  max_rects.insert(max_right.rect_index);
 #ifdef DEBUG
-  cerr << " and " << edge_lb->rect_index
-    << (edge_lb->dir == bp::LOW ? "-" : "+");
+  cerr << " and " << max_right.rect_index
+    << (max_right.dir == bp::LOW ? "-" : "+");
   cerr << endl;
 #endif
   return new_depth;
@@ -110,14 +113,33 @@ remove_rect(rect_type const& r)
   edges_x.erase(lb++);
   // Now subtract one from all depths until the end.
   // Again, this should really be done by manipulating internal tree nodes.
+  bool found_left=false, found_right=false;
   while (lb != ub)
   {
+    // Now if we just identified a max-depth rectangle, we may not have seen
+    // its bottom yet, since the bottom may be the top of this rectangle. The
+    // first top-edge to intersect both the left/right edges of the current
+    // max-rect must be the bottom of the actual max cell.
+    if (max_bottom_rect < 0)
+    {
+      if (!found_left && (*lb == max_left))
+        found_left = true;
+      if (!found_right && (*lb == max_right))
+        found_right = true;
+    }
+
     --(lb->depth);
     ++lb;
     // ??? b::add_edge(vd(r.index), vd((*eit).rect_index), graph);
   }
   // Now erase the right edge.
   edges_x.erase(ub);
+
+  // If we intersected the max-cell's vertical edges, we must be its bottom.
+  if (found_left && found_right) {
+    max_bottom_rect = r.index;
+    max_rects.insert(max_bottom_rect);
+  }
 
 #ifdef DEBUG
   cerr << "removed edges, status: " << edges_x << endl;

@@ -66,6 +66,13 @@ struct Edge
   Edge(coordinate_type const& c, bp::direction_1d const& d, int idx)
     : coord(c), dir(d), rect_index(idx), depth(-1) {}
 
+  bool operator==(Edge const& e) const {
+    return rect_index == e.rect_index
+      && dir == e.dir
+      && coord == e.coord; // epsilon compare?
+    // depth compare?
+  }
+
 #ifdef DEBUG
   template<typename U>
     friend std::ostream& operator<<(std::ostream& os, Edge<U> const& e) {
@@ -278,6 +285,9 @@ private:
   // indexes of rects which form the maximal intersection
   index_set max_rects;
   pure_rect_type max_rect;
+
+  edge_type max_left, max_right;
+  int max_bottom_rect;
 
   inline vertex_descriptor vd(int idx) const { return vertexes[idx]; }
 
