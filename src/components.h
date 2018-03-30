@@ -180,16 +180,6 @@ std::ostream& operator<<(std::ostream& os,
 namespace components
 {
 
-template<class Node_>
-struct depth_compare
-{
-  typedef Node_ node;
-  inline bool operator()(const node &d1, const node &d2) const
-  {
-    return d1.depth < d2.depth;
-  }
-};
-
 // Node to track 'cell depths'. These form the tree T(V_k) from the paper,
 // the leaves of which represent g_k[j]: the depth of the cell at position
 // j in the current sweep partition.
@@ -218,20 +208,6 @@ public:
   }
 };
 */
-
-template<class Iter1, class Iter2>
-Iter1 sync_iters(Iter1 begin1, Iter2 begin2, Iter2 end2) {
-  while (begin2++ != end2)
-    ++begin1;
-  return begin1;
-}
-
-template<class Iter1, class Iter2>
-Iter1 rsync_iters(Iter1 end1, Iter2 end2, Iter2 begin2) {
-  while (end2-- != begin2)
-    --end1;
-  return end1;
-}
 
 template<class Tp_>
 struct SolutionCompare;
