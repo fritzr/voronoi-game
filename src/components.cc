@@ -29,7 +29,6 @@ check_max_depth(rect_type const& r, EdgeSetIter edge_lb, int new_depth)
   if (new_depth <= max_depth)
     return new_depth;
   max_depth = new_depth;
-  max_flag = true;
   max_rects.clear();
   max_bottom_rect = -1;
   max_rects.insert(r.index);
@@ -157,11 +156,6 @@ compute(void)
 #ifdef DEBUG
     cerr << "reading edge " << edge << endl;
 #endif
-    //if (max_flag)
-    //{
-      //max_rects.insert(edge.rect_index);
-      //max_flag = false;
-    //}
 
     switch (edge.dir.to_int())
     {

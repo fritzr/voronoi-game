@@ -281,7 +281,6 @@ private:
   id_map component_ids;
   descriptor_list vertexes;
   int max_depth = -1;
-  bool max_flag = false;
   // indexes of rects which form the maximal intersection
   index_set max_rects;
   pure_rect_type max_rect;
