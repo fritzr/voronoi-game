@@ -160,8 +160,8 @@ remove_rect(rect_type const& r)
   while (sol_it != sol_ub)
   {
     solution_type& cell = solutions[sol_it->solution];
-    // We do not check left_edge/right_edge in the loop above, so check now.
-    if (*sol_it == left_edge || *sol_it == right_edge)
+    // We do not check our right edge in the loop above, so check now.
+    if (*sol_it == right_edge)
       cell.found(sol_it->edge.dir);
     // If we did indeed intersect the solution cell, remove its edges
     // from the solution edge set since our sweep line has now passed the cell.
