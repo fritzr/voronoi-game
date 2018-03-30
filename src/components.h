@@ -69,6 +69,12 @@ struct Edge
     : coord(other.coord), dir(other.dir), rect_index(new_idx),
       depth(other.depth) {}
 
+  inline bool operator<(Edge const& e) const
+  {
+    return coord < e.coord
+      || ((coord == e.coord) && (rect_index < e.rect_index));
+  }
+
   inline bool operator==(Edge const& e) const {
     return rect_index == e.rect_index
       && dir == e.dir
@@ -174,17 +180,6 @@ std::ostream& operator<<(std::ostream& os,
 namespace components
 {
 
-template<class Tp_>
-struct EdgeCompare
-{
-  typedef Edge<Tp_> edge_type;
-  inline bool operator()(edge_type const& e1, edge_type const& e2) const
-  {
-    return e1.coord < e2.coord
-      || ((e1.coord == e2.coord) && (e1.rect_index < e2.rect_index));
-  }
-};
-
 template<class Node_>
 struct depth_compare
 {
@@ -241,14 +236,12 @@ Iter1 rsync_iters(Iter1 end1, Iter2 end2, Iter2 begin2) {
 template<class Tp_>
 struct SolutionCompare;
 
-template<class Tp_>
+template<class Tp_, class EdgeType=Edge<Tp_> >
 struct SolutionEdge
 {
-  typedef Edge<Tp_> edge_type;
-  typedef EdgeCompare<Tp_> edge_comparator;
+  typedef EdgeType edge_type;
   typedef typename edge_type::coordinate_type coordinate_type;
   typedef SolutionEdge<Tp_> sedge_type;
-  typedef SolutionCompare<Tp_> sedge_compare;
 
   edge_type edge;
   int solution;
@@ -259,16 +252,17 @@ struct SolutionEdge
   }
 
   inline bool operator<(sedge_type const& other) const {
-    return sedge_compare()(*this, other);
+    return edge < other.edge
+      || (!(other.edge < edge) && solution < other.solution);
   }
   inline bool operator<(edge_type const& other) const {
-    return sedge_compare()(*this, other);
+    return edge < other;
   }
   inline bool operator==(sedge_type const& other) const {
-    return !sedge_compare()(*this, other) && !sedge_compare()(other, *this);
+    return !(*this < other) && !(other < *this);
   }
   inline bool operator==(edge_type const& other) const {
-    return !sedge_compare()(*this, other) && !sedge_compare()(other, *this);
+    return !(*this < other) && !(other < this->edge);
   }
 
 #ifdef DEBUG
@@ -283,26 +277,6 @@ struct SolutionEdge
 };
 
 template<class Tp_>
-struct SolutionCompare
-{
-  typedef SolutionEdge<Tp_> sedge_type;
-  typedef typename sedge_type::edge_type edge_type;
-  typedef typename sedge_type::edge_comparator edge_comparator;
-
-  inline bool operator()(sedge_type const& s1, sedge_type const& s2) const {
-    return edge_comparator()(s1.edge, s2.edge)
-      || (!edge_comparator()(s2.edge, s1.edge)
-          && s1.solution == s2.solution);
-  }
-  inline bool operator()(sedge_type const& s1, edge_type const& e2) const {
-    return edge_comparator()(s1.edge, e2);
-  }
-  inline bool operator()(edge_type const& e1, sedge_type const& s2) const {
-    return edge_comparator()(e1, s2.edge);
-  }
-};
-
-template<class Tp_>
 class ConnectedComponents;
 
 template<class Tp_>
@@ -314,11 +288,11 @@ public:
   typedef typename cctype::point_type      point_type;
   typedef typename cctype::rect_type       rect_type;
   typedef typename cctype::edge_type       edge_type;
-  typedef typename cctype::edge_comparator edge_comparator;
+  typedef typename cctype::edge_compare    edge_compare;
   typedef typename cctype::pure_rect_type  pure_rect_type;
 
   typedef SolutionEdge<Tp_> sedge_type;
-  typedef SolutionCompare<Tp_> sedge_compare;
+  typedef std::less<sedge_type> sedge_compare;
 
   // indexes of rects which form the maximal intersection
   typedef typename std::unordered_set<size_t> index_set;
@@ -404,13 +378,13 @@ public:
   typedef RectComponent<Tp_> rect_type;
   typedef typename rect_type::super_type pure_rect_type;
   typedef Edge<Tp_> edge_type;
-  typedef EdgeCompare<Tp_> edge_comparator;
+  typedef std::less<edge_type> edge_compare;
 
   typedef typename std::vector<edge_type> edge_container;
   typedef typename std::vector<rect_type> rect_container;
-  typedef typename std::set<edge_type, edge_comparator>
+  typedef typename std::set<edge_type, edge_compare>
     edge_set;
-  typedef std::priority_queue<edge_type, edge_container, edge_comparator>
+  typedef std::priority_queue<edge_type, edge_container, edge_compare>
     edge_queue;
   // T(V_k) from the paper - TODO
   //typedef typename tree::make_avltree<DepthNode<Tp_> >::type depth_tree_type;
@@ -431,7 +405,7 @@ public:
 
   typedef SolutionCell<Tp_> solution_type;
   typedef typename solution_type::sedge_type sedge_type;
-  typedef typename solution_type::sedge_compare sedge_compare;
+  typedef std::less<sedge_type> sedge_compare;
   typedef typename std::set<sedge_type, sedge_compare> solution_edge_set;
   typedef typename std::vector<solution_type> solution_list;
   typedef typename solution_list::const_iterator solution_iterator;
