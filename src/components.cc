@@ -16,9 +16,14 @@ namespace components
 
 template<class Tp_>
 ConnectedComponents<Tp_>::ConnectedComponents(void)
-  : rects(), edges_y(), edges_x(),
+  : rects(), edges_x(),
     component_ids(b::get(b::vertex_index_t(), graph)),
-    vertexes(), max_depth(-1), solutions()
+    vertexes(), max_depth(-1)
+{
+}
+
+template<class Tp_>
+ConnectedComponents<Tp_>::~ConnectedComponents(void)
 {
 }
 
@@ -40,7 +45,7 @@ check_max_depth(rect_type const& r, EdgeSetIter leftp, int new_depth)
 #ifdef DEBUG
     cerr << "solutions cleared, found new max depth " << max_depth << endl;
 #endif
-    solutions.clear();
+    solutions().clear();
     solution_edges.clear();
   }
 
@@ -48,10 +53,10 @@ check_max_depth(rect_type const& r, EdgeSetIter leftp, int new_depth)
   // Track the new edges as they belong to the solution cell.
   // This is necessary so we can "efficiently" (see remarks on T(V_k))
   // see whether we have found the bottom of a solution cell in remove_rect().
-  const int next_solution_index = solutions.size();
+  const int next_solution_index = solutions().size();
   solution_edges.emplace(*leftp, next_solution_index);
   solution_edges.emplace(*rightp, next_solution_index);
-  solutions.emplace_back(r.index, leftp->rect_index, rightp->rect_index);
+  solutions().emplace_back(r.index, leftp->rect_index, rightp->rect_index);
 
   return new_depth;
 }
@@ -140,7 +145,7 @@ remove_rect(rect_type const& r)
       // Mark any solution edge(s) that we intersect. This bottom edge is now
       // known as the bottom edge of the corresponding solution cell(s).
       if (*sol_it == *it) {
-        solutions[sol_it->solution].found(sol_it->edge.dir);
+        solutions()[sol_it->solution].found(sol_it->edge.dir);
         ++sol_it;
       }
     }
@@ -159,7 +164,7 @@ remove_rect(rect_type const& r)
   sol_it = sol_lb;
   while (sol_it != sol_ub)
   {
-    solution_type& cell = solutions[sol_it->solution];
+    solution_type& cell = solutions()[sol_it->solution];
     // We do not check our right edge in the loop above, so check now.
     if (*sol_it == right_edge)
       cell.found(sol_it->edge.dir);
@@ -185,39 +190,58 @@ remove_rect(rect_type const& r)
 
 template<class Tp_>
 void ConnectedComponents<Tp_>::
-compute(void)
+handle_event(bp::direction_1d const& dir, edge_type const& edge)
 {
-  // Run through the queue of sorted horizontal edges.
-  while (!edges_y.empty())
+  switch (dir.to_int())
   {
-    typename edge_queue::const_reference edge = edges_y.top();
-#ifdef DEBUG
-    cerr << "reading edge " << edge << endl;
-#endif
-
-    switch (edge.dir.to_int())
-    {
-    case bp::HIGH:
-      // When we first encounter a rectangle, insert its vertical edges in the
-      // sweep status.
-      insert_rect(rect(edge));
-      break;
-    case bp::LOW:
-      // When we encounter the top of a rectangle, we can remove its vertical
-      // edges from our sweep status.
-      remove_rect(rect(edge));
-      break;
-    default:
-      throw runtime_error("unreachable");
-    }
-
-    edges_y.pop();
+  case bp::HIGH:
+    // When we first encounter a rectangle, insert its vertical edges in the
+    // sweep status.
+    insert_rect(rect(edge));
+    break;
+  case bp::LOW:
+    // When we encounter the top of a rectangle, we can remove its vertical
+    // edges from our sweep status.
+    remove_rect(rect(edge));
+    break;
+  default:
+    throw runtime_error("unreachable");
   }
+}
 
-  // Now cache the solution cells.
+template<class Tp_>
+void ConnectedComponents<Tp_>::
+add_rect(rect_type const& rect)
+{
+  size_t next_idx = rects.size();
+  // Construct our custom rectangle wrappers.
+  //vertex_descriptor vd = b::add_vertex(graph);
+  vertexes.push_back(b::add_vertex(graph));
+  b::put(component_ids, vd(next_idx), b::vertex_index_t(next_idx));
+  // Add the rect and queue up the horizontal edges.
+  // Nb. a horizontal edge consists of (VERTICAL,LOW) and (VERTICAL,HIGH)
+  // coordinates in boost nonmenclature.
+  rects.push_back(rect);
+  rects.back().add_edges(push_inserter(queue()), bp::VERTICAL);
+}
+
+template<class Tp_>
+void ConnectedComponents<Tp_>::
+initialize(void)
+{
+  // We can never have more solutions than rects so just reserve this upper
+  // bound to prevent implicitly resizing the solutions vector.
+  solutions().reserve(rects.size());
+}
+
+template<class Tp_>
+void ConnectedComponents<Tp_>::
+finalize(void)
+{
+  // Cache the solution cells.
   solution_cells.clear();
-  solution_cells.reserve(solutions.size());
-  for (auto sol_it = solutions.begin(); sol_it != solutions.end(); ++sol_it)
+  solution_cells.reserve(solutions().size());
+  for (auto sol_it = solutions().begin(); sol_it != solutions().end(); ++sol_it)
     solution_cells.emplace_back(sol_it->cell(rects, rects.size()));
 }
 

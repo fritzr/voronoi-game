@@ -1,7 +1,6 @@
 
 // Tree structures with custom node data.
 #include <set>
-#include <queue>
 #include <vector>
 #include <unordered_set>
 
@@ -18,6 +17,8 @@
 #include <boost/geometry.hpp>
 
 #include <boost/graph/adjacency_list.hpp>
+
+#include "sweep.h"
 
 //#include "tree.h"
 
@@ -253,19 +254,34 @@ struct SolutionEdge
 };
 
 template<class Tp_>
-class ConnectedComponents;
+struct SolutionCell;
+
+template<typename Tp_>
+struct MaxDepthRectTraits
+{
+  typedef Tp_                            coordinate_type;
+  typedef typename cv::Point_<Tp_>       point_type;
+  typedef RectComponent<Tp_>             rect_type;
+  typedef typename rect_type::super_type pure_rect_type;
+  typedef Edge<Tp_>                      edge_type;
+  typedef std::less<edge_type>           edge_compare;
+
+  typedef SolutionCell<Tp_>                  solution_type;
+  typedef typename solution_type::sedge_type sedge_type;
+  typedef std::less<sedge_type>              sedge_compare;
+};
 
 template<class Tp_>
 struct SolutionCell
 {
 public:
-  typedef ConnectedComponents<Tp_> cctype;
-  typedef typename cctype::coordinate_type coordinate_type;
-  typedef typename cctype::point_type      point_type;
-  typedef typename cctype::rect_type       rect_type;
-  typedef typename cctype::edge_type       edge_type;
-  typedef typename cctype::edge_compare    edge_compare;
-  typedef typename cctype::pure_rect_type  pure_rect_type;
+  typedef MaxDepthRectTraits<Tp_> traits;
+  typedef typename traits::coordinate_type coordinate_type;
+  typedef typename traits::point_type      point_type;
+  typedef typename traits::rect_type       rect_type;
+  typedef typename traits::edge_type       edge_type;
+  typedef typename traits::edge_compare    edge_compare;
+  typedef typename traits::pure_rect_type  pure_rect_type;
 
   typedef SolutionEdge<Tp_> sedge_type;
   typedef std::less<sedge_type> sedge_compare;
@@ -345,23 +361,45 @@ public:
   }
 };
 
+template<typename Tp_>
+struct make_sla_traits
+{
+  typedef MaxDepthRectTraits<Tp_> traits;
+  typedef typename traits::pure_rect_type value_type;
+  typedef typename traits::solution_type solution_type;
+
+  typedef typename traits::edge_type    event_type;
+  typedef typename traits::edge_compare event_compare;
+  typedef typename bp::direction_1d     event_id_type;
+  typedef make_sla_traits etraits;
+
+  typedef sla_traits<value_type, event_type, solution_type, etraits> type;
+
+  inline static event_id_type get_type(event_type const& e) { return e.dir; }
+};
+
 template<class Tp_>
 class ConnectedComponents
+  : public SweepLineAlgorithm<typename make_sla_traits<Tp_>::type>
 {
 public:
-  typedef Tp_ coordinate_type;
-  typedef typename cv::Point_<Tp_> point_type;
-  typedef RectComponent<Tp_> rect_type;
-  typedef typename rect_type::super_type pure_rect_type;
-  typedef Edge<Tp_> edge_type;
-  typedef std::less<edge_type> edge_compare;
+  typedef SweepLineAlgorithm<typename make_sla_traits<Tp_>::type> super_type;
+
+  typedef MaxDepthRectTraits<Tp_> traits;
+  typedef typename traits::coordinate_type coordinate_type;
+  typedef typename traits::point_type      point_type;
+  typedef typename traits::rect_type       rect_type;
+  typedef typename traits::edge_type       edge_type;
+  typedef typename traits::edge_compare    edge_compare;
+  typedef typename rect_type::super_type   pure_rect_type;
+
+  typedef typename traits::solution_type   solution_type;
+  typedef typename traits::sedge_type      sedge_type;
+  typedef typename traits::sedge_compare   sedge_compare;
 
   typedef typename std::vector<edge_type> edge_container;
   typedef typename std::vector<rect_type> rect_container;
-  typedef typename std::set<edge_type, edge_compare>
-    edge_set;
-  typedef std::priority_queue<edge_type, edge_container, edge_compare>
-    edge_queue;
+  typedef typename std::set<edge_type, edge_compare> edge_set;
   // T(V_k) from the paper - TODO
   //typedef typename tree::make_avltree<DepthNode<Tp_> >::type depth_tree_type;
   // for now we take a short-cut and keep the entire array gk[j]
@@ -379,28 +417,23 @@ public:
 
   typedef typename edge_set::iterator edge_iterator;
 
-  typedef SolutionCell<Tp_> solution_type;
-  typedef typename solution_type::sedge_type sedge_type;
-  typedef std::less<sedge_type> sedge_compare;
   typedef typename std::set<sedge_type, sedge_compare> solution_edge_set;
-  typedef typename std::vector<solution_type> solution_list;
-  typedef typename solution_list::const_iterator solution_iterator;
+  typedef typename super_type::solution_container solution_container;
+  typedef typename super_type::solution_container::const_iterator
+    solution_iterator;
 
   typedef typename std::vector<pure_rect_type> pure_rect_list;
   typedef typename pure_rect_list::const_iterator pure_rect_iterator;
 
 private:
   rect_container rects;
-  edge_queue edges_y; // horizontal rect edges which are the sweep events
-  edge_set edges_x;   // vertical rect edges within each sweep line event
-  //depth_tree_type depth_tree;
+  edge_set edges_x;   // vertical rect edges within each line event (status)
   components_graph graph;
   id_map component_ids;
   descriptor_list vertexes;
-  int max_depth = -1;
+  int max_depth;
 
   solution_edge_set solution_edges;
-  solution_list solutions;
   pure_rect_list solution_cells;
 
   inline vertex_descriptor vd(int idx) const { return vertexes[idx]; }
@@ -414,65 +447,65 @@ private:
 
   void insert_rect(rect_type const& r);
   void remove_rect(rect_type const& r);
+  using super_type::solutions;
+  using super_type::queue;
+
+protected:
+  void handle_event(bp::direction_1d const& dir, edge_type const& event);
+  void initialize(void);
+  void finalize(void);
 
 public:
+  ~ConnectedComponents();
+
   // No inputs yet.
   ConnectedComponents();
+
+  // Construct from a list of input rectangles (may be in no particular order).
+  template<class RectIter>
+    ConnectedComponents(RectIter begin, RectIter end)
+    : rects(), edges_x(), graph(),
+      component_ids(b::get(b::vertex_index_t(), graph)),
+      vertexes(), max_depth(-1)
+    {
+      super_type::insert(begin, end);
+    }
 
   inline int index(vertex_descriptor v) const {
     return b::get(component_ids, v);
   }
 
-  // Construct from a list of input rectangles (may be in no particular order).
-  template<class RectIter>
-    ConnectedComponents(RectIter begin, RectIter end)
-    : rects(), edges_y(), edges_x(), graph(),
-      component_ids(b::get(b::vertex_index_t(), graph))
-    {
-      add_rects(begin, end);
-    }
-
   components_graph const& adj_graph(void) const { return graph; }
+
+  void add_rect(rect_type const& rect);
 
   // Add rectangles. Same as the constructor form, if you're lazy and want to
   // do it sometime after construction.
-  template<class RectIter>
-    void add_rects(RectIter begin, RectIter end)
+  template<class RectType>
+    void add_event(RectType const& rect)
     {
-      size_t idx = rects.size();
-      while (begin != end)
-      {
-        // Construct our custom rectangle wrappers.
-        //vertex_descriptor vd = b::add_vertex(graph);
-        vertexes.push_back(b::add_vertex(graph));
-        b::put(component_ids, vd(idx), b::vertex_index_t(idx));
-        // Make sure our intervals are in the proper order, otherwise
-        // the algorithm WILL fail.
-        auto hivl = bp::get(*begin, bp::HORIZONTAL);
-        auto hl = bp::get(hivl, bp::LOW), hh = bp::get(hivl, bp::HIGH);
-        auto vivl = bp::get(*begin, bp::VERTICAL);
-        auto vl = bp::get(vivl, bp::LOW), vh = bp::get(vivl, bp::HIGH);
-        hivl = bp::construct<decltype(hivl)>(std::min(hl,hh), std::max(hl,hh));
-        vivl = bp::construct<decltype(vivl)>(std::min(vl,vh), std::max(vl,vh));
+      // We must make sure the horizontal/vertical intervals are in the proper
+      // order, otherwise our algorithm will explode since we assume LOW < HIGH.
+      auto hivl = bp::get(rect, bp::HORIZONTAL);
+      auto vivl = bp::get(rect, bp::VERTICAL);
+      auto hl = bp::get(hivl, bp::LOW), hh = bp::get(hivl, bp::HIGH);
+      auto vl = bp::get(vivl, bp::LOW), vh = bp::get(vivl, bp::HIGH);
+      hivl = bp::construct<decltype(hivl)>(std::min(hl,hh), std::max(hl,hh));
+      vivl = bp::construct<decltype(vivl)>(std::min(vl,vh), std::max(vl,vh));
+      add_rect(rect_type(hivl, vivl, rects.size()));
 #ifdef DEBUG
-        std::cerr << "ADD [" << idx << "]"
-          << " h(" << bp::get(hivl, bp::LOW) << "," << bp::get(hivl, bp::HIGH)
-          << ")"
-          << " v(" << bp::get(vivl, bp::LOW) << "," << bp::get(vivl, bp::HIGH)
-          << ")" << std::endl;
+      std::cerr << "ADD [" << idx << "]"
+        << " h(" << bp::get(hivl, bp::LOW) << "," << bp::get(hivl, bp::HIGH)
+        << ")"
+        << " v(" << bp::get(vivl, bp::LOW) << "," << bp::get(vivl, bp::HIGH)
+        << ")" << std::endl;
 #endif
-        rects.emplace_back(hivl, vivl, idx++);
-        ++begin;
-        // Queue up the horizontal edges. Vertical edges go in at each event.
-        rects.back().add_edges(push_inserter(edges_y), bp::VERTICAL);
-      }
-      // We can never have more solutions than rects so just reserve this upper
-      // bound to prevent implicitly resizing the solutions vector.
-      solutions.reserve(rects.size());
     }
 
-  // Run the algorithm and compute the connected components.
-  void compute(void);
+  // override
+  void add_event(pure_rect_type const& rect) {
+    add_event<pure_rect_type>(rect);
+  }
 
   inline int depth(void) const { return max_depth; }
 
@@ -483,9 +516,9 @@ public:
   inline pure_rect_iterator end(void) const { return solution_cells.cend(); }
   inline pure_rect_type const& cell(size_t i) { return solution_cells[i]; }
 
-  inline solution_iterator sol_begin(void) const { return solutions.cbegin(); }
-  inline solution_iterator sol_end(void) const { return solutions.cend(); }
-  inline solution_type const& solution(size_t i) const { return solutions[i];}
+  inline solution_iterator sol_begin(void) const { return solutions().cbegin(); }
+  inline solution_iterator sol_end(void) const { return solutions().cend(); }
+  inline solution_type const& solution(size_t i) const { return solutions()[i]; }
 };
 
 extern template class ConnectedComponents<double>;
