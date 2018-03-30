@@ -65,8 +65,11 @@ struct Edge
   Edge() : coord(), dir(), rect_index(-1), depth(-1) {}
   Edge(coordinate_type const& c, bp::direction_1d const& d, int idx)
     : coord(c), dir(d), rect_index(idx), depth(-1) {}
+  Edge(Edge const& other, int new_idx)
+    : coord(other.coord), dir(other.dir), rect_index(new_idx),
+      depth(other.depth) {}
 
-  bool operator==(Edge const& e) const {
+  inline bool operator==(Edge const& e) const {
     return rect_index == e.rect_index
       && dir == e.dir
       && coord == e.coord; // epsilon compare?
@@ -76,9 +79,9 @@ struct Edge
 #ifdef DEBUG
   template<typename U>
     friend std::ostream& operator<<(std::ostream& os, Edge<U> const& e) {
-      os << "<d=" << e.depth << " " << (e.dir == bp::LOW ? "LOW " : "HIGH")
-         << " [" << std::setw(2) << std::setfill(' ') << e.rect_index
-         << "] " << e.coord << ">";
+      os << "<[" << std::setw(2) << std::setfill(' ') << e.rect_index
+        << "] " << (e.dir == bp::LOW ? "LOW " : "HIGH")
+        << " " << e.coord << " d=" << e.depth << ">";
       return os;
     }
 #endif
@@ -121,19 +124,19 @@ namespace boost { namespace polygon {
 #ifdef DEBUG
 template<typename T, typename C>
   std::ostream& operator<<(std::ostream& os, std::set<T, C> const& s) {
-    os << "set< ";
+    os << "set<" << std::endl;
     for (auto it = s.begin(); it != s.end(); ++it)
-      os << *it << ", ";
-    os << " >";
+      os << "  " << *it << std::endl;
+    os << ">";
     return os;
   }
 
 template<typename T>
   std::ostream& operator<<(std::ostream& os, std::unordered_set<T> const& s) {
-    os << "set{ ";
+    os << "set{" << std::endl;
     for (auto it = s.begin(); it != s.end(); ++it)
-      os << *it << ", ";
-    os << " }";
+      os << *it << std::endl;
+    os << "}";
     return os;
   }
 
@@ -175,7 +178,7 @@ template<class Tp_>
 struct EdgeCompare
 {
   typedef Edge<Tp_> edge_type;
-  bool operator()(edge_type const& e1, edge_type const& e2)
+  inline bool operator()(edge_type const& e1, edge_type const& e2) const
   {
     return e1.coord < e2.coord
       || ((e1.coord == e2.coord) && (e1.rect_index < e2.rect_index));
@@ -236,6 +239,163 @@ Iter1 rsync_iters(Iter1 end1, Iter2 end2, Iter2 begin2) {
 }
 
 template<class Tp_>
+struct SolutionCompare;
+
+template<class Tp_>
+struct SolutionEdge
+{
+  typedef Edge<Tp_> edge_type;
+  typedef EdgeCompare<Tp_> edge_comparator;
+  typedef typename edge_type::coordinate_type coordinate_type;
+  typedef SolutionEdge<Tp_> sedge_type;
+  typedef SolutionCompare<Tp_> sedge_compare;
+
+  edge_type edge;
+  int solution;
+
+  SolutionEdge(edge_type const& e, int sidx=-1)
+    : edge(e), solution(sidx)
+  {
+  }
+
+  inline bool operator<(sedge_type const& other) const {
+    return sedge_compare()(*this, other);
+  }
+  inline bool operator<(edge_type const& other) const {
+    return sedge_compare()(*this, other);
+  }
+  inline bool operator==(sedge_type const& other) const {
+    return !sedge_compare()(*this, other) && !sedge_compare()(other, *this);
+  }
+  inline bool operator==(edge_type const& other) const {
+    return !sedge_compare()(*this, other) && !sedge_compare()(other, *this);
+  }
+
+#ifdef DEBUG
+  template<typename U>
+    friend std::ostream& operator<<(std::ostream& os, SolutionEdge<U> const& e)
+    {
+      os << "[" << std::setw(2) << std::setfill(' ') << e.solution << "] from "
+        << e.edge;
+      return os;
+    }
+#endif
+};
+
+template<class Tp_>
+struct SolutionCompare
+{
+  typedef SolutionEdge<Tp_> sedge_type;
+  typedef typename sedge_type::edge_type edge_type;
+  typedef typename sedge_type::edge_comparator edge_comparator;
+
+  inline bool operator()(sedge_type const& s1, sedge_type const& s2) const {
+    return edge_comparator()(s1.edge, s2.edge)
+      || (!edge_comparator()(s2.edge, s1.edge)
+          && s1.solution == s2.solution);
+  }
+  inline bool operator()(sedge_type const& s1, edge_type const& e2) const {
+    return edge_comparator()(s1.edge, e2);
+  }
+  inline bool operator()(edge_type const& e1, sedge_type const& s2) const {
+    return edge_comparator()(e1, s2.edge);
+  }
+};
+
+template<class Tp_>
+class ConnectedComponents;
+
+template<class Tp_>
+struct SolutionCell
+{
+public:
+  typedef ConnectedComponents<Tp_> cctype;
+  typedef typename cctype::coordinate_type coordinate_type;
+  typedef typename cctype::point_type      point_type;
+  typedef typename cctype::rect_type       rect_type;
+  typedef typename cctype::edge_type       edge_type;
+  typedef typename cctype::edge_comparator edge_comparator;
+  typedef typename cctype::pure_rect_type  pure_rect_type;
+
+  typedef SolutionEdge<Tp_> sedge_type;
+  typedef SolutionCompare<Tp_> sedge_compare;
+
+  // indexes of rects which form the maximal intersection
+  typedef typename std::unordered_set<size_t> index_set;
+  typedef typename index_set::const_iterator index_iterator;
+  typedef typename index_set::size_type size_type;
+
+private:
+  index_set source_rects_;
+  int top_, bot_, left_, right_;
+  bool hit_left_, hit_right_;
+
+public:
+  SolutionCell(int top, int left, int right)
+    : source_rects_(),
+      top_(top), bot_(-1), left_(left), right_(right),
+      hit_left_(false), hit_right_(false)
+  {
+    source_rects_.insert(top_);
+    source_rects_.insert(left_);
+    source_rects_.insert(right_);
+#ifdef DEBUG
+    std::cerr << "new max from rect " << top_
+      << " and edges: " << left_ << " and " << right_ << std::endl;
+#endif
+  }
+
+  inline void found(bp::direction_1d dir) {
+    if (dir == bp::LEFT)  hit_left_  = true;
+    //else
+    if (dir == bp::RIGHT) hit_right_ = true;
+  }
+  inline bool marked(void) const { return hit_left_ || hit_right_; }
+  inline bool marked(int bot) {
+    if (marked())
+    {
+      set_bot(bot);
+      return true;
+    }
+    return false;
+  }
+
+  inline int top(void) const { return top_; }
+  inline int bot(void) const { return bot_; }
+  inline int left(void) const { return left_; }
+  inline int right(void) const { return right_; }
+  inline void set_bot(int new_bot) {
+    // only update bottom once
+    if (bot_ < 0 && new_bot >= 0)
+      source_rects_.insert(bot_ = new_bot);
+  }
+
+  inline index_iterator begin(void) const { return source_rects_.cbegin(); }
+  inline index_iterator end(void) const { return source_rects_.cend(); }
+  inline size_type size(void) const { return source_rects_.size(); }
+
+  // solution cell
+  template<class RectArray>
+  pure_rect_type cell(RectArray const& rects, size_t rects_size) const {
+    auto rit = source_rects_.begin();
+    if (rit == source_rects_.end())
+      return pure_rect_type();
+    int idx = *rit++;
+    if (idx < 0 || static_cast<size_t>(idx) >= rects_size)
+      return pure_rect_type();
+
+    pure_rect_type retcell = rects[idx];
+    while (rit != source_rects_.end())
+    {
+      idx = *rit++;
+      if (idx >= 0 && static_cast<size_t>(idx) < rects_size)
+        /*assert(*/bp::intersect(retcell, rects[idx])/*)*/;
+    }
+    return retcell;
+  }
+};
+
+template<class Tp_>
 class ConnectedComponents
 {
 public:
@@ -267,10 +427,17 @@ public:
     id_map;
   typedef typename std::vector<vertex_descriptor> descriptor_list;
 
-  typedef typename std::unordered_set<size_t> index_set;
-  typedef typename index_set::const_iterator index_iterator;
-
   typedef typename edge_set::iterator edge_iterator;
+
+  typedef SolutionCell<Tp_> solution_type;
+  typedef typename solution_type::sedge_type sedge_type;
+  typedef typename solution_type::sedge_compare sedge_compare;
+  typedef typename std::set<sedge_type, sedge_compare> solution_edge_set;
+  typedef typename std::vector<solution_type> solution_list;
+  typedef typename solution_list::const_iterator solution_iterator;
+
+  typedef typename std::vector<pure_rect_type> pure_rect_list;
+  typedef typename pure_rect_list::const_iterator pure_rect_iterator;
 
 private:
   rect_container rects;
@@ -281,12 +448,10 @@ private:
   id_map component_ids;
   descriptor_list vertexes;
   int max_depth = -1;
-  // indexes of rects which form the maximal intersection
-  index_set max_rects;
-  pure_rect_type max_rect;
 
-  edge_type max_left, max_right;
-  int max_bottom_rect;
+  solution_edge_set solution_edges;
+  solution_list solutions;
+  pure_rect_list solution_cells;
 
   inline vertex_descriptor vd(int idx) const { return vertexes[idx]; }
 
@@ -351,6 +516,9 @@ public:
         // Queue up the horizontal edges. Vertical edges go in at each event.
         rects.back().add_edges(push_inserter(edges_y), bp::VERTICAL);
       }
+      // We can never have more solutions than rects so just reserve this upper
+      // bound to prevent implicitly resizing the solutions vector.
+      solutions.reserve(rects.size());
     }
 
   // Run the algorithm and compute the connected components.
@@ -358,11 +526,16 @@ public:
 
   inline int depth(void) const { return max_depth; }
 
-  // Return the rectangle with maximal depth.
-  inline pure_rect_type max(void) const { return max_rect; }
+  // Return the solution cells.
+  inline size_t size(void) const { return solution_cells.size(); }
 
-  inline index_iterator begin(void) const { return max_rects.cbegin(); }
-  inline index_iterator end(void) const { return max_rects.cend(); }
+  inline pure_rect_iterator begin(void) const { return solution_cells.cbegin(); }
+  inline pure_rect_iterator end(void) const { return solution_cells.cend(); }
+  inline pure_rect_type const& cell(size_t i) { return solution_cells[i]; }
+
+  inline solution_iterator sol_begin(void) const { return solutions.cbegin(); }
+  inline solution_iterator sol_end(void) const { return solutions.cend(); }
+  inline solution_type const& solution(size_t i) const { return solutions[i];}
 };
 
 extern template class ConnectedComponents<double>;

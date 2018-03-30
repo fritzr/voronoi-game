@@ -91,6 +91,11 @@ using namespace std;
 using namespace cv;
 using namespace voronoi;
 
+typedef typename components::ConnectedComponents<double> CComp;
+typedef typename CComp::coordinate_type coordinate_type;
+typedef typename bp::rectangle_data<coordinate_type> rect_type;
+typedef typename CComp::solution_type solution_type;
+
 enum DrawRects {
   RECTS_NONE = 0,
   RECTS_ROTATED = 1,
@@ -645,6 +650,35 @@ finish_img(Mat img, Rect const& bbox, Size const& resolution)
   return colorimg;
 }
 
+static void
+dump_solution(Mat img, int idx, solution_type const& solution,
+    rect_type const& cell)
+{
+  Point tl, br;
+  bp::assign(tl, bp::ul(cell));
+  bp::assign(br, bp::lr(cell));
+  cout << "[" << setw(2) << setfill(' ') << dec << idx << "]"
+    << " (" << tl << ", " << br << ")"
+    << " from rects { ";
+  for (auto it = solution.begin(); it != solution.end(); ++it)
+    cout << *it << ", ";
+  cout << " }" << endl;
+
+  if (opts.computeCell & CELL_UPRIGHT)
+  {
+    Rect r(tl, br);
+    cv::rectangle(img, r, fillColor, CV_FILLED);
+  }
+  if (opts.computeCell & CELL_ROTATED)
+  {
+    Point2f center((tl.x + br.x)/2.0f, (tl.y + br.y)/2.0f);
+    center = rotn(center);
+    Size2f size(br.x - tl.x, tl.y - br.y);
+    RotatedRect rrect(center, size, ANGLE_DEG);
+    draw_rotrect(img, rrect, fillColor, CV_FILLED);
+  }
+}
+
 int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
@@ -673,9 +707,6 @@ int main(int argc, char *argv[])
   // Flip vertical initially so text comes out up-right (since we flip later)
   cv::flip(img, img, 0);
 
-  typedef typename components::ConnectedComponents<double> CComp;
-  typedef typename CComp::coordinate_type coordinate_type;
-  typedef typename bp::rectangle_data<coordinate_type> rect_type;
   vector<rect_type> rects;
   build_rects<rect_type>(img, sites, users, resolution, back_inserter(rects));
 
@@ -685,28 +716,12 @@ int main(int argc, char *argv[])
     comp.compute();
     cout << "maximal depth: " << comp.depth() << endl;
 
-    cout << "maximal intersections from: ";
-    for (auto it = comp.begin(); it != comp.end(); ++it)
-      cout << *it << ", ";
-    cout << endl;
-
-    auto maxrect = comp.max();
-    cout << "maximal rect:  " << maxrect << endl;
-    Point tl, br;
-    bp::assign(tl, bp::ul(maxrect));
-    bp::assign(br, bp::lr(maxrect));
-    if (opts.computeCell & CELL_UPRIGHT)
+    cout << "maximal rects:" << endl;
+    for (size_t idx = 0u; idx < comp.size(); ++idx)
     {
-      Rect r(tl, br);
-      cv::rectangle(img, r, fillColor, CV_FILLED);
-    }
-    if (opts.computeCell & CELL_ROTATED)
-    {
-      Point2f center((tl.x + br.x)/2.0f, (tl.y + br.y)/2.0f);
-      center = rotn(center);
-      Size2f size(br.x - tl.x, tl.y - br.y);
-      RotatedRect rrect(center, size, ANGLE_DEG);
-      draw_rotrect(img, rrect, fillColor, CV_FILLED);
+      solution_type const& sol = comp.solution(idx);
+      rect_type const& cell = comp.cell(idx);
+      dump_solution(img, idx, sol, cell);
     }
 
     if (opts.dumpGraph)
