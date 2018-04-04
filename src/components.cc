@@ -177,9 +177,10 @@ remove_rect(rect_type const& r)
         << setw(2) << setfill(' ') << r.index << "] at "
         << r.edge(bp::VERTICAL, bp::LOW) << endl;
 #endif
-      solution_edges.erase(sol_it);
+      sol_it = solution_edges.erase(sol_it);
     }
-    ++sol_it;
+    else
+      ++sol_it;
   }
 
 #ifdef DEBUG
