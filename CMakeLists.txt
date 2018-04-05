@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 2.8.12)
 #cmake_policy(POP)
 
 project(voronoi-game)
-if(NOT WIN32 AND NOT WIN64)
+if(NOT WIN32 AND NOT WIN64 AND NOT APPLE)
   set(CMAKE_CXX_COMPILER "g++")
 endif()
 
