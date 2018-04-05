@@ -492,7 +492,7 @@ public:
       vivl = bp::construct<decltype(vivl)>(std::min(vl,vh), std::max(vl,vh));
       add_rect(rect_type(hivl, vivl, rects.size()));
 #ifdef DEBUG
-      std::cerr << "ADD [" << idx << "]"
+      std::cerr << "ADD [" << (rects.size()-1) << "]"
         << " h(" << bp::get(hivl, bp::LOW) << "," << bp::get(hivl, bp::HIGH)
         << ")"
         << " v(" << bp::get(vivl, bp::LOW) << "," << bp::get(vivl, bp::HIGH)
