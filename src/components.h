@@ -20,8 +20,6 @@
 
 #include "sweep.h"
 
-//#include "tree.h"
-
 template <class Container>
   class push_insert_iterator:
     public std::iterator<std::output_iterator_tag,void,void,void,void>

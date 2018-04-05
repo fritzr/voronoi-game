@@ -39,8 +39,6 @@ add_executable(${TEST_PROG}
   components.h components.cc
   main.h main.cc
 )
-#add_executable(treetest treetest.cc tree.h )
-#add_executable(btreetest btreetest.cc)
 #add_executable(l23test l23test.cc)
 
 # these are just annoying
@@ -51,13 +49,9 @@ target_link_libraries(${TEST_PROG}
   ${Boost_LIBRARIES}
   )
 
-#target_link_libraries(treetest ${Boost_LIBRARIES} )
-#target_link_libraries(btreetest ${Boost_LIBRARIES} )
 #target_link_libraries(l23test ${Boost_LIBRARIES} )
 
 #cotire(${TEST_PROG})
 
 install (TARGETS ${TEST_PROG} DESTINATION bin)
-#install (TARGETS treetest DESTINATION bin)
-#install (TARGETS btreetest DESTINATION bin)
 #install (TARGETS l23test DESTINATION bin)
