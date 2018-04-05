@@ -7,15 +7,16 @@
 #include <iomanip>
 #endif
 
-#include "components.h"
+#include "maxrect.h"
 
 using namespace std;
 
-namespace components
+// competitive facility location algorithms
+namespace cfla
 {
 
 template<class Tp_>
-ConnectedComponents<Tp_>::ConnectedComponents(void)
+MaxRect<Tp_>::MaxRect(void)
   : rects(), edges_x(),
     component_ids(b::get(b::vertex_index_t(), graph)),
     vertexes(), max_depth(-1)
@@ -23,13 +24,13 @@ ConnectedComponents<Tp_>::ConnectedComponents(void)
 }
 
 template<class Tp_>
-ConnectedComponents<Tp_>::~ConnectedComponents(void)
+MaxRect<Tp_>::~MaxRect(void)
 {
 }
 
 template<class Tp_>
 template<class EdgeSetIter>
-int ConnectedComponents<Tp_>::
+int MaxRect<Tp_>::
 check_max_depth(rect_type const& r, EdgeSetIter leftp, int new_depth)
 {
   // Only bother with max depth cells, AND only if the edge of interest is
@@ -62,7 +63,7 @@ check_max_depth(rect_type const& r, EdgeSetIter leftp, int new_depth)
 }
 
 template<class Tp_>
-void ConnectedComponents<Tp_>::
+void MaxRect<Tp_>::
 insert_rect(rect_type const& r)
 {
 #ifdef DEBUG
@@ -108,7 +109,7 @@ insert_rect(rect_type const& r)
 }
 
 template<class Tp_>
-void ConnectedComponents<Tp_>::
+void MaxRect<Tp_>::
 remove_rect(rect_type const& r)
 {
 #ifdef DEBUG
@@ -190,7 +191,7 @@ remove_rect(rect_type const& r)
 }
 
 template<class Tp_>
-void ConnectedComponents<Tp_>::
+void MaxRect<Tp_>::
 handle_event(bp::direction_1d const& dir, edge_type const& edge)
 {
   switch (dir.to_int())
@@ -211,7 +212,7 @@ handle_event(bp::direction_1d const& dir, edge_type const& edge)
 }
 
 template<class Tp_>
-void ConnectedComponents<Tp_>::
+void MaxRect<Tp_>::
 add_rect(rect_type const& rect)
 {
   size_t next_idx = rects.size();
@@ -227,7 +228,7 @@ add_rect(rect_type const& rect)
 }
 
 template<class Tp_>
-void ConnectedComponents<Tp_>::
+void MaxRect<Tp_>::
 initialize(void)
 {
   // We can never have more solutions than rects so just reserve this upper
@@ -236,7 +237,7 @@ initialize(void)
 }
 
 template<class Tp_>
-void ConnectedComponents<Tp_>::
+void MaxRect<Tp_>::
 finalize(void)
 {
   // Cache the solution cells.
@@ -246,6 +247,6 @@ finalize(void)
     solution_cells.emplace_back(sol_it->cell(rects, rects.size()));
 }
 
-template class ConnectedComponents<double>;
+template class MaxRect<double>;
 
-} // end namespace components
+} // end namespace cfla

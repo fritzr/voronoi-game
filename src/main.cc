@@ -82,7 +82,7 @@ typedef typename std::vector<cv::Point>::iterator p2di;
 
 #include "main.h"
 #include "voronoi.h"
-#include "components.h"
+#include "maxrect.h"
 
 #define i2f(...) static_cast<float>(__VA_ARGS__)
 #define i2u(...) static_cast<unsigned int>(__VA_ARGS__)
@@ -91,10 +91,10 @@ using namespace std;
 using namespace cv;
 using namespace voronoi;
 
-typedef typename components::ConnectedComponents<double> CComp;
-typedef typename CComp::coordinate_type coordinate_type;
+typedef typename cfla::MaxRect<double> MaxRect;
+typedef typename MaxRect::coordinate_type coordinate_type;
 typedef typename bp::rectangle_data<coordinate_type> rect_type;
-typedef typename CComp::solution_type solution_type;
+typedef typename MaxRect::solution_type solution_type;
 
 enum DrawRects {
   RECTS_NONE = 0,
@@ -187,7 +187,7 @@ usage(const char *prog, const char *errmsg)
     << "  -q TYPE		Query type for mapping users to sites:" << endl
     << "    [0:default], 1:brute force, 2:range search, 3:NN(1) (fastest)"
     << endl
-    << "  -c			Compute connected components." << endl
+    << "  -c			Compute max rects." << endl
     << "  -r			Draw rects (default: none):" << endl
     << "    [0:none], 1:rotated, 2:upright, 3:both" << endl
     << "  -j			Dump adJacency list (default: no)" << endl
@@ -712,22 +712,22 @@ int main(int argc, char *argv[])
 
   if (opts.computeCell)
   {
-    CComp comp(rects.begin(), rects.end());
-    comp.compute();
-    cout << "maximal depth: " << comp.depth() << endl;
+    MaxRect mr(rects.begin(), rects.end());
+    mr.compute();
+    cout << "maximal depth: " << mr.depth() << endl;
 
     cout << "maximal rects:" << endl;
-    for (size_t idx = 0u; idx < comp.size(); ++idx)
+    for (size_t idx = 0u; idx < mr.size(); ++idx)
     {
-      solution_type const& sol = comp.solution(idx);
-      rect_type const& cell = comp.cell(idx);
+      solution_type const& sol = mr.solution(idx);
+      rect_type const& cell = mr.cell(idx);
       dump_solution(img, idx, sol, cell);
     }
 
     if (opts.dumpGraph)
     {
       /* Dump adjacency list */
-      auto graph = comp.adj_graph();
+      auto graph = mr.adj_graph();
       //size_t i = 0u, nedges = boost::num_edges(graph);
       auto itpair = boost::edges(graph);
       auto eit = itpair.first;
@@ -735,8 +735,8 @@ int main(int argc, char *argv[])
       cout << "connected rects: " << endl;
       while (eit != end)
       {
-        cout << "  " << comp.index(boost::source(*eit, graph))
-          << " <-> " << comp.index(boost::target(*eit, graph)) << endl;
+        cout << "  " << mr.index(boost::source(*eit, graph))
+          << " <-> " << mr.index(boost::target(*eit, graph)) << endl;
         ++eit;
       }
     }

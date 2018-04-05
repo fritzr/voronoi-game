@@ -43,7 +43,7 @@ push_insert_iterator<Container> push_inserter(Container& container){
   return push_insert_iterator<Container>(container);
 }
 
-namespace components
+namespace cfla
 {
 
 namespace b  = boost;
@@ -93,7 +93,7 @@ struct Edge
 };
 
 template<class Tp_>
-struct RectComponent : bp::rectangle_data<Tp_>
+struct RectWrapper : bp::rectangle_data<Tp_>
 {
   typedef typename bp::rectangle_data<Tp_> super_type;
   typedef typename bp::rectangle_traits<Tp_> traits;
@@ -103,7 +103,7 @@ struct RectComponent : bp::rectangle_data<Tp_>
   //int component; // ID of the component to which this rect belongs.
 
   template <class HInterval, class VInterval>
-    RectComponent(const HInterval& hrange, const VInterval& vrange, size_t idx)
+    RectWrapper(const HInterval& hrange, const VInterval& vrange, size_t idx)
       : super_type(hrange, vrange), index(idx)/*, component(-1)*/ {}
 
   inline edge_type edge(bp::orientation_2d orient, bp::direction_1d dir) const
@@ -118,11 +118,11 @@ struct RectComponent : bp::rectangle_data<Tp_>
     }
 };
 
-} // we interrupt your regularly scheduled components namespace to bring you...
+} // we interrupt your regularly scheduled cfla namespace to bring you...
 
 namespace boost { namespace polygon {
   template <typename Tp_>
-    struct geometry_concept<components::RectComponent<Tp_> >
+    struct geometry_concept<cfla::RectWrapper<Tp_> >
       { typedef rectangle_concept type; };
 }}
 
@@ -176,7 +176,7 @@ std::ostream& operator<<(std::ostream& os,
 }
 
 
-namespace components
+namespace cfla
 {
 
 // Node to track 'cell depths'. These form the tree T(V_k) from the paper,
@@ -259,7 +259,7 @@ struct MaxDepthRectTraits
 {
   typedef Tp_                            coordinate_type;
   typedef typename cv::Point_<Tp_>       point_type;
-  typedef RectComponent<Tp_>             rect_type;
+  typedef RectWrapper<Tp_>             rect_type;
   typedef typename rect_type::super_type pure_rect_type;
   typedef Edge<Tp_>                      edge_type;
   typedef std::less<edge_type>           edge_compare;
@@ -377,7 +377,7 @@ struct make_sla_traits
 };
 
 template<class Tp_>
-class ConnectedComponents
+class MaxRect
   : public SweepLineAlgorithm<typename make_sla_traits<Tp_>::type>
 {
 public:
@@ -454,14 +454,14 @@ protected:
   void finalize(void);
 
 public:
-  ~ConnectedComponents();
+  ~MaxRect();
 
   // No inputs yet.
-  ConnectedComponents();
+  MaxRect();
 
   // Construct from a list of input rectangles (may be in no particular order).
   template<class RectIter>
-    ConnectedComponents(RectIter begin, RectIter end)
+    MaxRect(RectIter begin, RectIter end)
     : rects(), edges_x(), graph(),
       component_ids(b::get(b::vertex_index_t(), graph)),
       vertexes(), max_depth(-1)
@@ -519,6 +519,6 @@ public:
   inline solution_type const& solution(size_t i) const { return solutions()[i]; }
 };
 
-extern template class ConnectedComponents<double>;
+extern template class MaxRect<double>;
 
-} // end namespace components
+} // end namespace cfla

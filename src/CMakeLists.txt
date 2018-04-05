@@ -36,7 +36,7 @@ set(TEST_PROG vgtest)
 add_executable(${TEST_PROG}
   voronoi.h voronoi.cc
   sweep.h
-  components.h components.cc
+  maxrect.h maxrect.cc
   main.h main.cc
 )
 #add_executable(l23test l23test.cc)
