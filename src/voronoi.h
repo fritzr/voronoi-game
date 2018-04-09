@@ -197,6 +197,34 @@ public:
   {
   }
 
+  template<class UserInputIter>
+  VoronoiDiagram(UserInputIter users_begin, UserInputIter users_end,
+      double max_width=1e9, double max_height=1e9)
+    : sites(), users(users_begin, users_end),
+      boundsx(max_width), u2s(users.size(), -1), vd()
+  {
+  }
+
+  // Add sites or users one-by-one. Note that if you do this you wil need
+  // to re-run build() before the answers will be correct.
+  template<class Point>
+    inline void add_site(Point const& site) { sites.push_back(site); }
+  template<class InputIter> 
+    inline void add_sites(InputIter begin, InputIter end)
+    { sites.push_back(begin, end); }
+
+  template<class Point>
+    inline void add_user(Point const& user) {
+      users.push_back(user);
+      u2s.push_back(-1);
+    }
+  template<class InputIter>
+    inline void add_users(InputIter begin, InputIter end) {
+      users.push_back(begin, end);
+      while (u2s.size() < users.size())
+        u2s.push_back(-1);
+    }
+
   // Return the coordinate of the site to which the given user belongs in O(1).
   inline point_type user_site(size_t user_index) const {
     return sites.at(u2s.at(user_index)); // bounds-checked
@@ -290,6 +318,7 @@ public:
     KNN,
     SM_BAD,
   };
+
   // Build the Voronoi diagram and figure out which users belong to which
   // sites. This method performs two steps. The first step is to build
   // the Voronoi diagram out of the sites(), which takes O(m log m) time.

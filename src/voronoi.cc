@@ -167,6 +167,8 @@ template<class Tp_>
 void
 VoronoiDiagram<Tp_>::build(SearchMethod sm)
 {
+  vd.clear();
+
   // Always construct the voronoi diagram from the sites so we have edges.
   boost::polygon::construct_voronoi(sites.begin(), sites.end(), &vd);
 
