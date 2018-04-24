@@ -46,29 +46,64 @@ inline Int randint(Int min, Int max)
   return distribution(rand);
 }
 
-template<class point_type, class user_container>
+#include <map>
+#include <list>
+#include <boost/geometry/geometry.hpp>
+namespace bgi = boost::geometry::index;
+
+template<class UserList, class FacilityList>
 class NN1
 {
 public:
+  typedef typename UserList::const_iterator user_citerator;
+  typedef typename UserList::iterator user_iterator;
+
+  typedef typename FacilityList::value_type point_type;
+  typedef std::pair<point_type, int> fpair_type;
+  typedef typename bgi::rtree<fpair_type, bgi::quadratic<16> > voronoi_tree;
 
 private:
-  value_list site_indexes;
-  user_container const& users;
+  UserList const& users_;
+  FacilityList const& facilities_;
+  std::list<fpair_type> fpairs_;
+  std::map<int, int> u2s_;
 
-  NN1(user_container const& u) : users(u) { }
-
-  class NN1Bind {
-    typedef std::pair<point_type, int> rvalue_t;
-    typedef std::vector<rvalue_t> value_list;
-    typedef typename bgi::rtree<rvalue_t, bgi::quadratic<16> > nn1tree;
-
-    template<class facility_container>
-    NN1Bind(facility_container const& facs) {
-    }
-  };
-
-  template<class facility_container>
-  NN1Bind bind(facility_container const& facs) {
-    return NN1Bind(facs);
+public:
+  NN1(UserList const& u, FacilityList const& f)
+    : users_(u), facilities_(f), u2s_(users_.size(), -1)
+  {
+    // Construct an R-tree for NN(1) queries on the facilitys.
+    // We use this to efficiently find the facility that is nearest to each user
+    int facility_idx = 0;
+    auto fbegin = f.begin();
+    while (fbegin != f.end())
+      fpairs_.emplace_back(*fbegin++, facility_idx++);
   }
+
+  void add_site(point_type p)
+  {
+    facilities_.push_back(p);
+    fpairs_.emplace_back(p, fpairs_.size());
+  }
+
+  template<class InputIter>
+  void build(void)
+  {
+    // The nearest-neighbor is of course the voronoi cell.
+    voronoi_tree vtree(fpairs_.begin(), fpairs_.end());
+    int user_idx = 0;
+    auto userp = users_.begin();
+    while (userp != users_.end())
+      u2s_[user_idx++] = vtree.qbegin(bgi::nearest(*userp++, 1))->second;
+  }
+
+  inline point_type nearest_facility(int up) const
+    { return facilities_.at(u2s_[up]); }
+  inline int nearest_index(int up) const
+    { return u2s_[up]; }
+  inline point_type nearest_facility(user_iterator up) const
+    { return facilities_.at(u2s_[up - users_.begin()]); }
+  inline int nearest_index(user_iterator up) const
+    { return u2s_[up - users_.begin()]; }
+
 };
