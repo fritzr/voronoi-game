@@ -1,3 +1,5 @@
+#pragma once
+
 #include <opencv2/core/core.hpp>
 
 #if CV_VERSION_MAJOR < 3 && !defined(OPENCV2_4_13)
@@ -19,3 +21,5 @@ extern "C" {
 #else
 #error no getopt support
 #endif
+
+#include "util.h"

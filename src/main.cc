@@ -83,6 +83,7 @@ typedef typename std::vector<cv::Point>::iterator p2di;
 #include "main.h"
 #include "voronoi.h"
 #include "maxrect.h"
+#include "vgame.h"
 
 #define i2f(...) static_cast<float>(__VA_ARGS__)
 #define i2u(...) static_cast<unsigned int>(__VA_ARGS__)
@@ -95,6 +96,9 @@ typedef typename cfla::MaxRect<double> MaxRect;
 typedef typename MaxRect::coordinate_type coordinate_type;
 typedef typename bp::rectangle_data<coordinate_type> rect_type;
 typedef typename MaxRect::solution_type solution_type;
+
+typedef typename cfla::cfla_traits<cv::Point2f> vgtraits;
+typedef typename cfla::VGame<vgtraits> VGame;
 
 enum DrawRects {
   RECTS_NONE = 0,
@@ -125,14 +129,16 @@ struct options_t
   bool fill_inputs = false;
   int screenWidth = 1920;
   int screenHeight = 1080;
-  DrawCell computeCell = CELL_ROTATED;
+  DrawCell computeCell = CELL_NONE;
   DrawRects drawRects = RECTS_NONE;
   bool dumpGraph = false; // adjacency graph
   VoronoiDiagram<double>::SearchMethod queryType
     =VoronoiDiagram<double>::Default;
+  unsigned int rounds = 1u;
 
-  string sites_path;
   string users_path;
+  string p1sites_path;
+  string p2sites_path;
 };
 
 static options_t opts;
@@ -151,6 +157,9 @@ static const Scalar FONT_COLOR(Scalar::all(255));
 const int FONT_XSPACE = 10;
 const int FONT_YSPACE = 10;
 
+static const Scalar P1COLOR(255, 0, 0); // blue
+static const Scalar P2COLOR(0, 0, 255); // red
+
 static void usage(const char *prog, const char *errmsg=NULL)
 #ifndef _MSC_VER
   __attribute__((noreturn))
@@ -160,7 +169,9 @@ static void usage(const char *prog, const char *errmsg=NULL)
 void
 usage(const char *prog, const char *errmsg)
 {
-  cerr << "usage: " << prog << " [OPTIONS] <sites-file> <users-file>" << endl
+  cerr << "usage: " << prog << " [OPTIONS] <users> <sites>" << endl
+    << "       " << prog << " [OPTIONS] -p<N> <users> <p1sites> <p2sites>"
+    << endl
     << "OPTIONS are:" << endl
     << "  -F			Fill input polygons (default: trace)" << endl
     << "  -C COLORMAP		Give a colormap index" << endl
@@ -187,10 +198,8 @@ usage(const char *prog, const char *errmsg)
     << "  -q TYPE		Query type for mapping users to sites:" << endl
     << "    [0:default], 1:brute force, 2:range search, 3:NN(1) (fastest)"
     << endl
-    << "  -c			Compute max rects." << endl
     << "  -r			Draw rects (default: none):" << endl
-    << "    [0:none], 1:rotated, 2:upright, 3:both" << endl
-    << "  -j			Dump adJacency list (default: no)" << endl
+    << "  -p N			Play N rounds of the game (default: 1)." << endl
     << endl
     ;
   if (errno) {
@@ -219,7 +228,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "Fc:C:X:Y:T:eEgGlLdW:H:hs:u:q:r:j";
+static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:";
 
 // Parses options and sets the global options structure.
 static void
@@ -269,11 +278,10 @@ get_options(int argc, char *argv[], options_t &o)
     case 'r':
       o.drawRects = getenum<DrawRects>(RECTS_BAD, optarg, errstr, "rect type");
       break;
-    case 'c':
-      o.computeCell = getenum<DrawCell>(CELL_BAD, optarg, errstr, "cell type");
-      break;
     case 'j':
       o.dumpGraph = true; break;
+    case 'p':
+      o.rounds = strtoul(optarg, NULL, 0); break;
     case 'h':
       usage(argv[0]);
     case ':':
@@ -290,7 +298,13 @@ get_options(int argc, char *argv[], options_t &o)
     usage(argv[0], errstr.str().c_str());
   }
 
-  if (argc - optind < 2) {
+  if (o.rounds != 0 && o.computeCell)
+    usage(argv[0], "-c and -p are mutually exclusive");
+
+  int nargs = 2;
+  if (o.rounds != 0)
+    nargs = 3;
+  if (argc - optind < 3) {
     usage(argv[0], "not enough arguments");
   }
 
@@ -302,8 +316,10 @@ get_options(int argc, char *argv[], options_t &o)
     cout << "reading polygons from file '" << argv[optind] << "'" << endl;
   }
 
-  o.sites_path = string(argv[optind]);
-  o.users_path = string(argv[optind+1]);
+  o.users_path = string(argv[optind]);
+  o.p1sites_path = string(argv[optind+1]);
+  if (nargs > 2)
+    o.p2sites_path = string(argv[optind+2]);
 }
 
 // Draw grid lines.
@@ -411,40 +427,6 @@ readOrDie(const string &path, It out)
   }
 }
 
-template<typename T>
-static inline T deg2rad(T deg) {
-  return (deg * static_cast<T>(M_PI)) / static_cast<T>(180.0);
-}
-template<typename T>
-static inline T rad2deg(T rad) {
-  return (rad * static_cast<T>(180.0)) / static_cast<T>(M_PI);
-}
-
-// Pre-computed 45-deg Euler rotation matrices
-static const float ANGLE_DEG = 45.0f;
-static const float pangle = deg2rad(ANGLE_DEG);
-static const float nangle = -pangle;
-static const Mat rotZn = Mat(Matx22f({
-  cosf(nangle), -sinf(nangle), /* 0, */
-  sinf(nangle),  cosf(nangle), /* 0, */
-  /*         0,             0,    1, */
-}));
-static const Mat rotZp = Mat(Matx22f({
-  cosf(pangle), -sinf(pangle), /* 0, */
-  sinf(pangle),  cosf(pangle), /* 0, */
-  /*         0,             0,    1, */
-}));
-
-static inline Point2f rotateZ2f_neg(Point2f pt) {
-  Mat ans = Mat(Matx12f({pt.x, pt.y})) * rotZn;
-  return Point2f(ans.at<float>(0u, 0u), ans.at<float>(0u, 1u));
-}
-
-static inline Point2f rotateZ2f_pos(Point2f pt) {
-  Mat ans = Mat(Matx12f({pt.x, pt.y})) * rotZp;
-  return Point2f(ans.at<float>(0u, 0u), ans.at<float>(0u, 1u));
-}
-
 static Point2f pbias, nbias;
 
 template<class pt>
@@ -492,16 +474,18 @@ draw_cells (Mat img, const VoronoiDiagram<Tp_> &vd)
   }
 }
 
-template <class Tp_>
+template<class InputIter>
 static void
-draw_sites(Mat img, const VoronoiDiagram<Tp_> &vd)
+draw_facilities(Mat img, InputIter begin, InputIter end, Scalar const& color)
 {
-  // Fill sites
-  for (size_t site_idx = 0u; site_idx < vd.sites_size(); ++site_idx) {
-    Scalar color = colorKey(site_idx, vd.sites_size());
-    cv::circle(img, check_rot(vd.site(site_idx)), 10, color, -1);
-  }
+  while (begin != end)
+    cv::circle(img, *begin++, 10, color, -1);
+}
 
+template<class InputIter>
+static void
+draw_users(Mat img, VGame const& vd)
+{
   // Don't fill users
   for (size_t user_idx = 0u; user_idx < vd.users_size(); ++user_idx) {
     Scalar color = colorKey(vd.site_index(user_idx), vd.sites_size());
@@ -683,14 +667,22 @@ int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
 
-  vector<Point> sites, users;
+  vector<Point> users, p1sites, p2sites;
 
-  readOrDie(opts.sites_path, back_inserter(sites));
   readOrDie(opts.users_path, back_inserter(users));
-
-  if (sites.empty()) {
-    cerr << "error: empty sites file (" << opts.sites_path << ")" << endl;
+  readOrDie(opts.p1sites_path, back_inserter(p1sites));
+  if (p1sites.empty()) {
+    cerr << "error: empty sites file (" << opts.p1sites_path << ")" << endl;
     exit(2);
+  }
+
+  if (opts.rounds != 0)
+  {
+    readOrDie(opts.p2sites_path, back_inserter(p2sites));
+    if (p2sites.empty()) {
+      cerr << "error: empty sites file (" << opts.p2sites_path << ")" << endl;
+      exit(2);
+    }
   }
 
   // We got resolution (x, y) as (width, height); flip to (rows, cols)
@@ -707,43 +699,29 @@ int main(int argc, char *argv[])
   // Flip vertical initially so text comes out up-right (since we flip later)
   cv::flip(img, img, 0);
 
-  vector<rect_type> rects;
-  build_rects<rect_type>(img, sites, users, resolution, back_inserter(rects));
-
-  if (opts.computeCell)
+  // Play the game one round at a time.
+  VGame vg(users.begin(), users.end());
+  vg.start(p1sites.begin(), p1sites.end(), p2sites.begin(), p2sites.end());
+  draw_users(img, vd);
+  draw_facilities(img, vg.player1().begin(), vg.player1().end(), P1COLOR);
+  draw_facilities(img, vg.player2().begin(), vg.player2().end(), P2COLOR);
+  unsigned int rounds_left = opts.rounds;
+  while (rounds_left--)
   {
-    MaxRect mr(rects.begin(), rects.end());
-    mr.compute();
-    cout << "maximal depth: " << mr.depth() << endl;
-
-    cout << "maximal rects:" << endl;
-    for (size_t idx = 0u; idx < mr.size(); ++idx)
-    {
-      solution_type const& sol = mr.solution(idx);
-      rect_type const& cell = mr.cell(idx);
-      dump_solution(img, idx, sol, cell);
-    }
-
-    if (opts.dumpGraph)
-    {
-      /* Dump adjacency list */
-      auto graph = mr.adj_graph();
-      //size_t i = 0u, nedges = boost::num_edges(graph);
-      auto itpair = boost::edges(graph);
-      auto eit = itpair.first;
-      auto end = itpair.second;
-      cout << "connected rects: " << endl;
-      while (eit != end)
-      {
-        cout << "  " << mr.index(boost::source(*eit, graph))
-          << " <-> " << mr.index(boost::target(*eit, graph)) << endl;
-        ++eit;
-      }
-    }
+    cv::Point2f next_facility = vg.play_round(1);
+    cv::circle(img, next_facility, 10, FONT_COLOR, -1);
+    /*
+    string round_title = string("round ") + std::to_string(rounds_left+1);
+    cv::flip(img, img, 0);
+    cv::imshow(round_title.c_str(), img);
+    cv::waitKey(0);
+    cv::flip(img, img, 0);
+    */
   }
 
-  auto pts = boost::join(sites, users);
-  Rect bbox = boundingRect(vector<Point>(pts.begin(), pts.end()));
+  auto player_sites = boost::join(p1sites, p2sites);
+  auto all_points = boost::join(player_sites, users);
+  Rect bbox = boundingRect(vector<Point>(all_points.begin(), all_points.end()));
   img = finish_img(img, bbox, resolution);
 
   // Now that we've flipped the image draw the user point labels

@@ -248,5 +248,6 @@ finalize(void)
 }
 
 template class MaxRect<double>;
+template class MaxRect<float>;
 
 } // end namespace cfla

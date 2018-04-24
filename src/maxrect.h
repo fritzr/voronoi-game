@@ -1,3 +1,4 @@
+#pragma once
 
 // Tree structures with custom node data.
 #include <set>
@@ -81,15 +82,6 @@ struct Edge
     // depth compare?
   }
 
-#ifdef DEBUG
-  template<typename U>
-    friend std::ostream& operator<<(std::ostream& os, Edge<U> const& e) {
-      os << "<[" << std::setw(2) << std::setfill(' ') << e.rect_index
-        << "] " << (e.dir == bp::LOW ? "LOW " : "HIGH")
-        << " " << e.coord << " d=" << e.depth << ">";
-      return os;
-    }
-#endif
 };
 
 template<class Tp_>
@@ -125,55 +117,6 @@ namespace boost { namespace polygon {
     struct geometry_concept<cfla::RectWrapper<Tp_> >
       { typedef rectangle_concept type; };
 }}
-
-#ifdef DEBUG
-template<typename T, typename C>
-  std::ostream& operator<<(std::ostream& os, std::set<T, C> const& s) {
-    os << "set<" << std::endl;
-    for (auto it = s.begin(); it != s.end(); ++it)
-      os << "  " << *it << std::endl;
-    os << ">";
-    return os;
-  }
-
-template<typename T>
-  std::ostream& operator<<(std::ostream& os, std::unordered_set<T> const& s) {
-    os << "set{" << std::endl;
-    for (auto it = s.begin(); it != s.end(); ++it)
-      os << *it << std::endl;
-    os << "}";
-    return os;
-  }
-
-template<typename T>
-  std::ostream& operator<<(std::ostream& os, std::vector<T> const& v) {
-    os << "[ ";
-    for (auto it = v.begin(); it != v.end(); ++it)
-      os << *it << ", ";
-    os << " ]";
-    return os;
-  }
-
-template<typename T>
-  std::ostream& operator<<(std::ostream& os, std::list<T> const& l) {
-    os << "[ ";
-    for (auto it = l.begin(); it != l.end(); ++it)
-      os << *it << ", ";
-    os << " ]";
-    return os;
-  }
-#endif
-
-template<typename Tp_>
-std::ostream& operator<<(std::ostream& os,
-    boost::polygon::rectangle_data<Tp_> const& r)
-{
-  namespace bp = boost::polygon;
-  os << "|" << bp::get(r, bp::HORIZONTAL, bp::LOW) << ","
-            << bp::get(r, bp::VERTICAL, bp::HIGH)
-     << "|";
-  return os;
-}
 
 
 namespace cfla
@@ -240,15 +183,6 @@ struct SolutionEdge
     return !(*this < other) && !(other < this->edge);
   }
 
-#ifdef DEBUG
-  template<typename U>
-    friend std::ostream& operator<<(std::ostream& os, SolutionEdge<U> const& e)
-    {
-      os << "[" << std::setw(2) << std::setfill(' ') << e.solution << "] from "
-        << e.edge;
-      return os;
-    }
-#endif
 };
 
 template<class Tp_>
@@ -520,5 +454,72 @@ public:
 };
 
 extern template class MaxRect<double>;
+extern template class MaxRect<float>;
 
 } // end namespace cfla
+
+#ifdef DEBUG
+template<typename T, typename C, typename A>
+std::ostream& operator<<(std::ostream& os, std::set<T, C, A> const& s) {
+  os << "set<" << std::endl;
+  for (auto it = s.begin(); it != s.end(); ++it)
+    os << "  " << *it << std::endl;
+  os << ">";
+  return os;
+}
+
+template<typename T>
+std::ostream& operator<<(std::ostream& os, std::unordered_set<T> const& s) {
+  os << "set{" << std::endl;
+  for (auto it = s.begin(); it != s.end(); ++it)
+    os << *it << std::endl;
+  os << "}";
+  return os;
+}
+
+template<typename T>
+std::ostream& operator<<(std::ostream& os, std::vector<T> const& v) {
+  os << "[ ";
+  for (auto it = v.begin(); it != v.end(); ++it)
+    os << *it << ", ";
+  os << " ]";
+  return os;
+}
+
+template<typename T>
+std::ostream& operator<<(std::ostream& os, std::list<T> const& l) {
+  os << "[ ";
+  for (auto it = l.begin(); it != l.end(); ++it)
+    os << *it << ", ";
+  os << " ]";
+  return os;
+}
+
+template<typename U>
+std::ostream& operator<<(std::ostream& os, cfla::Edge<U> const& e) {
+  os << "<[" << std::setw(2) << std::setfill(' ') << e.rect_index
+    << "] " << (e.dir == boost::polygon::LOW ? "LOW " : "HIGH")
+    << " " << e.coord << " d=" << e.depth << ">";
+  return os;
+}
+
+template<typename U>
+std::ostream& operator<<(std::ostream& os, cfla::SolutionEdge<U> const& e)
+{
+  os << "[" << std::setw(2) << std::setfill(' ') << e.solution << "] from "
+    << e.edge;
+  return os;
+}
+#endif
+
+template<typename Tp_>
+std::ostream& operator<<(std::ostream& os,
+    boost::polygon::rectangle_data<Tp_> const& r)
+{
+  namespace bp = boost::polygon;
+  os << "|" << bp::get(r, bp::HORIZONTAL, bp::LOW) << ","
+            << bp::get(r, bp::VERTICAL, bp::HIGH)
+     << "|";
+  return os;
+}
+

@@ -37,6 +37,8 @@ add_executable(${TEST_PROG}
   voronoi.h voronoi.cc
   sweep.h
   maxrect.h maxrect.cc
+  vgame.h #vgame.cc
+  util.h
   main.h main.cc
 )
 #add_executable(l23test l23test.cc)

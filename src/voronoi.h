@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iterator>
 #include <vector>
 #include <algorithm>
@@ -266,10 +268,10 @@ public:
     return sites.at(site_index(user_pt));
   }
 
-  // Build L1-distance rectangles for each user. The output iterator must
-  // support users_size() operations. Note that the boost::rectangle concept
-  // requires these to be axis-up, but to be correct they should be rotated
-  // 45 degrees. Just remember that when you use them... ;)
+  // Build L1-distance rectangles for each user.
+  // Note that the boost::rectangle concept requires these to be axis-up, but
+  // to be correct they should be rotated 45 degrees.
+  // Just remember that when you use them... ;)
   template<class OutputIter>
     void build_rects(OutputIter out) {
       point_iterator uit = users_begin();
