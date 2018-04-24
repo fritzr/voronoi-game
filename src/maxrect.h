@@ -456,45 +456,7 @@ public:
 extern template class MaxRect<double>;
 extern template class MaxRect<float>;
 
-} // end namespace cfla
-
 #ifdef DEBUG
-template<typename T, typename C, typename A>
-std::ostream& operator<<(std::ostream& os, std::set<T, C, A> const& s) {
-  os << "set<" << std::endl;
-  for (auto it = s.begin(); it != s.end(); ++it)
-    os << "  " << *it << std::endl;
-  os << ">";
-  return os;
-}
-
-template<typename T>
-std::ostream& operator<<(std::ostream& os, std::unordered_set<T> const& s) {
-  os << "set{" << std::endl;
-  for (auto it = s.begin(); it != s.end(); ++it)
-    os << *it << std::endl;
-  os << "}";
-  return os;
-}
-
-template<typename T>
-std::ostream& operator<<(std::ostream& os, std::vector<T> const& v) {
-  os << "[ ";
-  for (auto it = v.begin(); it != v.end(); ++it)
-    os << *it << ", ";
-  os << " ]";
-  return os;
-}
-
-template<typename T>
-std::ostream& operator<<(std::ostream& os, std::list<T> const& l) {
-  os << "[ ";
-  for (auto it = l.begin(); it != l.end(); ++it)
-    os << *it << ", ";
-  os << " ]";
-  return os;
-}
-
 template<typename U>
 std::ostream& operator<<(std::ostream& os, cfla::Edge<U> const& e) {
   os << "<[" << std::setw(2) << std::setfill(' ') << e.rect_index
@@ -510,6 +472,52 @@ std::ostream& operator<<(std::ostream& os, cfla::SolutionEdge<U> const& e)
     << e.edge;
   return os;
 }
+#endif
+
+} // end namespace cfla
+
+#ifdef DEBUG
+namespace std
+{
+
+template<typename T, typename C, typename A>
+ostream& operator<<(ostream& os, set<T, C, A> const& s) {
+  os << "set<" << endl;
+  for (auto it = s.begin(); it != s.end(); ++it)
+    os << "  " << *it << endl;
+  os << ">";
+  return os;
+}
+
+template<typename T>
+ostream& operator<<(ostream& os, unordered_set<T> const& s) {
+  os << "set{" << endl;
+  for (auto it = s.begin(); it != s.end(); ++it)
+    os << *it << endl;
+  os << "}";
+  return os;
+}
+
+template<typename T>
+ostream& operator<<(ostream& os, vector<T> const& v) {
+  os << "[ ";
+  for (auto it = v.begin(); it != v.end(); ++it)
+    os << *it << ", ";
+  os << " ]";
+  return os;
+}
+
+template<typename T>
+ostream& operator<<(ostream& os, list<T> const& l) {
+  os << "[ ";
+  for (auto it = l.begin(); it != l.end(); ++it)
+    os << *it << ", ";
+  os << " ]";
+  return os;
+}
+
+} // end namespace std
+
 #endif
 
 template<typename Tp_>
