@@ -119,7 +119,6 @@ enum DrawCell {
 struct options_t
 {
   // Global configurable options
-  bool drawEdges=true;
   bool dogrid=false;
   bool gridLabels=true;
   unsigned int ngridx=10u, ngridy=10u; // number of grid lines (if any)
@@ -132,8 +131,6 @@ struct options_t
   DrawCell computeCell = CELL_NONE;
   DrawRects drawRects = RECTS_NONE;
   bool dumpGraph = false; // adjacency graph
-  VoronoiDiagram<double>::SearchMethod queryType
-    =VoronoiDiagram<double>::Default;
   unsigned int rounds = 1u;
 
   string users_path;
@@ -157,8 +154,8 @@ static const Scalar FONT_COLOR(Scalar::all(255));
 const int FONT_XSPACE = 10;
 const int FONT_YSPACE = 10;
 
-static const Scalar P1COLOR(255, 0, 0); // blue
-static const Scalar P2COLOR(0, 0, 255); // red
+static const Scalar P1COLOR(Scalar::all(38));
+static const Scalar P2COLOR(Scalar::all(110));
 
 static void usage(const char *prog, const char *errmsg=NULL)
 #ifndef _MSC_VER
@@ -250,10 +247,6 @@ get_options(int argc, char *argv[], options_t &o)
       o.ngridx = getenum<int>(INT_MAX, optarg, errstr, "X grid lines"); break;
     case 'Y':
       o.ngridy = getenum<int>(INT_MAX, optarg, errstr, "Y grid lines"); break;
-    case 'e':
-      o.drawEdges = true; break;
-    case 'E':
-      o.drawEdges = false; break;
     case 'g':
       o.dogrid = true; break;
     case 'G':
@@ -270,10 +263,6 @@ get_options(int argc, char *argv[], options_t &o)
       break;
     case 'H':
       o.screenHeight = getenum<int>(INT_MAX, optarg, errstr, "screen height");
-      break;
-    case 'q':
-      o.queryType = getenum<VoronoiDiagram<double>::SearchMethod>(
-        VoronoiDiagram<double>::SM_BAD, optarg, errstr, "query type");
       break;
     case 'r':
       o.drawRects = getenum<DrawRects>(RECTS_BAD, optarg, errstr, "rect type");
@@ -452,27 +441,6 @@ colorKey(int i, int imax) {
   return Scalar(((i+1) * double(maxcolor))/ (imax+1));
 }
 
-template <class Tp_>
-static void
-draw_cells (Mat img, const VoronoiDiagram<Tp_> &vd)
-{
-  size_t site_idx = 0u;
-  for (auto cell_iter=vd.begin(); cell_iter!=vd.end(); ++cell_iter, ++site_idx)
-  {
-    Scalar color = colorKey(site_idx, vd.sites_size());
-    auto const& cell = *cell_iter;
-    for (auto edge_iter = vd.cell_begin(cell); edge_iter != vd.cell_end(cell);
-        ++edge_iter) {
-      auto edge = *edge_iter;
-      cv::line(img, check_rot(edge.p0), check_rot(edge.p1), color, 2);
-    }
-    // With debug, show each cell's borders as it is drawn
-    if (opts.debug) {
-      cv::imshow("output", img);
-      cv::waitKey(0);
-    }
-  }
-}
 
 template<class InputIter>
 static void
@@ -482,141 +450,15 @@ draw_facilities(Mat img, InputIter begin, InputIter end, Scalar const& color)
     cv::circle(img, *begin++, 10, color, -1);
 }
 
-template<class InputIter>
 static void
 draw_users(Mat img, VGame const& vd)
 {
   // Don't fill users
-  for (size_t user_idx = 0u; user_idx < vd.users_size(); ++user_idx) {
-    Scalar color = colorKey(vd.site_index(user_idx), vd.sites_size());
-    cv::circle(img, check_rot(vd.user(user_idx)), 5, color);
+  for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp) {
+    typename VGame::player_type const& p = vd.owner(*userp);
+    Scalar color = p.id() == 0 ? P1COLOR : P2COLOR;
+    cv::circle(img, check_rot(*userp), 5, color);
   }
-}
-
-// rotated rect bounding box as rectangle data
-static bp::rectangle_data<float>
-getRRBBox(RotatedRect const& rr)
-{
-  // Older OpenCV doesn't have floating-point bounding rects
-#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
-  Rect brect = rr.boundingRect();
-#else
-  Rect_<float> brect = rr.boundingRect2f();
-#endif
-  bp::rectangle_data<float> ret;
-  bp::set_points(ret, brect.tl(), brect.br());
-  return ret;
-}
-
-// rotated rect bounding box as rectangle data
-template<class RRectIter>
-static bp::rectangle_data<float>
-getRRBBox(RRectIter begin, RRectIter end)
-{
-  auto bbox = getRRBBox(*begin++); // assumes non-empty iterator
-  while (begin != end)
-  {
-    RotatedRect const& rr = *begin++;
-    std::array<Point2f, 4> pts;
-    rr.points(pts.begin());
-    for (unsigned int i = 0u; i < 4; ++i)
-      bp::encompass(bbox, pts[i]);
-  }
-  return bbox;
-}
-
-static void
-draw_rotrect(Mat img, RotatedRect const& rrect, Scalar const& color,
-    int thicc=2)
-{
-  std::array<Point2f, 4> pts;
-  rrect.points(pts.begin());
-  if (thicc < 0) {
-    std::array<Point, 4> ipts;
-    std::copy(pts.begin(), pts.end(), ipts.begin());
-    cv::fillConvexPoly(img, ipts.begin(), ipts.size(), color);
-  }
-  else
-    for (unsigned int i = 0u; i < pts.size(); ++i)
-      cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
-}
-
-template<class Tp_, class RectIter>
-static void
-draw_rotrects(Mat img, VoronoiDiagram<Tp_> const& vd, RectIter rrectp,
-    int thicc=2)
-{
-  unsigned int rectidx = 0u;
-  for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp)
-  {
-    Scalar color = colorKey(vd.site_index(userp), vd.sites_size());
-    const RotatedRect& rrect = *rrectp++;
-    draw_rotrect(img, rrect, color, thicc);
-    putText(img, to_string(rectidx++),
-        Point(rrect.center.x + FONT_XSPACE, rrect.center.y - FONT_YSPACE),
-        FONT, FONT_SCALE, color, FONT_THICKNESS);
-  }
-}
-
-template<class rect_type, class RectIter>
-static void
-build_rects(Mat img, vector<Point>& sites, vector<Point>& users,
-    Size const& resolution, RectIter rects_out)
-{
-  VoronoiDiagram<double> vd(
-      p2di(sites.begin()), p2di(sites.end()),
-      p2di(users.begin()), p2di(users.end()),
-      resolution.width, resolution.height);
-  vd.build(opts.queryType);
-
-  // First build the L1 rotated rects.
-  vector<RotatedRect> rotrects;
-  vd.build_rects(back_inserter(rotrects));
-
-  // Draw rotated rects if we want.
-  if (opts.drawRects & RECTS_ROTATED)
-    draw_rotrects(img, vd, rotrects.begin());
-
-  // Get the center of the rotated rect-space.
-  auto bbox = getRRBBox(rotrects.begin(), rotrects.end());
-  Point2f center;
-  bp::center(center, bbox);
-  //cv::circle(img, center, 10, fillColor);
-  // set the global bias position so points appear back near the center
-  pbias = rotateZ2f_pos(center) - center;
-  nbias = rotateZ2f_neg(center) - center;
-
-  // Now rotate the entire space to output axis-up rectangles,
-  // biased by the center point.
-  size_t user_idx = 0u;
-  for (auto rrectp = rotrects.begin(); rrectp != rotrects.end(); ++rrectp)
-  {
-    const RotatedRect& rrect = *rrectp;
-    array<Point2f, 4> pts;
-    rrect.points(pts.begin());
-    for (auto pp = pts.begin(); pp != pts.end(); ++pp)
-      *pp = rotp(*pp); // rotate and bias
-
-    // Write the axis-up rectangles to the output array.
-     // BL, TL, TR, BR -> xl, yl, xh, yh
-    *rects_out++ = bp::construct<rect_type>(
-        pts[RRBL].x, pts[RRBL].y, pts[RRTR].x, pts[RRTR].y);
-
-    // Draw the axis-up rects if we want.
-    if (opts.drawRects & RECTS_UPRIGHT)
-    {
-      Scalar color = colorKey(vd.site_index(user_idx), vd.sites_size());
-      cv::rectangle(img, Rect(pts[RRTL], pts[RRBR]), color, 2);
-    }
-
-    ++user_idx;
-  }
-
-  // Draw cells/sites now that we know the proper bias.
-  if (opts.drawEdges) {
-    draw_cells(img, vd);
-  }
-  draw_sites(img, vd);
 }
 
 static Mat
@@ -632,6 +474,23 @@ finish_img(Mat img, Rect const& bbox, Size const& resolution)
   cv::flip(img, colorimg, 0); // flip vertical
   applyColorMap(colorimg, colorimg, opts.colormap);
   return colorimg;
+}
+
+#if 0
+static void
+draw_rotrect(Mat img, RotatedRect const& rrect, Scalar const& color,
+    int thicc=2)
+{
+  std::array<Point2f, 4> pts;
+  rrect.points(pts.begin());
+  if (thicc < 0) {
+    std::array<Point, 4> ipts;
+    std::copy(pts.begin(), pts.end(), ipts.begin());
+    cv::fillConvexPoly(img, ipts.begin(), ipts.size(), color);
+  }
+  else
+    for (unsigned int i = 0u; i < pts.size(); ++i)
+      cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
 }
 
 static void
@@ -662,6 +521,7 @@ dump_solution(Mat img, int idx, solution_type const& solution,
     draw_rotrect(img, rrect, fillColor, CV_FILLED);
   }
 }
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -701,10 +561,13 @@ int main(int argc, char *argv[])
 
   // Play the game one round at a time.
   VGame vg(users.begin(), users.end());
-  vg.start(p1sites.begin(), p1sites.end(), p2sites.begin(), p2sites.end());
-  draw_users(img, vd);
-  draw_facilities(img, vg.player1().begin(), vg.player1().end(), P1COLOR);
-  draw_facilities(img, vg.player2().begin(), vg.player2().end(), P2COLOR);
+  vg.init_player(0, p1sites.begin(), p1sites.end());
+  vg.init_player(1, p2sites.begin(), p2sites.end());
+  draw_users(img, vg);
+  const typename VGame::player_type& p1 = vg.player(0);
+  const typename VGame::player_type& p2 = vg.player(1);
+  draw_facilities(img, p1.begin(), p1.end(), P1COLOR);
+  draw_facilities(img, p2.begin(), p2.end(), P2COLOR);
   unsigned int rounds_left = opts.rounds;
   while (rounds_left--)
   {

@@ -1,21 +1,23 @@
 #pragma once
 
-#include <utility> // std::copy
+#include <utility>   // std::copy
 #include <algorithm> // std::swap
+#include <iterator>  // std::advance
 #include <list>
 #include <array>
-#include <map>
 #include <cmath>
 #include <stdexcept>
 
-#include <boost/range/join.hpp> // boost::join
-#include <opencv2/core/core.hpp>
+#include <opencv2/core/core.hpp> // cv::norm
+
+#include <boost/geometry/geometry.hpp>
 
 #include "maxrect.h"
-#include "util.h"
+#include "util.h" // randint
 
 namespace cfla
 {
+namespace bgi = boost::geometry::index;
 
 // Generic typedefs common for cfla stuff to ease the templating
 // of the many classes which require these typedefs.
@@ -48,64 +50,44 @@ public: \
   typedef typename traits::size_type       size_type; \
 
 template<class Traits>
-class Facility : public Traits::point_type
-{
-  inherit_traits(Traits);
-
-  // Membrs
-public:
-  int player_id;
-
-  // Methods
-public:
-  Facility(coordinate_type x, coordinate_type y)
-    : point_type(x, y), player_id(-1) {}
-  Facility(coordinate_type x, coordinate_type y, unsigned int pid)
-    : point_type(x, y), player_id(pid) {}
-};
-
-
-template<class Traits>
 class VPlayer
 {
   inherit_traits(Traits);
-  typedef point_citerator iterator;
-  typedef point_citerator const_iterator;
-  typedef point_type      value_type;
-  typedef NN1<point_list, point_list> VNN;
+  typedef typename bgi::rtree<point_type, bgi::quadratic<16> > nn_tree;
+  typedef typename nn_tree::value_type     value_type;
+  typedef typename nn_tree::const_iterator const_iterator;
+  typedef typename nn_tree::const_iterator iterator;
 
   // Members
 private:
   // Player ID.
-  int id_;
-  // List of facility locations.
-  point_list flist_;
-  // Voronoi diagram to locate our nearest facility to each user point.
-  VNN nn_;
+  const int id_;
+  // Data structure for locating the nearest facility to each user point.
+  nn_tree nn_;
   // Number of customers we 'own' (closest facility is ours).
   int score_;
 
 public:
   template<class UserList, class InputIter>
   VPlayer(int id, UserList const& users, InputIter fbegin, InputIter fend)
-    : id_(id), flist_(fbegin, fend), nn_(users, flist_), score_(-1)
+    : id_(id), nn_(fbegin, fend), score_(-1)
   {}
 
   inline int id(void) const { return id_; }
 
   // Iterate over facilities.
-  inline iterator begin(void) const { return flist_.begin(); }
-  inline iterator end(void) const { return flist_.end(); }
-  inline size_type size(void) const { return flist_.size(); }
+  inline const_iterator begin(void) const { return nn_.begin(); }
+  inline const_iterator end(void) const { return nn_.end(); }
+  inline size_type size(void) const { return nn_.size(); }
 
   inline void set_score(int new_score) { score_ = new_score; }
   inline int score(void) const { return score_; }
   inline void add_score(int to_add=1) { set_score(score()+to_add); }
 
-  inline VNN const& nn(void) const { return nn_; }
-  inline void build(void) { nn_.build(); }
-
-  inline void add(point_type const& f) { nn_.add_site(f); }
+  inline point_type const& nearest_facility(point_type const& user) {
+    return *nn_.qbegin(bgi::nearest(user, 1));
+  }
+  inline void insert(point_type const& f) { nn_.insert(f); }
 }; // end class VPlayer
 
 template<class Traits>
@@ -123,14 +105,29 @@ private:
 
 public:
   VGame(point_list const& users)
-    : users_(users)
+    : players_({nullptr}), users_(users)
   {}
 
   template<class InputIter>
   VGame(InputIter users_begin, InputIter users_end)
-    : users_(users_begin, users_end)
+    : players_({nullptr}), users_(users_begin, users_end)
   {}
 
+  ~VGame()
+  {
+    for (size_type playerid = 0u; playerid < nplayers; ++playerid)
+    {
+      if (players_[playerid])
+      {
+        delete players_[playerid];
+        players_[playerid] = nullptr;
+      }
+    }
+  }
+
+  inline point_type user(int user_idx) const {
+    return std::advance(users_begin(), user_idx);
+  }
   inline point_citerator users_begin(void) const { return users_.cbegin(); }
   inline point_citerator users_end(void) const { return users_.cend(); }
   inline size_type users_size(void) const { return users_.size(); }
@@ -140,7 +137,7 @@ public:
   inline void init_player(unsigned int id, InputIter fbegin, InputIter fend) {
     if (players_[id])
       delete players_[id];
-    players_[id] = new player_type(users_, fbegin, fend);
+    players_[id] = new player_type(id, users_, fbegin, fend);
   }
 
   // Return the player congruent to id modulo the number of players.
@@ -149,10 +146,9 @@ public:
     return *players_[id % players_.size()];
   }
 
-protected:
   // Modifiable reference.
   inline player_type& player(int id) {
-    return const_cast<player_type&>(player(id));
+    return const_cast<player_type&>(const_cast<const VGame*>(this)->player(id));
   }
 
 public:
@@ -165,30 +161,28 @@ public:
   // To find who owns a point, get each player's closest facility and narrow
   // down to which one is really closer. This prevents us from having to
   // keep an extra range tree (since we already have one per player).
-  const player_type& owner(int user_index) const
+  const player_type& owner(point_type const& user) const
   {
     coordinate_type dist = std::numeric_limits<coordinate_type>::infinity();
-    player_type* min_player = &player(0);
-    point_type user = users_.at(user_index);
+    const player_type* min_player = &player(0);
     for (auto playerp = players_.begin(); playerp != players_.end(); ++playerp)
     {
-      point_type facility = (*playerp)->nn().nearest_facility(user_index);
+      point_type facility = (*playerp)->nearest_facility(user);
       coordinate_type d = distance(facility, user);
       if (std::abs(d) < std::abs(dist)) {
         dist = d;
         min_player = *playerp;
       }
     }
-    return min_player;
+    return *min_player;
   }
 
-protected:
-  inline player_type& owner(int user_index) {
-    return const_cast<player_type&>(owner(user_index));
+  inline player_type& owner(point_type const& user) {
+    return const_cast<player_type&>(const_cast<const VGame*>(this)->owner(user));
   }
 
 public:
-  
+
   // Score all players.
   void score(void)
   {
@@ -215,7 +209,6 @@ public:
     return winning_player;
   }
 
-protected:
   inline player_type& winner(void) {
     return const_cast<player_type&>(winner());
   }
@@ -228,15 +221,12 @@ public:
   // Return the last facility added.
   point_type play_round(size_type rounds=1)
   {
-    player_type* p1ptr = &players_[0];
     int player_id = 1; // starting with player 2
     point_type last_solution;
     while (rounds--) {
-      // Each round we need a new NN search since we may have added a facility.
-      player(player_id).build();
       // Solve for player 2 and add the point to p2's list and the VD sites.
       last_solution = nth_round(player(player_id-1), player(player_id));
-      player(player_id).add(last_solution);
+      player(player_id).insert(last_solution);
       // Then switch players for next round.
       ++player_id;
     }
@@ -264,7 +254,7 @@ private:
     for (auto userp = users_begin(); userp != users_end(); ++userp)
     {
       point_type user = *userp;
-      point_type site = player(1).nn().nearest_facility(userp);
+      point_type site = player(1).nearest_facility(user);
 
       /* This is actually the distance to the corner points from   o      o o
        * the center.  The left and right points become top-left  o---o =>  \
