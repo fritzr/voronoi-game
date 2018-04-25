@@ -105,12 +105,12 @@ private:
 
 public:
   VGame(point_list const& users)
-    : players_({nullptr}), users_(users)
+    : players_({}), users_(users)
   {}
 
   template<class InputIter>
   VGame(InputIter users_begin, InputIter users_end)
-    : players_({nullptr}), users_(users_begin, users_end)
+    : players_({}), users_(users_begin, users_end)
   {}
 
   ~VGame()
