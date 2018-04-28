@@ -249,12 +249,12 @@ private:
   // Build an "L1 ball" (square) for each user point to pass to the maxrect
   // algorithm. The rectangles (squares) are formed using the L1 distance from
   // the user to its nearest facility.
-  void build_rects(std::list<rect_type> &rects_out)
+  void build_rects(const player_type& player, std::list<rect_type> &rects_out)
   {
     for (auto userp = users_begin(); userp != users_end(); ++userp)
     {
       point_type user = *userp;
-      point_type site = player(1).nearest_facility(user);
+      point_type site = player.nearest_facility(user);
 
       /* This is actually the distance to the corner points from   o      o o
        * the center.  The left and right points become top-left  o---o =>  \
@@ -274,7 +274,7 @@ private:
     // Build L1 (rotated) rectangles, and rotate the space about the
     // origin to solve with axis-up rectangles.
     std::list<rect_type> l1rects;
-    build_rects(l1rects);
+    build_rects(p2, l1rects);
 
     MaxRect<coordinate_type> maxrect(l1rects.begin(), l1rects.end());
     maxrect.compute();
