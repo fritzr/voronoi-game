@@ -132,6 +132,7 @@ struct options_t
   DrawRects drawRects = RECTS_NONE;
   bool dumpGraph = false; // adjacency graph
   unsigned int rounds = 1u;
+  bool userLabels = true;
 
   string users_path;
   string p1sites_path;
@@ -154,8 +155,8 @@ static const Scalar FONT_COLOR(Scalar::all(255));
 const int FONT_XSPACE = 10;
 const int FONT_YSPACE = 10;
 
-static const Scalar P1COLOR(Scalar::all(38));
-static const Scalar P2COLOR(Scalar::all(110));
+static const Scalar P1COLOR(Scalar(255, 0, 0));
+static const Scalar P2COLOR(Scalar(0, 0, 255));
 
 static void usage(const char *prog, const char *errmsg=NULL)
 #ifndef _MSC_VER
@@ -188,6 +189,8 @@ usage(const char *prog, const char *errmsg)
     << "  -l			Label the grid lines (default: yes)" << endl
     << "  -L			Do not label grid lines" << endl
     << "  -d			Debug mode (extra output)" << endl
+    << "  -u			Draw user labels (default: yes)" << endl
+    << "  -U                    Do not draw user labels" << endl
     << "  -W SIZE		Max width of the display (default: 1920)"
     << endl
     << "  -H SIZE		Max height of the display (default: 1080)"
@@ -255,6 +258,10 @@ get_options(int argc, char *argv[], options_t &o)
       o.gridLabels = true; break;
     case 'L':
       o.gridLabels = false; break;
+    case 'u':
+      o.userLabels = true; break;
+    case 'U':
+      o.userLabels = false; break;
     case 'T':
       o.gridThickness = getenum<int>(INT_MAX, optarg, errstr, "grid thickness");
       break;
@@ -436,12 +443,6 @@ static inline pt check_rot(pt p)
   return (opts.drawRects == RECTS_UPRIGHT) ? rotp(p) : p;
 }
 
-static inline Scalar
-colorKey(int i, int imax) {
-  return Scalar(((i+1) * double(maxcolor))/ (imax+1));
-}
-
-
 template<class InputIter>
 static void
 draw_facilities(Mat img, InputIter begin, InputIter end, Scalar const& color)
@@ -461,6 +462,11 @@ draw_users(Mat img, VGame const& vd)
   }
 }
 
+#if 0
+static inline Scalar
+colorKey(int i, int imax) {
+  return Scalar(((i+1) * double(maxcolor))/ (imax+1));
+}
 static Mat
 finish_img(Mat img, Rect const& bbox, Size const& resolution)
 {
@@ -476,7 +482,6 @@ finish_img(Mat img, Rect const& bbox, Size const& resolution)
   return colorimg;
 }
 
-#if 0
 static void
 draw_rotrect(Mat img, RotatedRect const& rrect, Scalar const& color,
     int thicc=2)
@@ -547,7 +552,7 @@ int main(int argc, char *argv[])
 
   // We got resolution (x, y) as (width, height); flip to (rows, cols)
   Size resolution(opts.screenWidth, opts.screenHeight);
-  Mat img(resolution.height, resolution.width, CV_8U);
+  Mat img(resolution.height, resolution.width, CV_8UC3);
 
   if (opts.debug)
     cout << "canvas size " << img.cols << " x " << img.rows << endl;
@@ -557,7 +562,7 @@ int main(int argc, char *argv[])
     drawGrid(img, opts.ngridx, opts.ngridy, gridColor, opts.gridThickness,
         opts.gridLabels);
   // Flip vertical initially so text comes out up-right (since we flip later)
-  cv::flip(img, img, 0);
+  //cv::flip(img, img, 0);
 
   // Play the game one round at a time.
   VGame vg(users.begin(), users.end());
@@ -568,35 +573,44 @@ int main(int argc, char *argv[])
   const typename VGame::player_type& p2 = vg.player(1);
   draw_facilities(img, p1.begin(), p1.end(), P1COLOR);
   draw_facilities(img, p2.begin(), p2.end(), P2COLOR);
+  putText(img, "P1", Point(FONT_XSPACE, 2*FONT_YSPACE),
+      FONT, FONT_SCALE, P1COLOR, FONT_THICKNESS);
+  putText(img, "P2", Point(FONT_XSPACE+40, 2*FONT_YSPACE),
+      FONT, FONT_SCALE, P2COLOR, FONT_THICKNESS);
+
+  unsigned int round_num = 0;
   unsigned int rounds_left = opts.rounds;
+  Scalar pcolor = P1COLOR;
   while (rounds_left--)
   {
-    cv::Point2f next_facility = vg.play_round(1);
-    cv::circle(img, next_facility, 10, FONT_COLOR, -1);
-    /*
-    string round_title = string("round ") + std::to_string(rounds_left+1);
-    cv::flip(img, img, 0);
-    cv::imshow(round_title.c_str(), img);
-    cv::waitKey(0);
-    cv::flip(img, img, 0);
-    */
+    Point2f next_facility = vg.play_round(1);
+    circle(img, next_facility, 10, FONT_COLOR, -1);
+    //flip(img, img, 0);
+    imshow("output", img);
+    waitKey(0);
+    //flip(img, img, 0);
+    pcolor = (round_num % 2 == 0) ? P1COLOR : P2COLOR;
+    circle(img, next_facility, 10, pcolor, -1);
   }
 
-  auto player_sites = boost::join(p1sites, p2sites);
-  auto all_points = boost::join(player_sites, users);
-  Rect bbox = boundingRect(vector<Point>(all_points.begin(), all_points.end()));
-  img = finish_img(img, bbox, resolution);
+  //auto player_sites = boost::join(vg.player(0), vg.player(1));
+  //auto all_points = boost::join(player_sites, users);
+  //Rect bbox = boundingRect(vector<Point>(all_points.begin(), all_points.end()));
+  //img = finish_img(img, bbox, resolution);
 
   // Now that we've flipped the image draw the user point labels
   // so they are upright.
-  unsigned int user_idx = 0u;
-  for (auto uit = users.begin(); uit != users.end(); ++uit)
+  if (opts.userLabels)
   {
-    Point up = check_rot(*uit);
-    up.y = resolution.height - up.y;
-    putText(img, to_string(user_idx++),
-        Point(up.x + FONT_XSPACE, up.y - FONT_YSPACE),
-        FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
+    unsigned int user_idx = 0u;
+    for (auto uit = users.begin(); uit != users.end(); ++uit)
+    {
+      Point up = check_rot(*uit);
+      //up.y = resolution.height - up.y;
+      putText(img, to_string(user_idx++),
+          Point(up.x + FONT_XSPACE, up.y - FONT_YSPACE),
+          FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
+    }
   }
 
   imshow("output", img);
