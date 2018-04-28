@@ -237,7 +237,7 @@ public:
     source_rects_.insert(top_);
     source_rects_.insert(left_);
     source_rects_.insert(right_);
-#ifdef DEBUG
+#ifdef MAXRECT_DEBUG
     std::cerr << "new max from rect " << top_
       << " and edges: " << left_ << " and " << right_ << std::endl;
 #endif
@@ -425,7 +425,7 @@ public:
       hivl = bp::construct<decltype(hivl)>(std::min(hl,hh), std::max(hl,hh));
       vivl = bp::construct<decltype(vivl)>(std::min(vl,vh), std::max(vl,vh));
       add_rect(rect_type(hivl, vivl, rects.size()));
-#ifdef DEBUG
+#ifdef MAXRECT_DEBUG
       std::cerr << "ADD [" << (rects.size()-1) << "]"
         << " h(" << bp::get(hivl, bp::LOW) << "," << bp::get(hivl, bp::HIGH)
         << ")"

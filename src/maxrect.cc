@@ -43,7 +43,7 @@ check_max_depth(rect_type const& r, EdgeSetIter leftp, int new_depth)
   if (new_depth > max_depth)
   {
     max_depth = new_depth;
-#ifdef DEBUG
+#ifdef MAXRECT_DEBUG
     cerr << "solutions cleared, found new max depth " << max_depth << endl;
 #endif
     solutions().clear();
@@ -66,7 +66,7 @@ template<class Tp_>
 void MaxRect<Tp_>::
 insert_rect(rect_type const& r)
 {
-#ifdef DEBUG
+#ifdef MAXRECT_DEBUG
   cerr << "inserting" << endl;
 #endif
   // Insert edges in-place.
@@ -102,7 +102,7 @@ insert_rect(rect_type const& r)
     --depth;
   eub->depth = depth;
 
-#ifdef DEBUG
+#ifdef MAXRECT_DEBUG
   cerr << "inserted edges, status: " << edges_x << endl;
   cerr << "solution status: " << solution_edges << endl;
 #endif
@@ -112,7 +112,7 @@ template<class Tp_>
 void MaxRect<Tp_>::
 remove_rect(rect_type const& r)
 {
-#ifdef DEBUG
+#ifdef MAXRECT_DEBUG
   cerr << "removing" << endl;
 #endif
 
@@ -172,7 +172,7 @@ remove_rect(rect_type const& r)
     // If we did indeed intersect the solution cell, remove its edges
     // from the solution edge set since our sweep line has now passed the cell.
     if (cell.marked(r.index)) {
-#ifdef DEBUG
+#ifdef MAXRECT_DEBUG
       cerr << "found bottom for solution ["
         << setw(2) << setfill(' ') << sol_it->solution << "] from rect ["
         << setw(2) << setfill(' ') << r.index << "] at "
@@ -184,7 +184,7 @@ remove_rect(rect_type const& r)
       ++sol_it;
   }
 
-#ifdef DEBUG
+#ifdef MAXRECT_DEBUG
   cerr << "removed edges, status: " << edges_x << endl;
   cerr << "solution status: " << solution_edges << endl;
 #endif
