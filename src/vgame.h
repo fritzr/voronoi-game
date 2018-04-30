@@ -25,11 +25,13 @@ namespace bgi = boost::geometry::index;
 // of the many classes which require these typedefs.
 template<
   class Point, class PointContainer=std::list<Point>,
-  unsigned int NumPlayers=2u
+  unsigned int NumPlayers=2u,
+  unsigned int DistanceNorm=1u
 >
 struct cfla_traits
 {
   static const unsigned int nplayers = NumPlayers;
+  static const unsigned int norm     = DistanceNorm;
   typedef Point                               point_type;
   typedef decltype(point_type::x)             coordinate_type;
   typedef typename bp::rectangle_data<coordinate_type> rect_type;
@@ -43,6 +45,7 @@ struct cfla_traits
 public: \
   typedef t traits; \
   static const auto nplayers = t::nplayers; \
+  static const auto norm     = t::norm; \
   typedef typename traits::point_type      point_type; \
   typedef typename traits::coordinate_type coordinate_type; \
   typedef typename traits::rect_type       rect_type; \
@@ -168,10 +171,25 @@ public:
 
 public:
 
-  static inline coordinate_type
+  template<int Norm>
+  static inline
+  typename std::enable_if<Norm == 1u, coordinate_type>::type
     distance(const point_type &p1, const point_type &p2) {
+      // L1 distance
+      return std::abs(p1.x - p2.x) + std::abs(p1.y - p2.y);
+    }
+
+  template<int Norm>
+  static inline
+  typename std::enable_if<Norm == 2u, coordinate_type>::type
+    distance(const point_type &p1, const point_type &p2) {
+      // L2 distance
       return cv::norm(p2 - p1);
     }
+
+  static inline coordinate_type
+    distance(const point_type& p1, const point_type& p2)
+      { return distance<VGame::norm>(p1, p2); }
 
   // To find who owns a point, get each player's closest facility and narrow
   // down to which one is really closer. This prevents us from having to
@@ -183,7 +201,7 @@ public:
     for (auto playerp = players_.begin(); playerp != players_.end(); ++playerp)
     {
       point_type facility = (*playerp)->nearest_facility(user);
-      coordinate_type d = distance(facility, user);
+      coordinate_type d = VGame::distance(facility, user);
       if (std::abs(d) < std::abs(dist)) {
         dist = d;
         min_player = *playerp;
@@ -282,13 +300,17 @@ private:
   {
     for (auto userp = users_begin(); userp != users_end(); ++userp)
     {
+      // Only build rects for points owned by the selected player.
+      if (owner(*userp).id() != player.id())
+        continue;
+
       point_type user = *userp;
       point_type site = player.nearest_facility(user);
 
       /* This is actually the distance to the corner points from   o      o o
        * the center.  The left and right points become top-left  o---o =>  \
        * and bottom-right when rotated.                            o      o o */
-      auto l1dist = 2.0f * (std::abs(site.x-user.x) + std::abs(site.y-user.y));
+      auto l1dist = VGame::distance(site, user);
       point_type tl = rotateZ2f_pos(point_type(user.x - l1dist, user.y));
       point_type br = rotateZ2f_pos(point_type(user.x + l1dist, user.y));
 
