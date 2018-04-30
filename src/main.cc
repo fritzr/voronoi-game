@@ -132,7 +132,7 @@ struct options_t
   DrawRects drawRects = RECTS_NONE;
   bool dumpGraph = false; // adjacency graph
   unsigned int rounds = 1u;
-  bool userLabels = true;
+  bool userLabels = false;
 
   string users_path;
   string p1sites_path;
