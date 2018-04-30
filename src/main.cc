@@ -581,6 +581,9 @@ int main(int argc, char *argv[])
 
   // Play the game one round at a time.
   VGame vg(users.begin(), users.end());
+#ifdef DEBUG
+  vg.set_img(img);
+#endif
   vg.init_player(0, p1sites.begin(), p1sites.end());
   vg.init_player(1, p2sites.begin(), p2sites.end());
   const typename VGame::player_type& p1 = vg.player(0);

@@ -113,22 +113,25 @@ class VGame
   inherit_traits(Traits);
   typedef VPlayer<traits> player_type;
   typedef std::array<player_type*, nplayers> player_list;
-  unsigned int current_round;
 
   // Members
 private:
   // List of customer (user) points.
   player_list players_;
   point_list users_;
+  unsigned int current_round;
+#ifdef DEBUG
+  cv::Mat* img_ = nullptr;
+#endif
 
 public:
   VGame(point_list const& users)
-    : current_round(0), players_({}), users_(users)
+    : players_({}), users_(users), current_round(0)
   {}
 
   template<class InputIter>
   VGame(InputIter users_begin, InputIter users_end)
-    : current_round(0), players_({}), users_(users_begin, users_end)
+    : players_({}), users_(users_begin, users_end), current_round(0)
   {}
 
   ~VGame()
@@ -142,6 +145,10 @@ public:
       }
     }
   }
+
+#ifdef DEBUG
+  inline void set_img(cv::Mat& img) { img_ = &img; }
+#endif
 
   inline point_type user(int user_idx) const {
     return std::advance(users_begin(), user_idx);
@@ -311,11 +318,28 @@ private:
        * the center.  The left and right points become top-left  o---o =>  \
        * and bottom-right when rotated.                            o      o o */
       auto l1dist = VGame::distance(site, user);
-      point_type tl = rotateZ2f_pos(point_type(user.x - l1dist, user.y));
-      point_type br = rotateZ2f_pos(point_type(user.x + l1dist, user.y));
+      point_type tl = point_type(user.x - l1dist, user.y);
+      point_type br = point_type(user.x + l1dist, user.y);
+#if 0
+//#ifdef DEBUG
+      point_type tr = point_type(user.x, user.y + l1dist);
+      point_type bl = point_type(user.x, user.y - l1dist);
+      if (img_) {
+        cv::line(*img_, tl, tr, cv::Scalar(0xcc, 0xcc, 0xcc), 1);
+        cv::line(*img_, tr, br, cv::Scalar(0xcc, 0xcc, 0xcc), 1);
+        cv::line(*img_, br, bl, cv::Scalar(0xcc, 0xcc, 0xcc), 1);
+        cv::line(*img_, bl, tl, cv::Scalar(0xcc, 0xcc, 0xcc), 1);
+        cv::imshow("rectangles", *img_);
+        cv::waitKey(0);
+      }
+#endif
+      tl = rotateZ2f_pos(tl);
+      br = rotateZ2f_pos(br);
 
       // Build the upright rectangle.
-      rects_out.push_back(bp::construct<rect_type>(tl.x, tl.y, br.x, br.y));
+      rect_type l1rect;
+      l1rect = bp::construct<rect_type>(tl.x, tl.y, br.x, br.y);
+      rects_out.push_back(l1rect);
     }
   }
 
