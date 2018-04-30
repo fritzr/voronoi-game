@@ -8,9 +8,7 @@
 #include <cmath>
 #include <stdexcept>
 
-#ifdef DEBUG
 #include <iostream>
-#endif
 
 #include <opencv2/core/core.hpp> // cv::norm
 
@@ -112,7 +110,7 @@ class VGame
   inherit_traits(Traits);
   typedef VPlayer<traits> player_type;
   typedef std::array<player_type*, nplayers> player_list;
-  unsigned int current_player = (nplayers-1); // starting with player 2
+  unsigned int current_round;
 
   // Members
 private:
@@ -122,12 +120,12 @@ private:
 
 public:
   VGame(point_list const& users)
-    : players_({}), users_(users)
+    : current_round(0), players_({}), users_(users)
   {}
 
   template<class InputIter>
   VGame(InputIter users_begin, InputIter users_end)
-    : players_({}), users_(users_begin, users_end)
+    : current_round(0), players_({}), users_(users_begin, users_end)
   {}
 
   ~VGame()
@@ -232,6 +230,12 @@ public:
 
 public:
 
+  // The number of the next round to be played (the first round is round 0).
+  inline unsigned int next_round(void) const { return current_round; }
+  inline player_type const& next_player(void) const {
+    return player(current_round + nplayers - 1);
+  }
+
   // Play the game for the given number of rounds (default: play 1 round).
   // Note that one round means one player is solved (two rounds is symmetric).
   // Note also that this uses the player 2 nth-round solution in each round.
@@ -241,19 +245,19 @@ public:
   point_type play_round(size_type rounds=1, int starting_player=-1)
   {
     point_type last_solution;
-    unsigned int roundnum = 0u;
     while (rounds--) {
-      unsigned int prev_player = current_player-1;
+      unsigned int current_player = next_player().id();
+      unsigned int prev_player = (current_player - 1) % nplayers;
 #ifdef DEBUG
-      std::cout << "round " << roundnum++ << ":" << std::endl
+      std::cout << "round " << current_round << ":" << std::endl
         << prev_player << ": " << player(prev_player) << std::endl
-        << current_player << ": " << player(current_player) << std::endl;
+        << current_round << ": " << player(current_player) << std::endl;
 #endif
       // Solve for player 2 and add the point to p2's list and the VD sites.
       last_solution = nth_round(player(prev_player), player(current_player));
       player(current_player).insert(last_solution);
       // Then switch players for next round.
-      ++current_player;
+      ++current_round;
     }
     return last_solution;
   }
@@ -296,19 +300,48 @@ private:
   // Play a single round and return thei deal location for player 2.
   point_type nth_round(player_type const& p1, player_type const& p2)
   {
-    // Build L1 (rotated) rectangles, and rotate the space about the
-    // origin to solve with axis-up rectangles.
+    // To solve for player 2, build L1 (rotated) rectangles from the
+    // opposing player's facilities and solve for max-depth region(s).
+    // We first rotate the space about the origin so we solve with axis-up
+    // rectangles.
     std::list<rect_type> l1rects;
-    build_rects(p2, l1rects);
+    build_rects(p1, l1rects);
 
     MaxRect<coordinate_type> maxrect(l1rects.begin(), l1rects.end());
     maxrect.compute();
 
     // We have potentially multiple solution cells.
     // Pick a randome one and return its center.
-    rect_type solution = maxrect.cell(randint(size_type(0), maxrect.size()));
-    point_type center;
+    if (maxrect.size() == 0)
+    {
+      std::cerr << "warning: empty solution" << std::endl;
+      return point_type(0, 0);
+    }
+
+    size_type chosen_one = randint(size_type(0), maxrect.size());
+#ifdef DEBUG
+    // Dump all possible solutions.
+    std::cerr << "solutions:" << std::endl;
+    size_type cellidx = size_type(0);
+    for (auto cellp = maxrect.begin(); cellp != maxrect.end(); ++cellp)
+    {
+      rect_type solution = *cellp;
+      point_type ctmp(0, 0);
+      bp::center(ctmp, solution);
+      std::cerr << "[" << std::setw(2) << std::setfill(' ') << std::dec
+        << cellidx++ << "] " << ctmp << std::endl;
+    }
+#endif
+
+    rect_type solution = maxrect.cell(chosen_one);
+    point_type center(0, 0);
     bp::center(center, solution);
+#ifdef DEBUG
+    // Dump our chosen solution.
+    std::cerr << "chose [" << std::setw(2) << std::setfill(' ') << std::dec
+      << chosen_one << "] " << center << std::endl;
+#endif
+
     // Make sure to rotate the solution point back to the original space, since
     // the solution space itself is rotated.
     return rotateZ2f_neg(center);

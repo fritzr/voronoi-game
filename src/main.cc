@@ -578,18 +578,19 @@ int main(int argc, char *argv[])
   putText(img, "P2", Point(FONT_XSPACE+40, 2*FONT_YSPACE),
       FONT, FONT_SCALE, P2COLOR, FONT_THICKNESS);
 
-  unsigned int round_num = 0;
   unsigned int rounds_left = opts.rounds;
   Scalar pcolor = P1COLOR;
   while (rounds_left--)
   {
+    pcolor = (vg.next_round() % 2 == 0) ? P2COLOR : P1COLOR;
+    unsigned int nextp = vg.next_player().id();
     Point2f next_facility = vg.play_round(1);
+    cout << "player " << nextp << " solution at " << next_facility << endl;
+    // First show a white circle...
     circle(img, next_facility, 10, FONT_COLOR, -1);
-    //flip(img, img, 0);
     imshow("output", img);
     waitKey(0);
-    //flip(img, img, 0);
-    pcolor = (round_num % 2 == 0) ? P1COLOR : P2COLOR;
+    // Then show it as the right color once we've moved on.
     circle(img, next_facility, 10, pcolor, -1);
   }
 
