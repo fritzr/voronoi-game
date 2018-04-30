@@ -318,7 +318,7 @@ private:
       return point_type(0, 0);
     }
 
-    size_type chosen_one = randint(size_type(0), maxrect.size());
+    size_type chosen_one = randint(size_type(0), maxrect.size()-1);
 #ifdef DEBUG
     // Dump all possible solutions.
     std::cerr << "solutions:" << std::endl;
