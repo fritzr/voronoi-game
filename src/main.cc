@@ -568,7 +568,6 @@ int main(int argc, char *argv[])
   VGame vg(users.begin(), users.end());
   vg.init_player(0, p1sites.begin(), p1sites.end());
   vg.init_player(1, p2sites.begin(), p2sites.end());
-  draw_users(img, vg);
   const typename VGame::player_type& p1 = vg.player(0);
   const typename VGame::player_type& p2 = vg.player(1);
   draw_facilities(img, p1.begin(), p1.end(), P1COLOR);
@@ -582,6 +581,17 @@ int main(int argc, char *argv[])
   Scalar pcolor = P1COLOR;
   while (rounds_left--)
   {
+    // Draw updated users and scores based on new owners.
+    vg.score();
+    draw_users(img, vg);
+    cout << "scores:" << endl;
+    for (unsigned int pid = 0u; pid < VGame::nplayers; ++pid)
+    {
+      const typename VGame::player_type& player = vg.player(pid);
+      cout << "  player " << player.id() << " = "
+        << setw(2) << setfill(' ') << player.score() << endl;
+    }
+
     pcolor = (vg.next_round() % 2 == 0) ? P2COLOR : P1COLOR;
     unsigned int nextp = vg.next_player().id();
     Point2f next_facility = vg.play_round(1);

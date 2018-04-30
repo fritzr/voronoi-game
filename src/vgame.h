@@ -203,8 +203,8 @@ public:
   {
     for (auto playerp = players_.begin(); playerp != players_.end(); ++playerp)
       (*playerp)->set_score(0);
-    for (int user_idx = 0; user_idx < users_size(); ++user_idx)
-      owner(user_idx).add_score(1);
+    for (auto userp = users_begin(); userp != users_end(); ++userp)
+      owner(*userp).add_score(1);
   }
 
   // Return the winning player. You must run score() first.
@@ -250,8 +250,8 @@ public:
       unsigned int prev_player = (current_player - 1) % nplayers;
 #ifdef DEBUG
       std::cout << "round " << current_round << ":" << std::endl
-        << prev_player << ": " << player(prev_player) << std::endl
-        << current_round << ": " << player(current_player) << std::endl;
+        << prev_player << ": " << player(prev_player)
+        << current_player << ": " << player(current_player);
 #endif
       // Solve for player 2 and add the point to p2's list and the VD sites.
       last_solution = nth_round(player(prev_player), player(current_player));
