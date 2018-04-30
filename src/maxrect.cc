@@ -57,7 +57,8 @@ check_max_depth(rect_type const& r, EdgeSetIter leftp, int new_depth)
   const int next_solution_index = solutions().size();
   solution_edges.emplace(*leftp, next_solution_index);
   solution_edges.emplace(*rightp, next_solution_index);
-  solutions().emplace_back(r.index, leftp->rect_index, rightp->rect_index);
+  solutions().emplace_back(r.index, leftp->rect_index, rightp->rect_index,
+      new_depth);
 
   return new_depth;
 }

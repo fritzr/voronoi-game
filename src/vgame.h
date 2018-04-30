@@ -375,7 +375,8 @@ private:
       point_type ctmp(0, 0);
       bp::center(ctmp, solution);
       std::cerr << "[" << std::setw(2) << std::setfill(' ') << std::dec
-        << cellidx++ << "] " << ctmp << std::endl;
+        << cellidx << "] (depth=" << maxrect.solution(cellidx).depth()
+        << ") " << ctmp << std::endl;
     }
 #endif
 

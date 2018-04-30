@@ -227,12 +227,13 @@ private:
   index_set source_rects_;
   int top_, bot_, left_, right_;
   bool hit_left_, hit_right_;
+  int depth_;
 
 public:
-  SolutionCell(int top, int left, int right)
+  SolutionCell(int top, int left, int right, int depth)
     : source_rects_(),
       top_(top), bot_(-1), left_(left), right_(right),
-      hit_left_(false), hit_right_(false)
+      hit_left_(false), hit_right_(false), depth_(depth)
   {
     source_rects_.insert(top_);
     source_rects_.insert(left_);
@@ -242,6 +243,8 @@ public:
       << " and edges: " << left_ << " and " << right_ << std::endl;
 #endif
   }
+
+  inline int depth(void) const { return depth_; }
 
   inline void found(bp::direction_1d dir) {
     if (dir == bp::LEFT)  hit_left_  = true;
