@@ -528,6 +528,21 @@ dump_solution(Mat img, int idx, solution_type const& solution,
 }
 #endif
 
+static void
+show_score(Mat& img, VGame& vg)
+{
+  // Draw updated users and scores based on new owners.
+  vg.score();
+  draw_users(img, vg);
+  cout << "scores:" << endl;
+  for (unsigned int pid = 0u; pid < VGame::nplayers; ++pid)
+  {
+    const typename VGame::player_type& player = vg.player(pid);
+    cout << "  player " << player.id() << " = "
+      << setw(2) << setfill(' ') << player.score() << endl;
+  }
+}
+
 int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
@@ -581,17 +596,7 @@ int main(int argc, char *argv[])
   Scalar pcolor = P1COLOR;
   while (rounds_left--)
   {
-    // Draw updated users and scores based on new owners.
-    vg.score();
-    draw_users(img, vg);
-    cout << "scores:" << endl;
-    for (unsigned int pid = 0u; pid < VGame::nplayers; ++pid)
-    {
-      const typename VGame::player_type& player = vg.player(pid);
-      cout << "  player " << player.id() << " = "
-        << setw(2) << setfill(' ') << player.score() << endl;
-    }
-
+    show_score(img, vg);
     pcolor = (vg.next_round() % 2 == 0) ? P2COLOR : P1COLOR;
     unsigned int nextp = vg.next_player().id();
     Point2f next_facility = vg.play_round(1);
@@ -603,6 +608,7 @@ int main(int argc, char *argv[])
     // Then show it as the right color once we've moved on.
     circle(img, next_facility, 10, pcolor, -1);
   }
+  show_score(img, vg);
 
   //auto player_sites = boost::join(vg.player(0), vg.player(1));
   //auto all_points = boost::join(player_sites, users);
