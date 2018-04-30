@@ -8,6 +8,10 @@
 #include <cmath>
 #include <stdexcept>
 
+#ifdef DEBUG
+#include <iostream>
+#endif
+
 #include <opencv2/core/core.hpp> // cv::norm
 
 #include <boost/geometry/geometry.hpp>
@@ -84,10 +88,22 @@ public:
   inline int score(void) const { return score_; }
   inline void add_score(int to_add=1) { set_score(score()+to_add); }
 
-  inline point_type const& nearest_facility(point_type const& user) {
+  inline point_type const& nearest_facility(point_type const& user) const {
     return *nn_.qbegin(bgi::nearest(user, 1));
   }
   inline void insert(point_type const& f) { nn_.insert(f); }
+
+#ifdef DEBUG
+  template <class Traits_>
+  friend inline std::ostream& operator<<(std::ostream& os,
+      VPlayer<Traits_> const& p)
+  {
+    for (auto ptit = p.begin(); ptit != p.end(); ++ptit)
+      std::cout << *ptit << " ";
+    std::cout << std::endl;
+    return os;
+  }
+#endif
 }; // end class VPlayer
 
 template<class Traits>
@@ -96,6 +112,7 @@ class VGame
   inherit_traits(Traits);
   typedef VPlayer<traits> player_type;
   typedef std::array<player_type*, nplayers> player_list;
+  unsigned int current_player = (nplayers-1); // starting with player 2
 
   // Members
 private:
@@ -219,16 +236,24 @@ public:
   // Note that one round means one player is solved (two rounds is symmetric).
   // Note also that this uses the player 2 nth-round solution in each round.
   // Return the last facility added.
-  point_type play_round(size_type rounds=1)
+  // If starting_player is negative, continue with the last player played.
+  // Otherwise, reset such that "player two" is the given player index.
+  point_type play_round(size_type rounds=1, int starting_player=-1)
   {
-    int player_id = 1; // starting with player 2
     point_type last_solution;
+    unsigned int roundnum = 0u;
     while (rounds--) {
+      unsigned int prev_player = current_player-1;
+#ifdef DEBUG
+      std::cout << "round " << roundnum++ << ":" << std::endl
+        << prev_player << ": " << player(prev_player) << std::endl
+        << current_player << ": " << player(current_player) << std::endl;
+#endif
       // Solve for player 2 and add the point to p2's list and the VD sites.
-      last_solution = nth_round(player(player_id-1), player(player_id));
-      player(player_id).insert(last_solution);
+      last_solution = nth_round(player(prev_player), player(current_player));
+      player(current_player).insert(last_solution);
       // Then switch players for next round.
-      ++player_id;
+      ++current_player;
     }
     return last_solution;
   }
