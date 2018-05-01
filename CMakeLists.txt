@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 2.8.12)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake")
-cmake_policy(PUSH)
-include(cotire)
-cmake_policy(POP)
+#set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake")
+#cmake_policy(PUSH)
+#include(cotire)
+#cmake_policy(POP)
 
 project(voronoi-game)
-if(NOT WIN32 AND NOT WIN64)
+if(NOT WIN32 AND NOT WIN64 AND NOT APPLE)
   set(CMAKE_CXX_COMPILER "g++")
 endif()
 
@@ -25,7 +25,12 @@ else()
   message (FATAL_ERROR "${CMAKE_CXX_COMPILER} does not appear to support C++11")
 endif()
 
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -std=c++11")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
+if (${DEBUG})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -DDEBUG")
+else()
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+endif()
 
 set(CXX_STATIC "-static-libgcc -static-libstdc++ ")
 if (GCC_VERSION VERSION_GREATER 5.0 AND GCC_VERSION VERSION_LESS 5.4)

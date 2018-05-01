@@ -5,6 +5,9 @@
 using namespace std;
 using namespace cv;
 
+namespace voronoi
+{
+
 template<class Tp_>
 void
 VoronoiDiagram<Tp_>::clip_infinite_edge(const edge_type& edge,
@@ -164,6 +167,8 @@ template<class Tp_>
 void
 VoronoiDiagram<Tp_>::build(SearchMethod sm)
 {
+  vd.clear();
+
   // Always construct the voronoi diagram from the sites so we have edges.
   boost::polygon::construct_voronoi(sites.begin(), sites.end(), &vd);
 
@@ -186,3 +191,5 @@ VoronoiDiagram<Tp_>::build(SearchMethod sm)
 
 // Common instantiations.
 template class VoronoiDiagram<double>;
+
+}

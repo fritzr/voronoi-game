@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iterator>
 #include <vector>
 #include <algorithm>
@@ -15,10 +17,6 @@
 #include <boost/geometry/geometries/register/point.hpp>
 #include <boost/geometry/geometries/register/box.hpp>
 #include <boost/geometry/geometries/adapted/boost_polygon.hpp>
-
-namespace bp = boost::polygon;
-namespace bg = boost::geometry;
-namespace bgi = boost::geometry::index;
 
 #ifndef BOOST_POLY_REGISTER_POINT
 #define BOOST_POLY_REGISTER_POINT(ptype, ctype) \
@@ -40,14 +38,65 @@ point_traits<ptype> \
 }} // end namespace boost::polygon
 #endif
 
+#ifndef BOOST_POLY_REGISTER_POINT
+#define BOOST_POLY_REGISTER_POINT(ptype, ctype) \
+namespace boost { namespace polygon { \
+template <> struct \
+geometry_concept<ptype> \
+{ \
+  typedef point_concept type; \
+}; \
+template <> struct \
+point_traits<ptype> \
+{ \
+  typedef ctype coordinate_type; \
+  static inline coordinate_type get(const ptype &pt, orientation_2d orient) \
+  { \
+    return (orient == HORIZONTAL) ? pt.x : pt.y; \
+  } \
+}; \
+}} // end namespace boost::polygon
+#endif
+
+#define _EXPAND(...) __VA_ARGS__
+
+#ifndef BOOST_POLY_REGISTER_MPOINT
+#define BOOST_POLY_REGISTER_MPOINT(ptype, ctype) \
+_EXPAND(BOOST_POLY_REGISTER_POINT(ptype, ctype)) \
+namespace boost { namespace polygon { \
+template <> struct \
+point_mutable_traits<ptype> \
+{ \
+  typedef ctype coordinate_type; \
+  static inline void set(ptype& point, orientation_2d orient, \
+      coordinate_type value) \
+  { \
+    switch(orient.to_int()) { \
+    case VERTICAL: point.y = value; break; \
+    case HORIZONTAL: default: point.x = value; break; \
+    } \
+  } \
+  static inline ptype construct(coordinate_type xval, coordinate_type yval) \
+    { return ptype(xval, yval); } \
+}; \
+}} // end namespace boost::polygon
+#endif
+
 // Tell boost about cv points
-BOOST_POLY_REGISTER_POINT(cv::Point, int);
-BOOST_POLY_REGISTER_POINT(cv::Point2f, float);
-BOOST_POLY_REGISTER_POINT(cv::Point2d, double);
+BOOST_POLY_REGISTER_MPOINT(cv::Point, int);
+BOOST_POLY_REGISTER_MPOINT(cv::Point2f, float);
+BOOST_POLY_REGISTER_MPOINT(cv::Point2d, double);
 
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point, int, cs::cartesian, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point2f, float, cs::cartesian, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point2d, double, cs::cartesian, x, y);
+
+namespace voronoi
+{
+
+namespace bp = boost::polygon;
+namespace bg = boost::geometry;
+namespace bgi = boost::geometry::index;
 
 template<class Tp_> class edge_iterator;
 
@@ -73,6 +122,7 @@ public:
   typedef typename voronoi_diagram::vertex_type vertex_type;
   typedef typename voronoi_diagram::coordinate_type coordinate_type;
   typedef typename bp::rectangle_data<Tp_> rect_type;
+  typedef typename rect_type::interval_type interval_type;
   typedef Edge<Tp_> finite_edge_type;
 
   typedef cell_type value_type;
@@ -149,6 +199,34 @@ public:
   {
   }
 
+  template<class UserInputIter>
+  VoronoiDiagram(UserInputIter users_begin, UserInputIter users_end,
+      double max_width=1e9, double max_height=1e9)
+    : sites(), users(users_begin, users_end),
+      boundsx(max_width), u2s(users.size(), -1), vd()
+  {
+  }
+
+  // Add sites or users one-by-one. Note that if you do this you wil need
+  // to re-run build() before the answers will be correct.
+  template<class Point>
+    inline void add_site(Point const& site) { sites.push_back(site); }
+  template<class InputIter> 
+    inline void add_sites(InputIter begin, InputIter end)
+    { sites.push_back(begin, end); }
+
+  template<class Point>
+    inline void add_user(Point const& user) {
+      users.push_back(user);
+      u2s.push_back(-1);
+    }
+  template<class InputIter>
+    inline void add_users(InputIter begin, InputIter end) {
+      users.push_back(begin, end);
+      while (u2s.size() < users.size())
+        u2s.push_back(-1);
+    }
+
   // Return the coordinate of the site to which the given user belongs in O(1).
   inline point_type user_site(size_t user_index) const {
     return sites.at(u2s.at(user_index)); // bounds-checked
@@ -183,6 +261,30 @@ public:
   inline point_type const& user(size_t user_index) const {
     return users.at(user_index); // bounds-checked
   }
+  inline point_type nearest_site(size_t user_index) const {
+    return sites.at(site_index(user_index));
+  }
+  inline point_type nearest_site(point_iterator user_pt) const {
+    return sites.at(site_index(user_pt));
+  }
+
+  // Build L1-distance rectangles for each user.
+  // Note that the boost::rectangle concept requires these to be axis-up, but
+  // to be correct they should be rotated 45 degrees.
+  // Just remember that when you use them... ;)
+  template<class OutputIter>
+    void build_rects(OutputIter out) {
+      point_iterator uit = users_begin();
+      while (uit != users_end())
+      {
+        point_type site = nearest_site(uit);
+        point_type user = *uit;
+        coordinate_type l1d = sqrt(2)
+          * (std::abs(site.x - user.x) + std::abs(site.y - user.y));
+        *out++ = cv::RotatedRect(user, cv::Size(l1d, l1d), 45.0f);
+        ++uit;
+      }
+    }
 
   // Iterate through finite points of the edges of a cell.
   inline finite_edge_iterator cell_begin(const cell_type &cell) const {
@@ -218,6 +320,7 @@ public:
     KNN,
     SM_BAD,
   };
+
   // Build the Voronoi diagram and figure out which users belong to which
   // sites. This method performs two steps. The first step is to build
   // the Voronoi diagram out of the sites(), which takes O(m log m) time.
@@ -289,3 +392,5 @@ public:
 
 // Common instantiations.
 extern template class VoronoiDiagram<double>;
+
+} // end namespace voronoi

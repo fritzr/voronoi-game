@@ -57,21 +57,68 @@ struct pointiter : public std::iterator<
 #endif
 #endif
 
+// With older OpenCV, you can't construct Point2d from Point
+#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
+typedef pointiter<typename std::vector<cv::Point>::iterator, cv::Point2d> p2di;
+
+// Point order from RotatedRect::points()
+#define RRBL 1
+#define RRTL 0
+#define RRTR 3
+#define RRBR 2
+
+#else
+typedef typename std::vector<cv::Point>::iterator p2di;
+
+// Point order from RotatedRect::points()
+#define RRBL 0
+#define RRTL 1
+#define RRTR 2
+#define RRBR 3
+#endif
+
 #include <boost/range/join.hpp>
 #include <boost/foreach.hpp>
 
 #include "main.h"
 #include "voronoi.h"
+#include "maxrect.h"
+#include "vgame.h"
 
 #define i2f(...) static_cast<float>(__VA_ARGS__)
 #define i2u(...) static_cast<unsigned int>(__VA_ARGS__)
 
 using namespace std;
 using namespace cv;
+using namespace voronoi;
 
-struct options_t {
+typedef typename cfla::MaxRect<double> MaxRect;
+typedef typename MaxRect::coordinate_type coordinate_type;
+typedef typename bp::rectangle_data<coordinate_type> rect_type;
+typedef typename MaxRect::solution_type solution_type;
+
+typedef typename cfla::cfla_traits<cv::Point2f> vgtraits;
+typedef typename cfla::VGame<vgtraits> VGame;
+
+enum DrawRects {
+  RECTS_NONE = 0,
+  RECTS_ROTATED = 1,
+  RECTS_UPRIGHT = 2,
+  RECTS_BOTH = 3,
+  RECTS_BAD = 4,
+};
+
+enum DrawCell {
+  CELL_NONE = 0,
+  CELL_ROTATED = 1,
+  CELL_UPRIGHT = 2,
+  CELL_BOTH = 3,
+  CELL_BAD = 4,
+};
+
+struct options_t
+{
   // Global configurable options
-  bool drawEdges=true;
   bool dogrid=false;
   bool gridLabels=true;
   unsigned int ngridx=10u, ngridy=10u; // number of grid lines (if any)
@@ -81,26 +128,32 @@ struct options_t {
   bool fill_inputs = false;
   int screenWidth = 1920;
   int screenHeight = 1080;
-  VoronoiDiagram<double>::SearchMethod queryType
-    =VoronoiDiagram<double>::Default;
+  DrawCell computeCell = CELL_NONE;
+  DrawRects drawRects = RECTS_NONE;
+  bool dumpGraph = false; // adjacency graph
+  unsigned int rounds = 1u;
+  bool userLabels = false;
+  bool interactive = false;
+  string output_path;
 
-  string sites_path;
   string users_path;
-} options;
+  string p1sites_path;
+  string p2sites_path;
+};
 
 static options_t opts;
 
-// Colors for solution polygons
-static const size_t maxcolor = (1 << 8) - 1;
-static const Scalar fillColor(maxcolor-1);
-static const Scalar holeColor(0);
-static const Scalar gridColor(fillColor);
-
-// Default fonts
+// Default colors and fonts
+static const Scalar gridColor(Scalar::all(0xff)); // white
 static const int FONT = FONT_HERSHEY_SCRIPT_SIMPLEX;
 static const double FONT_SCALE = 0.5;
 static const int FONT_THICKNESS = 1;
-static const Scalar FONT_COLOR(Scalar::all(255));
+static const Scalar FONT_COLOR(Scalar::all(0xff)); // white
+const int FONT_XSPACE = 10;
+const int FONT_YSPACE = 10;
+
+static const Scalar P1COLOR(Scalar(255, 0, 0));
+static const Scalar P2COLOR(Scalar(0, 0, 255));
 
 static void usage(const char *prog, const char *errmsg=NULL)
 #ifndef _MSC_VER
@@ -111,7 +164,9 @@ static void usage(const char *prog, const char *errmsg=NULL)
 void
 usage(const char *prog, const char *errmsg)
 {
-  cerr << "usage: " << prog << " [OPTIONS] <sites-file> <users-file>" << endl
+  cerr << "usage: " << prog << " [OPTIONS] <users> <sites>" << endl
+    << "       " << prog << " [OPTIONS] -p<N> <users> <p1sites> <p2sites>"
+    << endl
     << "OPTIONS are:" << endl
     << "  -F			Fill input polygons (default: trace)" << endl
     << "  -C COLORMAP		Give a colormap index" << endl
@@ -131,12 +186,21 @@ usage(const char *prog, const char *errmsg)
     << "  -l			Label the grid lines (default: yes)" << endl
     << "  -L			Do not label grid lines" << endl
     << "  -d			Debug mode (extra output)" << endl
+    << "  -u			Draw user labels (default: yes)" << endl
+    << "  -U                    Do not draw user labels" << endl
     << "  -W SIZE		Max width of the display (default: 1920)"
     << endl
     << "  -H SIZE		Max height of the display (default: 1080)"
     << endl
     << "  -q TYPE		Query type for mapping users to sites:" << endl
     << "    [0:default], 1:brute force, 2:range search, 3:NN(1) (fastest)"
+    << endl
+    << "  -r			Draw rects (default: none):" << endl
+    << "  -p N			Play N rounds of the game (default: 1)." << endl
+    << "  -i			Play interactively (default: no)" << endl
+    << "  -I			Do not play interactively (default)" << endl
+    << "  -o FILE		Output image to file instead of screen." << endl
+    << "			This implies -I." << endl
     << endl
     ;
   if (errno) {
@@ -165,7 +229,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:";
+static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:iIo:";
 
 // Parses options and sets the global options structure.
 static void
@@ -187,10 +251,6 @@ get_options(int argc, char *argv[], options_t &o)
       o.ngridx = getenum<int>(INT_MAX, optarg, errstr, "X grid lines"); break;
     case 'Y':
       o.ngridy = getenum<int>(INT_MAX, optarg, errstr, "Y grid lines"); break;
-    case 'e':
-      o.drawEdges = true; break;
-    case 'E':
-      o.drawEdges = false; break;
     case 'g':
       o.dogrid = true; break;
     case 'G':
@@ -199,6 +259,10 @@ get_options(int argc, char *argv[], options_t &o)
       o.gridLabels = true; break;
     case 'L':
       o.gridLabels = false; break;
+    case 'u':
+      o.userLabels = true; break;
+    case 'U':
+      o.userLabels = false; break;
     case 'T':
       o.gridThickness = getenum<int>(INT_MAX, optarg, errstr, "grid thickness");
       break;
@@ -208,18 +272,31 @@ get_options(int argc, char *argv[], options_t &o)
     case 'H':
       o.screenHeight = getenum<int>(INT_MAX, optarg, errstr, "screen height");
       break;
-    case 'q':
-      o.queryType = getenum<VoronoiDiagram<double>::SearchMethod>(
-        VoronoiDiagram<double>::SM_BAD, optarg, errstr, "query type");
+    case 'r':
+      o.drawRects = getenum<DrawRects>(RECTS_BAD, optarg, errstr, "rect type");
       break;
+    case 'j':
+      o.dumpGraph = true; break;
+    case 'p':
+      o.rounds = strtoul(optarg, NULL, 0); break;
+    case 'i':
+      o.interactive = true; break;
+    case 'I':
+      o.interactive = false; break;
+    case 'o':
+      o.output_path = string(optarg); break;
     case 'h':
       usage(argv[0]);
     case ':':
       errstr << "option -" << (char)opt << " missing argument";
       if (!opterr) opterr = 1;
       break;
+    case '?':
+      errstr << "unknown option -" << (char)optopt;
+      if (!opterr) opterr = 1;
+      break;
     default:
-      errstr << "unknown option -" << (char)opt;
+      errstr << "unknown return from getopt: " << opt;
       if (!opterr) opterr = 1;
       break;
     }
@@ -228,7 +305,13 @@ get_options(int argc, char *argv[], options_t &o)
     usage(argv[0], errstr.str().c_str());
   }
 
-  if (argc - optind < 2) {
+  if (o.computeCell)
+    usage(argv[0], "-c is no longer implemented");
+  if (o.drawRects)
+    usage(argv[0], "-r is no longer implemented");
+
+  int nargs = 3;
+  if (argc - optind < nargs) {
     usage(argv[0], "not enough arguments");
   }
 
@@ -236,12 +319,13 @@ get_options(int argc, char *argv[], options_t &o)
   if (o.screenHeight == 0) o.screenHeight = INT_MAX;
   if (o.screenWidth == 0) o.screenWidth = INT_MAX;
 
-  if (o.debug) {
-    cout << "reading polygons from file '" << argv[optind] << "'" << endl;
-  }
+  // Disable interactive mode with file output.
+  if (!o.output_path.empty()) o.interactive = false;
 
-  o.sites_path = string(argv[optind]);
-  o.users_path = string(argv[optind+1]);
+  o.users_path = string(argv[optind]);
+  o.p1sites_path = string(argv[optind+1]);
+  if (nargs > 2)
+    o.p2sites_path = string(argv[optind+2]);
 }
 
 // Draw grid lines.
@@ -251,8 +335,6 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
   const Size sz(img.size());
   const unsigned int dx = sz.width / nx;
   const unsigned int dy = sz.height / ny;
-  const int xspace = 15;
-  const int yspace = 15;
 
   // Vertical lines.
   for (unsigned int xpos=0; xpos < i2u(sz.width); xpos += dx) {
@@ -260,7 +342,7 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
     // Label the grid lines.
     if (labels) {
       ostringstream ss; ss << xpos;
-      putText(img, ss.str(), Point(xpos + xspace, sz.height - yspace),
+      putText(img, ss.str(), Point(xpos + FONT_XSPACE, sz.height - FONT_YSPACE),
           FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
     }
   }
@@ -271,42 +353,10 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
     // Label the grid lines.
     if (labels) {
       ostringstream ss; ss << (sz.height - ypos - dy);
-      putText(img, ss.str(), Point(xspace, ypos + dy - yspace),
+      putText(img, ss.str(), Point(FONT_XSPACE, ypos + dy - FONT_YSPACE),
           FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
     }
   }
-}
-
-static Mat
-translate(Mat img, float transx, float transy)
-{
-  Mat displace = (Mat_<float>(2,3)<< 1, 0, transx, 0, 1, transy);
-  cv::warpAffine(img, img, displace, img.size());
-  return img;
-}
-
-static Mat
-resizeToFit(Mat img, Mat out, const Rect &bbox, const Size &screen)
-{
-  // First subtract origin (top-left) of the rectangle and crop.
-  img = translate(img, -bbox.x, -bbox.y);
-  img = img(Rect(0, 0, bbox.width, bbox.height));
-
-  // Then see if we need to squash the image to fit our screen,
-  // maintaining aspect ratio.
-  Size nsz(bbox.width, bbox.height);
-  if (nsz.height > screen.height) {
-    nsz.width = static_cast<int>((screen.height/(float)nsz.height) * nsz.width);
-    nsz.height = screen.height;
-  }
-
-  if (nsz.width > screen.width) {
-    nsz.width = screen.height;
-    nsz.width = static_cast<int>((screen.width/(float)nsz.width) * nsz.height);
-  }
-
-  cv::resize(img, out, nsz);
-  return out;
 }
 
 // Read points from a file (one point per line) and write to out.
@@ -349,47 +399,57 @@ readOrDie(const string &path, It out)
   }
 }
 
-static inline Scalar
-colorKey(int i, int imax) {
-  return Scalar(((i+1) * double(maxcolor))/ (imax+1));
+static Point2f pbias, nbias;
+
+template<class pt>
+static inline pt rotp(pt p)
+{
+  return rotateZ2f_pos(p) - pbias;
 }
 
-template <class Tp_>
-static void
-draw_cells (Mat img, const VoronoiDiagram<Tp_> &vd)
+template<class pt>
+static inline pt rotn(pt p)
 {
-  size_t site_idx = 0u;
-  for (auto cell_iter=vd.begin(); cell_iter!=vd.end(); ++cell_iter, ++site_idx)
-  {
-    Scalar color = colorKey(site_idx, vd.sites_size());
-    auto const& cell = *cell_iter;
-    for (auto edge_iter = vd.cell_begin(cell); edge_iter != vd.cell_end(cell);
-        ++edge_iter) {
-      auto edge = *edge_iter;
-      cv::line(img, edge.p0, edge.p1, color, 2);
-    }
-    // With debug, show each cell's borders as it is drawn
-    if (opts.debug) {
-      cv::imshow("output", img);
-      cv::waitKey(0);
-    }
-  }
+  return rotateZ2f_neg(p) - nbias;
 }
 
-template <class Tp_>
-static void
-draw_sites(Mat img, const VoronoiDiagram<Tp_> &vd)
+template<class pt>
+static inline pt check_rot(pt p)
 {
-  // Fill sites
-  for (size_t site_idx = 0u; site_idx < vd.sites_size(); ++site_idx) {
-    Scalar color = colorKey(site_idx, vd.sites_size());
-    cv::circle(img, vd.site(site_idx), 10, color, -1);
-  }
+  return (opts.drawRects == RECTS_UPRIGHT) ? rotp(p) : p;
+}
 
+template<class InputIter>
+static void
+draw_facilities(Mat& img, InputIter begin, InputIter end, Scalar const& color)
+{
+  while (begin != end)
+    cv::circle(img, *begin++, 10, color, -1);
+}
+
+static void
+draw_users(Mat& img, VGame const& vd)
+{
   // Don't fill users
-  for (size_t user_idx = 0u; user_idx < vd.users_size(); ++user_idx) {
-    Scalar color = colorKey(vd.site_index(user_idx), vd.sites_size());
-    cv::circle(img, vd.user(user_idx), 5, color);
+  for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp) {
+    typename VGame::player_type const& p = vd.owner(*userp);
+    Scalar color = p.id() == 0 ? P1COLOR : P2COLOR;
+    cv::circle(img, check_rot(*userp), 5, color);
+  }
+}
+
+static void
+show_score(Mat& img, VGame& vg)
+{
+  // Draw updated users and scores based on new owners.
+  vg.score();
+  draw_users(img, vg);
+  cout << "scores:" << endl;
+  for (unsigned int pid = 0u; pid < VGame::nplayers; ++pid)
+  {
+    const typename VGame::player_type& player = vg.player(pid);
+    cout << "  player " << player.id() << " = "
+      << setw(2) << setfill(' ') << player.score() << endl;
   }
 }
 
@@ -397,19 +457,25 @@ int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
 
-  vector<Point> sites, users;
+  vector<Point> users, p1sites, p2sites;
 
-  readOrDie(opts.sites_path, back_inserter(sites));
   readOrDie(opts.users_path, back_inserter(users));
-
-  if (sites.empty()) {
-    cerr << "error: empty sites file (" << opts.sites_path << ")" << endl;
+  readOrDie(opts.p1sites_path, back_inserter(p1sites));
+  if (p1sites.empty()) {
+    cerr << "error: empty sites file (" << opts.p1sites_path << ")" << endl;
+    exit(2);
+  }
+  readOrDie(opts.p2sites_path, back_inserter(p2sites));
+  if (p2sites.empty()) {
+    cerr << "error: empty sites file (" << opts.p2sites_path << ")" << endl;
     exit(2);
   }
 
   // We got resolution (x, y) as (width, height); flip to (rows, cols)
   Size resolution(opts.screenWidth, opts.screenHeight);
-  Mat img(resolution.height, resolution.width, CV_8U);
+  Mat img(resolution.height, resolution.width, CV_8UC3);
+  // White background
+  img.setTo(Scalar::all(0xff));
 
   if (opts.debug)
     cout << "canvas size " << img.cols << " x " << img.rows << endl;
@@ -418,41 +484,69 @@ int main(int argc, char *argv[])
   if (opts.dogrid)
     drawGrid(img, opts.ngridx, opts.ngridy, gridColor, opts.gridThickness,
         opts.gridLabels);
-  // Flip vertical initially so text comes out up-right (since we flip later)
-  cv::flip(img, img, 0);
 
-  // With older OpenCV, you can't construct Point2d from Point
-#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
-  typedef pointiter<vector<Point>::iterator, Point2d> p2di;
-#else
-  typedef vector<Point>::iterator p2di;
+  // Play the game one round at a time.
+  VGame vg(users.begin(), users.end());
+#ifdef DEBUG
+  vg.set_img(img);
 #endif
+  vg.init_player(0, p1sites.begin(), p1sites.end());
+  vg.init_player(1, p2sites.begin(), p2sites.end());
+  const typename VGame::player_type& p1 = vg.player(0);
+  const typename VGame::player_type& p2 = vg.player(1);
+  draw_facilities(img, p1.begin(), p1.end(), P1COLOR);
+  draw_facilities(img, p2.begin(), p2.end(), P2COLOR);
+  putText(img, "P1", Point(FONT_XSPACE, 2*FONT_YSPACE),
+      FONT, FONT_SCALE, P1COLOR, FONT_THICKNESS);
+  putText(img, "P2", Point(FONT_XSPACE+40, 2*FONT_YSPACE),
+      FONT, FONT_SCALE, P2COLOR, FONT_THICKNESS);
 
-  VoronoiDiagram<double> vd(
-      p2di(sites.begin()), p2di(sites.end()),
-      p2di(users.begin()), p2di(users.end()),
-      resolution.width, resolution.height);
-  vd.build(opts.queryType);
-
-  if (opts.drawEdges) {
-    draw_cells(img, vd);
+  unsigned int turns_remaining = (unsigned int)(opts.rounds != 0);
+  unsigned int rounds_per_turn = opts.rounds;
+  if (opts.interactive)
+  {
+    turns_remaining = opts.rounds;
+    rounds_per_turn = 1u;
   }
-  draw_sites(img, vd);
-
-  // Convert grayscale gradient to color gradient for plotting
-  Mat colorimg;
-  auto pts = boost::join(sites, users);
-  Rect bbox = boundingRect(vector<Point>(pts.begin(), pts.end()));
-  // squash to screen size, maintaining aspect ratio
-  if ((bbox.width > 0 || bbox.height > 0)
-      && (bbox.height > opts.screenHeight || bbox.width > opts.screenWidth)) {
-    img = resizeToFit(img, img, bbox, resolution);
+  Scalar pcolor = P1COLOR;
+  while (turns_remaining--)
+  {
+    show_score(img, vg);
+    pcolor = (vg.next_round() % 2 == 0) ? P2COLOR : P1COLOR;
+    unsigned int nextp = vg.next_player().id();
+    Point2f next_facility = vg.play_round(rounds_per_turn);
+    cout << "player " << nextp << " solution at " << next_facility << endl;
+    if (opts.interactive)
+    {
+      // First show a white circle...
+      circle(img, next_facility, 10, FONT_COLOR, -1);
+      imshow("output", img);
+      waitKey(0);
+    }
+    // Then show it as the right color once we've moved on.
+    circle(img, next_facility, 10, pcolor, -1);
   }
-  cv::flip(img, colorimg, 0); // flip vertical
-  applyColorMap(colorimg, colorimg, opts.colormap);
+  show_score(img, vg);
 
-  imshow("output", colorimg);
-  waitKey(0);
+  if (opts.userLabels)
+  {
+    unsigned int user_idx = 0u;
+    for (auto uit = users.begin(); uit != users.end(); ++uit)
+    {
+      Point up = check_rot(*uit);
+      putText(img, to_string(user_idx++),
+          Point(up.x + FONT_XSPACE, up.y - FONT_YSPACE),
+          FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
+    }
+  }
+
+  if (opts.output_path.empty())
+  {
+    imshow("output", img);
+    waitKey(0);
+  }
+  else
+    imwrite(opts.output_path, img);
 
   return 0;
 }
