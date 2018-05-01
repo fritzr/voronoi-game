@@ -142,17 +142,12 @@ struct options_t
 
 static options_t opts;
 
-// Colors for solution polygons
-static const size_t maxcolor = (1 << 8) - 1;
-static const Scalar fillColor(maxcolor-1);
-static const Scalar holeColor(0);
-static const Scalar gridColor(fillColor);
-
-// Default fonts
+// Default colors and fonts
+static const Scalar gridColor(Scalar::all(0xff)); // white
 static const int FONT = FONT_HERSHEY_SCRIPT_SIMPLEX;
 static const double FONT_SCALE = 0.5;
 static const int FONT_THICKNESS = 1;
-static const Scalar FONT_COLOR(Scalar::all(255));
+static const Scalar FONT_COLOR(Scalar::all(0xff)); // white
 const int FONT_XSPACE = 10;
 const int FONT_YSPACE = 10;
 
@@ -306,7 +301,9 @@ get_options(int argc, char *argv[], options_t &o)
   }
 
   if (o.computeCell)
-    usage(argv[0], "-o is no longer implemented");
+    usage(argv[0], "-c is no longer implemented");
+  if (o.drawRects)
+    usage(argv[0], "-r is no longer implemented");
 
   int nargs = 3;
   if (argc - optind < nargs) {
@@ -353,40 +350,6 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
     }
   }
 }
-
-#if 0
-static Mat
-translate(Mat img, float transx, float transy)
-{
-  Mat displace = (Mat_<float>(2,3)<< 1, 0, transx, 0, 1, transy);
-  cv::warpAffine(img, img, displace, img.size());
-  return img;
-}
-
-static Mat
-resizeToFit(Mat img, Mat out, const Rect &bbox, const Size &screen)
-{
-  // First subtract origin (top-left) of the rectangle and crop.
-  img = translate(img, -bbox.x, -bbox.y);
-  img = img(Rect(0, 0, bbox.width, bbox.height));
-
-  // Then see if we need to squash the image to fit our screen,
-  // maintaining aspect ratio.
-  Size nsz(bbox.width, bbox.height);
-  if (nsz.height > screen.height) {
-    nsz.width = static_cast<int>((screen.height/(float)nsz.height) * nsz.width);
-    nsz.height = screen.height;
-  }
-
-  if (nsz.width > screen.width) {
-    nsz.width = screen.height;
-    nsz.width = static_cast<int>((screen.width/(float)nsz.width) * nsz.height);
-  }
-
-  cv::resize(img, out, nsz);
-  return out;
-}
-#endif
 
 // Read points from a file (one point per line) and write to out.
 template <class It>
@@ -450,14 +413,14 @@ static inline pt check_rot(pt p)
 
 template<class InputIter>
 static void
-draw_facilities(Mat img, InputIter begin, InputIter end, Scalar const& color)
+draw_facilities(Mat& img, InputIter begin, InputIter end, Scalar const& color)
 {
   while (begin != end)
     cv::circle(img, *begin++, 10, color, -1);
 }
 
 static void
-draw_users(Mat img, VGame const& vd)
+draw_users(Mat& img, VGame const& vd)
 {
   // Don't fill users
   for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp) {
@@ -466,72 +429,6 @@ draw_users(Mat img, VGame const& vd)
     cv::circle(img, check_rot(*userp), 5, color);
   }
 }
-
-#if 0
-static inline Scalar
-colorKey(int i, int imax) {
-  return Scalar(((i+1) * double(maxcolor))/ (imax+1));
-}
-static Mat
-finish_img(Mat img, Rect const& bbox, Size const& resolution)
-{
-  // Convert grayscale gradient to color gradient for plotting
-  Mat colorimg;
-  // squash to screen size, maintaining aspect ratio
-  if ((bbox.width > 0 || bbox.height > 0)
-      && (bbox.height > opts.screenHeight || bbox.width > opts.screenWidth)) {
-    //img = resizeToFit(img, img, bbox, resolution);
-  }
-  cv::flip(img, colorimg, 0); // flip vertical
-  applyColorMap(colorimg, colorimg, opts.colormap);
-  return colorimg;
-}
-
-static void
-draw_rotrect(Mat img, RotatedRect const& rrect, Scalar const& color,
-    int thicc=2)
-{
-  std::array<Point2f, 4> pts;
-  rrect.points(pts.begin());
-  if (thicc < 0) {
-    std::array<Point, 4> ipts;
-    std::copy(pts.begin(), pts.end(), ipts.begin());
-    cv::fillConvexPoly(img, ipts.begin(), ipts.size(), color);
-  }
-  else
-    for (unsigned int i = 0u; i < pts.size(); ++i)
-      cv::line(img, pts[i], pts[(i+1)%pts.size()], color, thicc);
-}
-
-static void
-dump_solution(Mat img, int idx, solution_type const& solution,
-    rect_type const& cell)
-{
-  Point tl, br;
-  bp::assign(tl, bp::ul(cell));
-  bp::assign(br, bp::lr(cell));
-  cout << "[" << setw(2) << setfill(' ') << dec << idx << "]"
-    << " (" << tl << ", " << br << ")"
-    << " from rects { ";
-  for (auto it = solution.begin(); it != solution.end(); ++it)
-    cout << *it << ", ";
-  cout << " }" << endl;
-
-  if (opts.computeCell & CELL_UPRIGHT)
-  {
-    Rect r(tl, br);
-    cv::rectangle(img, r, fillColor, CV_FILLED);
-  }
-  if (opts.computeCell & CELL_ROTATED)
-  {
-    Point2f center((tl.x + br.x)/2.0f, (tl.y + br.y)/2.0f);
-    center = rotn(center);
-    Size2f size(br.x - tl.x, tl.y - br.y);
-    RotatedRect rrect(center, size, ANGLE_DEG);
-    draw_rotrect(img, rrect, fillColor, CV_FILLED);
-  }
-}
-#endif
 
 static void
 show_score(Mat& img, VGame& vg)
@@ -577,8 +474,6 @@ int main(int argc, char *argv[])
   if (opts.dogrid)
     drawGrid(img, opts.ngridx, opts.ngridy, gridColor, opts.gridThickness,
         opts.gridLabels);
-  // Flip vertical initially so text comes out up-right (since we flip later)
-  //cv::flip(img, img, 0);
 
   // Play the game one round at a time.
   VGame vg(users.begin(), users.end());
@@ -623,20 +518,12 @@ int main(int argc, char *argv[])
   }
   show_score(img, vg);
 
-  //auto player_sites = boost::join(vg.player(0), vg.player(1));
-  //auto all_points = boost::join(player_sites, users);
-  //Rect bbox = boundingRect(vector<Point>(all_points.begin(), all_points.end()));
-  //img = finish_img(img, bbox, resolution);
-
-  // Now that we've flipped the image draw the user point labels
-  // so they are upright.
   if (opts.userLabels)
   {
     unsigned int user_idx = 0u;
     for (auto uit = users.begin(); uit != users.end(); ++uit)
     {
       Point up = check_rot(*uit);
-      //up.y = resolution.height - up.y;
       putText(img, to_string(user_idx++),
           Point(up.x + FONT_XSPACE, up.y - FONT_YSPACE),
           FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
