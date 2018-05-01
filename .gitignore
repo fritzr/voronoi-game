@@ -35,3 +35,7 @@ build/
 
 # Vim swap files
 .*.sw*
+
+# Images
+*.png
+*.jpg
