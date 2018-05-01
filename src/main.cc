@@ -474,6 +474,8 @@ int main(int argc, char *argv[])
   // We got resolution (x, y) as (width, height); flip to (rows, cols)
   Size resolution(opts.screenWidth, opts.screenHeight);
   Mat img(resolution.height, resolution.width, CV_8UC3);
+  // White background
+  img.setTo(Scalar::all(0xff));
 
   if (opts.debug)
     cout << "canvas size " << img.cols << " x " << img.rows << endl;
