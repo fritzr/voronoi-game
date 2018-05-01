@@ -148,7 +148,7 @@ static const Scalar gridColor(Scalar::all(0xff)); // white
 static const int FONT = FONT_HERSHEY_SCRIPT_SIMPLEX;
 static const double FONT_SCALE = 0.5;
 static const int FONT_THICKNESS = 1;
-static const Scalar FONT_COLOR(Scalar::all(0xff)); // white
+static const Scalar FONT_COLOR(Scalar::all(0)); // black
 const int FONT_XSPACE = 10;
 const int FONT_YSPACE = 10;
 
@@ -501,29 +501,23 @@ int main(int argc, char *argv[])
   putText(img, "P2", Point(FONT_XSPACE+40, 2*FONT_YSPACE),
       FONT, FONT_SCALE, P2COLOR, FONT_THICKNESS);
 
-  unsigned int turns_remaining = (unsigned int)(opts.rounds != 0);
-  unsigned int rounds_per_turn = opts.rounds;
-  if (opts.interactive)
-  {
-    turns_remaining = opts.rounds;
-    rounds_per_turn = 1u;
-  }
-  Scalar pcolor = P1COLOR;
+  unsigned int turns_remaining = opts.rounds;
+  unsigned int rounds_per_turn = 1u;
   while (turns_remaining--)
   {
     show_score(img, vg);
-    pcolor = (vg.next_round() % 2 == 0) ? P2COLOR : P1COLOR;
+    Scalar pcolor = (vg.next_round() % 2 == 0) ? P2COLOR : P1COLOR;
     unsigned int nextp = vg.next_player().id();
     Point2f next_facility = vg.play_round(rounds_per_turn);
     cout << "player " << nextp << " solution at " << next_facility << endl;
     if (opts.interactive)
     {
-      // First show a white circle...
+      // First show the next solution circle.
       circle(img, next_facility, 10, FONT_COLOR, -1);
       imshow("output", img);
       waitKey(0);
     }
-    // Then show it as the right color once we've moved on.
+    // Show the solution as the right player's color.
     circle(img, next_facility, 10, pcolor, -1);
   }
   show_score(img, vg);
