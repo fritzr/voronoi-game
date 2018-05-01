@@ -134,6 +134,7 @@ struct options_t
   unsigned int rounds = 1u;
   bool userLabels = false;
   bool interactive = false;
+  string output_path;
 
   string users_path;
   string p1sites_path;
@@ -198,6 +199,8 @@ usage(const char *prog, const char *errmsg)
     << "  -p N			Play N rounds of the game (default: 1)." << endl
     << "  -i			Play interactively (default: no)" << endl
     << "  -I			Do not play interactively (default)" << endl
+    << "  -o FILE		Output image to file instead of screen." << endl
+    << "			This implies -I." << endl
     << endl
     ;
   if (errno) {
@@ -226,7 +229,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:iI";
+static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:iIo:";
 
 // Parses options and sets the global options structure.
 static void
@@ -280,6 +283,8 @@ get_options(int argc, char *argv[], options_t &o)
       o.interactive = true; break;
     case 'I':
       o.interactive = false; break;
+    case 'o':
+      o.output_path = string(optarg); break;
     case 'h':
       usage(argv[0]);
     case ':':
@@ -313,6 +318,9 @@ get_options(int argc, char *argv[], options_t &o)
   // Unlimited screen size when set to zero.
   if (o.screenHeight == 0) o.screenHeight = INT_MAX;
   if (o.screenWidth == 0) o.screenWidth = INT_MAX;
+
+  // Disable interactive mode with file output.
+  if (!o.output_path.empty()) o.interactive = false;
 
   o.users_path = string(argv[optind]);
   o.p1sites_path = string(argv[optind+1]);
@@ -530,8 +538,13 @@ int main(int argc, char *argv[])
     }
   }
 
-  imshow("output", img);
-  waitKey(0);
+  if (opts.output_path.empty())
+  {
+    imshow("output", img);
+    waitKey(0);
+  }
+  else
+    imwrite(opts.output_path, img);
 
   return 0;
 }
