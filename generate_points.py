@@ -39,8 +39,8 @@ def main(*args):
 
     # Parse options and args
     from getopt import getopt, GetoptError
-    sopts = 'hs:'
-    lopts = ['--help', '--seed=']
+    sopts = 'hs:W:H:'
+    lopts = ['help', 'seed=', 'width=', 'height=']
     o, args = getopt(args, sopts, lopts)
     o = dict(o)
 
@@ -50,8 +50,8 @@ def main(*args):
     if len(args) != 1:
         usage('Wrong number of arguments.')
     seed = int(option(o, '-s', '--seed') or time.time())
-    width = int(option(o, '-w', '--width') or 800)
-    height = int(option(o, '-h', '--height') or 800)
+    width = int(option(o, '-W', '--width') or 800)
+    height = int(option(o, '-H', '--height') or 800)
     npoints = int(args[0], 0)
 
     random.seed(seed)
