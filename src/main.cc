@@ -133,6 +133,7 @@ struct options_t
   bool dumpGraph = false; // adjacency graph
   unsigned int rounds = 1u;
   bool userLabels = false;
+  bool interactive = false;
 
   string users_path;
   string p1sites_path;
@@ -200,6 +201,8 @@ usage(const char *prog, const char *errmsg)
     << endl
     << "  -r			Draw rects (default: none):" << endl
     << "  -p N			Play N rounds of the game (default: 1)." << endl
+    << "  -i			Play interactively (default: no)" << endl
+    << "  -I			Do not play interactively (default)" << endl
     << endl
     ;
   if (errno) {
@@ -228,7 +231,7 @@ getenum(int maxval, const char *instr, ostream &err, const char *errtype)
   return static_cast<T>(ival);
 }
 
-static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:";
+static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:iI";
 
 // Parses options and sets the global options structure.
 static void
@@ -278,14 +281,22 @@ get_options(int argc, char *argv[], options_t &o)
       o.dumpGraph = true; break;
     case 'p':
       o.rounds = strtoul(optarg, NULL, 0); break;
+    case 'i':
+      o.interactive = true; break;
+    case 'I':
+      o.interactive = false; break;
     case 'h':
       usage(argv[0]);
     case ':':
       errstr << "option -" << (char)opt << " missing argument";
       if (!opterr) opterr = 1;
       break;
+    case '?':
+      errstr << "unknown option -" << (char)optopt;
+      if (!opterr) opterr = 1;
+      break;
     default:
-      errstr << "unknown option -" << (char)opt;
+      errstr << "unknown return from getopt: " << opt;
       if (!opterr) opterr = 1;
       break;
     }
@@ -294,23 +305,17 @@ get_options(int argc, char *argv[], options_t &o)
     usage(argv[0], errstr.str().c_str());
   }
 
-  if (o.rounds != 0 && o.computeCell)
-    usage(argv[0], "-c and -p are mutually exclusive");
+  if (o.computeCell)
+    usage(argv[0], "-o is no longer implemented");
 
-  int nargs = 2;
-  if (o.rounds != 0)
-    nargs = 3;
-  if (argc - optind < 3) {
+  int nargs = 3;
+  if (argc - optind < nargs) {
     usage(argv[0], "not enough arguments");
   }
 
   // Unlimited screen size when set to zero.
   if (o.screenHeight == 0) o.screenHeight = INT_MAX;
   if (o.screenWidth == 0) o.screenWidth = INT_MAX;
-
-  if (o.debug) {
-    cout << "reading polygons from file '" << argv[optind] << "'" << endl;
-  }
 
   o.users_path = string(argv[optind]);
   o.p1sites_path = string(argv[optind+1]);
@@ -555,14 +560,10 @@ int main(int argc, char *argv[])
     cerr << "error: empty sites file (" << opts.p1sites_path << ")" << endl;
     exit(2);
   }
-
-  if (opts.rounds != 0)
-  {
-    readOrDie(opts.p2sites_path, back_inserter(p2sites));
-    if (p2sites.empty()) {
-      cerr << "error: empty sites file (" << opts.p2sites_path << ")" << endl;
-      exit(2);
-    }
+  readOrDie(opts.p2sites_path, back_inserter(p2sites));
+  if (p2sites.empty()) {
+    cerr << "error: empty sites file (" << opts.p2sites_path << ")" << endl;
+    exit(2);
   }
 
   // We got resolution (x, y) as (width, height); flip to (rows, cols)
@@ -595,19 +596,28 @@ int main(int argc, char *argv[])
   putText(img, "P2", Point(FONT_XSPACE+40, 2*FONT_YSPACE),
       FONT, FONT_SCALE, P2COLOR, FONT_THICKNESS);
 
-  unsigned int rounds_left = opts.rounds;
+  unsigned int turns_remaining = (unsigned int)(opts.rounds != 0);
+  unsigned int rounds_per_turn = opts.rounds;
+  if (opts.interactive)
+  {
+    turns_remaining = opts.rounds;
+    rounds_per_turn = 1u;
+  }
   Scalar pcolor = P1COLOR;
-  while (rounds_left--)
+  while (turns_remaining--)
   {
     show_score(img, vg);
     pcolor = (vg.next_round() % 2 == 0) ? P2COLOR : P1COLOR;
     unsigned int nextp = vg.next_player().id();
-    Point2f next_facility = vg.play_round(1);
+    Point2f next_facility = vg.play_round(rounds_per_turn);
     cout << "player " << nextp << " solution at " << next_facility << endl;
-    // First show a white circle...
-    circle(img, next_facility, 10, FONT_COLOR, -1);
-    imshow("output", img);
-    waitKey(0);
+    if (opts.interactive)
+    {
+      // First show a white circle...
+      circle(img, next_facility, 10, FONT_COLOR, -1);
+      imshow("output", img);
+      waitKey(0);
+    }
     // Then show it as the right color once we've moved on.
     circle(img, next_facility, 10, pcolor, -1);
   }
