@@ -32,6 +32,10 @@ else()
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 endif()
 
+if (${MAXRECT_DEBUG})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMAXRECT_DEBUG")
+endif()
+
 set(CXX_STATIC "-static-libgcc -static-libstdc++ ")
 if (GCC_VERSION VERSION_GREATER 5.0 AND GCC_VERSION VERSION_LESS 5.4)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_STATIC}")
