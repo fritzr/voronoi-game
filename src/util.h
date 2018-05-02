@@ -37,12 +37,32 @@ inline cv::Point2f rotateZ2f_pos(cv::Point2f pt) {
 }
 
 #include <random>
+#include <ctime>
+#include <type_traits>
+#ifdef DEBUG
+#include <iostream>
+#endif
 
-template<class Int>
-inline Int randint(Int min, Int max)
+typedef std::default_random_engine rng_type;
+extern rng_type* rng;
+
+template<class Type>
+inline Type randrange(Type min, Type max)
 {
-  static std::default_random_engine rand;
-  std::uniform_int_distribution<Int> distribution(min, max);
-  return distribution(rand);
-}
+  if (rng == nullptr)
+  {
+    auto seed = time(NULL);
+    rng = new rng_type(seed);
+#ifdef DEBUG
+    std::cerr << "using RNG seed: " << seed << std::endl;
+#endif
+  }
 
+  typedef typename std::conditional<std::is_integral<Type>::value,
+      std::uniform_int_distribution<Type>,
+      std::uniform_real_distribution<Type>
+    >::type distribution_type;
+
+  distribution_type distribution(min, max);
+  return distribution(*rng);
+}

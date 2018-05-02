@@ -139,6 +139,7 @@ struct options_t
   bool userLabels = false;
   bool interactive = false;
   string output_path;
+  long unsigned int seed = 0u;
 
   string users_path;
   string p1sites_path;
@@ -205,6 +206,8 @@ usage(const char *prog, const char *errmsg)
     << "  -I			Do not play interactively (default)" << endl
     << "  -o FILE		Output image to file instead of screen." << endl
     << "			This implies -I." << endl
+    << "  -s SEED		Seed the RNG with the given number." << endl
+    << "			Default is to use current Epoch time." << endl
     << endl
     ;
   if (errno) {
@@ -256,7 +259,7 @@ getenum(T maxval, const char *instr, ostream &err, const char *errtype)
   return T(ival);
 }
 
-static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:iIo:";
+static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:iIo:s:";
 
 // Parses options and sets the global options structure.
 static void
@@ -312,6 +315,12 @@ get_options(int argc, char *argv[], options_t &o)
       o.interactive = false; break;
     case 'o':
       o.output_path = string(optarg); break;
+    case 's':
+      if (rng != nullptr)
+        usage(argv[0], "-s given multiple times");
+      o.seed = getenum(ULONG_MAX, optarg, errstr, "seed");
+      rng = new rng_type(o.seed);
+      break;
     case 'h':
       usage(argv[0]);
     case ':':
@@ -480,6 +489,8 @@ show_score(Mat& img, VGame& vg)
   }
 }
 
+std::default_random_engine* rng = nullptr;
+
 int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
@@ -569,5 +580,7 @@ int main(int argc, char *argv[])
   else
     imwrite(opts.output_path, img);
 
+  if (rng != nullptr)
+    delete rng;
   return 0;
 }
