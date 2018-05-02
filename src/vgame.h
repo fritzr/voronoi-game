@@ -380,18 +380,25 @@ private:
     }
 #endif
 
+    // Instead of the center, choose a random point in the cell.
     rect_type solution = maxrect.cell(chosen_one);
-    point_type center(0, 0);
-    bp::center(center, solution);
+
+    coordinate_type randx = randrange(
+        bp::get(solution, bp::HORIZONTAL, bp::LOW),
+        bp::get(solution, bp::HORIZONTAL, bp::HIGH));
+    coordinate_type randy = randrange(
+        bp::get(solution, bp::VERTICAL, bp::LOW),
+        bp::get(solution, bp::VERTICAL, bp::HIGH));
+    point_type next(randx, randy);;
 #ifdef DEBUG
     // Dump our chosen solution.
     std::cerr << "chose [" << std::setw(2) << std::setfill(' ') << std::dec
-      << chosen_one << "] " << center << std::endl;
+      << chosen_one << "] " << next << std::endl;
 #endif
 
     // Make sure to rotate the solution point back to the original space, since
     // the solution space itself is rotated.
-    return rotateZ2f_neg(center);
+    return rotateZ2f_neg(next);
   }
 
 }; // end class VGame
