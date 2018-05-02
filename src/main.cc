@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <iterator>
 #include <cmath>
+#include <type_traits>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -116,6 +117,9 @@ enum DrawCell {
   CELL_BAD = 4,
 };
 
+static ColormapTypes COLORMAP_BAD
+  = static_cast<ColormapTypes>(((unsigned int)COLORMAP_PARULA) + 1);
+
 struct options_t
 {
   // Global configurable options
@@ -126,8 +130,8 @@ struct options_t
   bool debug = false;
   ColormapTypes colormap = COLORMAP_HOT;
   bool fill_inputs = false;
-  int screenWidth = 1920;
-  int screenHeight = 1080;
+  unsigned int screenWidth = 1920;
+  unsigned int screenHeight = 1080;
   DrawCell computeCell = CELL_NONE;
   DrawRects drawRects = RECTS_NONE;
   bool dumpGraph = false; // adjacency graph
@@ -213,20 +217,43 @@ usage(const char *prog, const char *errmsg)
   exit(1);
 }
 
+template <typename T>
+struct to_int {
+  static const bool signum = std::is_signed<T>::value;
+
+  typedef typename std::make_signed<T>::type signed_type;
+  typedef typename std::make_unsigned<T>::type unsigned_type;
+
+  typedef typename std::conditional<signum,
+      typename std::make_signed<T>::type,
+      typename std::make_unsigned<T>::type
+        >::type
+    type;
+
+  static inline type initval(void) {
+    if (signum)
+      return -1;
+    else
+      return 0u;
+  }
+};
 
 template <typename T>
 static T
-getenum(int maxval, const char *instr, ostream &err, const char *errtype)
+getenum(T maxval, const char *instr, ostream &err, const char *errtype)
 {
+  typedef typename to_int<T>::type int_type;
   istringstream in(instr);
-  int ival = -1;
+  const int_type initval = to_int<T>::initval();
+  int_type ival = initval;
+  int_type imax = int_type(maxval);
   in >> ival;
-  if (!in.eof() || in.fail() || ival < 0 || ival >= maxval) {
+  if (!in.eof() || in.fail() || ival < 0 || ival >= imax) {
     err << "bad value for " << errtype << ": '" << instr << "'";
     opterr = 1;
-    return static_cast<T>(-1);
+    return T(initval);
   }
-  return static_cast<T>(ival);
+  return T(ival);
 }
 
 static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:iIo:";
@@ -245,12 +272,12 @@ get_options(int argc, char *argv[], options_t &o)
     case 'F':
       o.fill_inputs = true; break;
     case 'C':
-      o.colormap = getenum<ColormapTypes>(13, optarg, errstr, "colormap");
+      o.colormap = getenum(COLORMAP_BAD, optarg, errstr, "colormap");
       break;
     case 'X':
-      o.ngridx = getenum<int>(INT_MAX, optarg, errstr, "X grid lines"); break;
+      o.ngridx = getenum(UINT_MAX, optarg, errstr, "X grid lines"); break;
     case 'Y':
-      o.ngridy = getenum<int>(INT_MAX, optarg, errstr, "Y grid lines"); break;
+      o.ngridy = getenum(UINT_MAX, optarg, errstr, "Y grid lines"); break;
     case 'g':
       o.dogrid = true; break;
     case 'G':
@@ -264,16 +291,16 @@ get_options(int argc, char *argv[], options_t &o)
     case 'U':
       o.userLabels = false; break;
     case 'T':
-      o.gridThickness = getenum<int>(INT_MAX, optarg, errstr, "grid thickness");
+      o.gridThickness = getenum(INT_MAX, optarg, errstr, "grid thickness");
       break;
     case 'W':
-      o.screenWidth = getenum<int>(INT_MAX, optarg, errstr, "screen width");
+      o.screenWidth = getenum(UINT_MAX, optarg, errstr, "screen width");
       break;
     case 'H':
-      o.screenHeight = getenum<int>(INT_MAX, optarg, errstr, "screen height");
+      o.screenHeight = getenum(UINT_MAX, optarg, errstr, "screen height");
       break;
     case 'r':
-      o.drawRects = getenum<DrawRects>(RECTS_BAD, optarg, errstr, "rect type");
+      o.drawRects = getenum(RECTS_BAD, optarg, errstr, "rect type");
       break;
     case 'j':
       o.dumpGraph = true; break;
@@ -316,8 +343,8 @@ get_options(int argc, char *argv[], options_t &o)
   }
 
   // Unlimited screen size when set to zero.
-  if (o.screenHeight == 0) o.screenHeight = INT_MAX;
-  if (o.screenWidth == 0) o.screenWidth = INT_MAX;
+  if (o.screenHeight == 0) o.screenHeight = UINT_MAX;
+  if (o.screenWidth == 0) o.screenWidth = UINT_MAX;
 
   // Disable interactive mode with file output.
   if (!o.output_path.empty()) o.interactive = false;
