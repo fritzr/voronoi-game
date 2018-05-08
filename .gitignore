@@ -39,3 +39,6 @@ build/
 # Images
 *.png
 *.jpg
+
+# Python bytecode
+*.pyc
