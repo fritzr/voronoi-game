@@ -73,6 +73,15 @@ POLYGON OPTIONS are:
 -r,--inner-radius=N
 -R,--outer-radius=N
     Average radius of the inner and outer rings. Default 40 and 80.
+-t,--triangulate
+    Triangulate the generated polygons and output triangles instead. The
+    output format of each polygon is as follows:
+    N
+    v00 v01 v02
+    v10 v11 v12
+    ...
+    Where N is the number of triangles to follow, and each line until the next
+    polygon describes one triangle.
 -v,--variance=param1:value1[,param2:value2[,...]]
     Variance of polygon parameters. Parameter names should be the same as the
     option names above (short or long) with no dashes. The value given is the
@@ -110,6 +119,7 @@ _common_flags = [
 # Polygon options
 _polygon_flags = [
     ('P', 'polygons'),
+    ('t', 'triangulate'),
     ('d:', 'directions='),
     ('n:', 'vertices='),
     ('r:', 'inner-radius='),
@@ -250,7 +260,7 @@ class point(object):
 
 class polygon(object):
     __slots__ = ('center', 'nspikes', 'nvertices', 'inner', 'outer', 'angle',
-            'points', 'bbox')
+            'points', 'bbox', 'triangles')
     def __init__(self, center, variables):
         self.center = center
         # Get a random number of directional spikes and total vertices
@@ -265,6 +275,20 @@ class polygon(object):
         # Generate points
         self.points = self.generate_points()
         self.bbox = boundingRect(self.points)
+        self.triangles = None # list() when triangulated
+
+    def triangulate(self):
+        """Triangulate the polygon."""
+        from polygon_triangulate import polygon_triangulate
+        self.triangles = polygon_triangulate(self.npoints, *zip(*self.points))
+        return self.triangulated
+
+    @property
+    def triangulated(self):
+        return self.triangles is not None
+    @property
+    def npoints(self):
+        return len(self.points)
 
     def generate_points(self):
         # Store points as (angle, magnitude) for easy angle-sort.
@@ -336,9 +360,14 @@ class polygon(object):
     def __repr__(self):
         return '<polygon:' + str(len(self.points)) + '>'
     def write(self, ostream):
-        ostream.write(str(len(self.points)) + '\n')
-        for px, py in self.points:
-            ostream.write('{} {}\n'.format(px, py))
+        if self.triangulated:
+            ostream.write(str(len(self.triangles)) + '\n')
+            for v0, v1, v2 in self.triangles:
+                ostream.write('{} {} {}\n'.format(v0, v1, v2))
+        else:
+            ostream.write(str(len(self.points)) + '\n')
+            for px, py in self.points:
+                ostream.write('{} {}\n'.format(px, py))
 
 class file_iter(object):
     """Iterate over file objects with the given base path and extension,
@@ -452,6 +481,11 @@ def main(*args):
     randvars['angle'] = random_variable(0, variance['angle'])
     global polygon
     polygons = [polygon(center, randvars) for center in points]
+
+    # See if we want to triangulate the polygons first.
+    triangulate = opts.get('triangulate', False)
+    for poly in (polygons if triangulate else []):
+        poly.triangulate()
 
     # Now output polygons. Adjust them first so they don't leave our bounds.
     # If we are using multifile, also output a line which can be used to
