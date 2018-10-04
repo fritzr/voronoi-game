@@ -1,0 +1,63 @@
+/********************************************************************
+
+    Quaternion.cpp    Source File
+
+    Jyh-Ming Lien 03/30/2002
+    Computer Science.
+    Texas A&M University
+
+*********************************************************************/
+#include "Quaternion.h"
+
+namespace mathtool{
+
+    //
+    //from Jonathan Blow
+    //Understanding Slerp, Then Not Using It
+    //
+    Quaternion slerp(const Quaternion& q0, const Quaternion& q1, mpreal t)
+    {
+        // v0 and v1 should be unit length or else
+        // something broken will happen.
+
+        // Compute the cosine of the angle between the two vectors.
+        const mpreal dot = q0.getReal()*q1.getReal()+q0.getComplex()*q1.getComplex();
+        if(dot>=1) return q0;//q0==q1
+
+        const mpreal DOT_THRESHOLD = 0.9999995f;
+        if (dot > DOT_THRESHOLD) {
+            // If the inputs are too close for comfort, linearly interpolate
+            // and normalize the result.
+            Quaternion result=q0+(q1-q0)*t.toDouble();
+            result.normalize();
+            return result;
+        }
+
+        //Clamp(dot, -1, 1);                 // Robustness: Stay within domain of acos()
+        mpreal theta_0 = acos(dot);          // theta_0 = angle between input vectors
+        mpreal theta = (theta_0*t);    // theta = angle between v0 and result 
+
+        Quaternion q2 = q1-q0*dot.toDouble();
+        q2.normalize();              // { v0, v2 } is now an orthonormal basis
+
+        return q0*cos(theta.toDouble())+q2*sin(theta.toDouble());
+    }
+
+    istream& operator>>(istream & in, Quaternion & q )
+    {
+        in>>q.m_s>>q.m_v;
+        return in;
+    }
+
+    ostream& operator<<(ostream & out, const Quaternion & q )
+    {
+        out<<q.m_s<<" "<<q.m_v;
+        return out;
+    }
+
+    Quaternion operator*(const Vector3d & v, const Quaternion & q2)
+    {
+        Quaternion q1(0,v);
+        return q1*q2;
+    }
+}
