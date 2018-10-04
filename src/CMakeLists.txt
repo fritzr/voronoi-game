@@ -1,5 +1,6 @@
 find_package(OpenCV REQUIRED)
 find_package(Boost REQUIRED)
+find_package(FIST REQUIRED)
 
 # require boost 1.47.0 for polygon and geometry packages
 if (Boost_VERSION LESS 105200)
@@ -25,6 +26,10 @@ endif()
 
 set(LIB_INCLUDE "${CMAKE_SOURCE_DIR}/lib")
 
+link_directories(
+  ${FIST_LIBRARY_DIR}
+)
+
 include_directories(
   ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
@@ -49,6 +54,7 @@ add_definitions(-Wno-parentheses)
 target_link_libraries(${TEST_PROG}
   ${OpenCV_LIBS}
   ${Boost_LIBRARIES}
+  ${FIST_LIBRARY}
   )
 
 #target_link_libraries(l23test ${Boost_LIBRARIES} )

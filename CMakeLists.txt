@@ -5,6 +5,8 @@ cmake_minimum_required(VERSION 2.8.12)
 #include(cotire)
 #cmake_policy(POP)
 
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/Modules")
+
 project(voronoi-game)
 if(NOT WIN32 AND NOT WIN64 AND NOT APPLE)
   set(CMAKE_CXX_COMPILER "g++")
