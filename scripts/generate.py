@@ -271,16 +271,17 @@ def write_points(shp, point_list):
         shp.point(px, py)
         shp.record(pi)
 
-def write_poly_layers(shp, layer_list):
+def write_poly_layers(shp, layer_list, opts):
     shp.field('pointIndex', 'N')
     npoly = 0
     for idx, layer in enumerate(layer_list):
-        npoly += write_polygons(shp, idx, layer)
+        npoly += write_polygons(shp, idx, layer, opts)
     return npoly # number of polygons written
 
-def write_polygons(shp, pidx, polygon_list):
+def write_polygons(shp, pidx, polygon_list, opts):
     # All our polygons only have one ring (no holes).
     for poly in polygon_list:
+        poly.adjust(opts.bbox)
         shp.poly([list(poly)])
         shp.record(pidx)
     return len(polygon_list) # number of polygons written
@@ -464,7 +465,7 @@ class polygon(object):
                 in sorted(self.polar, key=itemgetter(0), reverse=True)]
         return self.points
 
-    def _translafe(self, pt):
+    def _translate(self, pt):
         """Translate without recomputing the bounding box."""
         if isinstance(pt, (tuple, list)):
             pt = point(*pt)
@@ -519,10 +520,10 @@ class polygon(object):
             if self.max(X) > bbox[X][1]:
                 self._translate((bbox[X][1] - self.max(X), 0))
                 continue
-            if self.min(Y) < 0:
+            if self.min(Y) < bbox[Y][0]:
                 self._translate((0, bbox[Y][0] - self.min(Y)))
                 continue
-            if self.max(Y) > height:
+            if self.max(Y) > bbox[Y][1]:
                 self._translate((0, bbox[Y][1] - self.max(Y)))
                 continue
 
@@ -642,7 +643,7 @@ def main(*args):
         layers = [p.layer() for p in polygons]
         npolys = 0
         with ShapefileWriter(opts.poly_file, shapefile.POLYGON) as shp:
-            npolys = write_poly_layers(shp, layers)
+            npolys = write_poly_layers(shp, layers, opts)
         echo_shapefiles(npolys, 'polygons', opts.poly_file)
 
     # Graph them if we want.
