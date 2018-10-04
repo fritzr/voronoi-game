@@ -483,9 +483,20 @@ class polygon(object):
         return self.bbox[which][1]
 
     @property
+    def xmin(self):
+        return self.min(X)
+    @property
+    def xmax(self):
+        return self.max(X)
+    @property
+    def ymin(self):
+        return self.min(Y)
+    @property
+    def ymax(self):
+        return self.max(Y)
+    @property
     def xspan(self):
         return self.max(X) - self.min(X)
-
     @property
     def yspan(self):
         return self.max(Y) - self.min(Y)
@@ -501,33 +512,23 @@ class polygon(object):
         self.bbox = boundingRect(self.points)
 
     def adjust(self, bbox):
-        """Translate and scale such that the entire polygon lies inside a given
-        bounding box.
-        """
-        # First scale our points so that we fit in the box.
-        xfactor = (bbox[X][1] - bbox[X][0]) / self.xspan
-        yfactor = (bbox[Y][1] - bbox[Y][0]) / self.yspan
-        factor = min(xfactor, yfactor)
-        if factor < 1:
-            self._scale(fact)
+        """Clip vertices so that they lie in the given bounding box."""
+        xmin, xmax = bbox[X]
+        ymin, ymax = bbox[Y]
+        for pi, pt in enumerate(self.points):
+            if pt.x > xmax:
+                pt.x = xmax
+            elif pt.x < xmin:
+                pt.x = xmin
+            if pt.y > ymax:
+                pt.y = ymax
+            elif pt.y < ymin:
+                pt.y = ymin
 
-        # Then translate so we lie inside the bounding box.
-        # We are lazy so we adjust each bound one-by-one in four passes.
-        for i in xrange(4):
-            if self.min(X) < bbox[X][0]:
-                self._translate((bbox[X][0] - self.min(X), 0))
-                continue
-            if self.max(X) > bbox[X][1]:
-                self._translate((bbox[X][1] - self.max(X), 0))
-                continue
-            if self.min(Y) < bbox[Y][0]:
-                self._translate((0, bbox[Y][0] - self.min(Y)))
-                continue
-            if self.max(Y) > bbox[Y][1]:
-                self._translate((0, bbox[Y][1] - self.max(Y)))
-                continue
-
-        self.bbox = boundingRect(self.points)
+        self.bbox = (
+            (min(self.xmin, xmin), max(self.xmax, xmax)),
+            (min(self.ymin, ymin), max(self.ymax, ymax)),
+        )
 
     def layer(self):
         """Create and return a layer of n cocentric polygons (as lists of
@@ -538,7 +539,7 @@ class polygon(object):
         factor = 1.0 + self.layer_factor()
 
         # Scale and copy each remaining layer.
-        nlayers = max(1, self.layers() - 1) - 1
+        nlayers = max(1, self.layers()) - 1
         for ln in xrange(nlayers):
             newpoly = polygon.copy_of(self)
             newpoly.scale(factor)
