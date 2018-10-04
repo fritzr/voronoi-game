@@ -15,11 +15,17 @@ import math
 from operator import itemgetter
 import argparse
 import traceback
+import shlex
 
 import shapefile
 
 if sys.version_info.major > 2:
     xrange = range
+
+if sys.hexversion >= 0x3030000:
+    from shlex import quote
+else:
+    from pipes import quote
 
 _shapefile_major_version = int(shapefile.__version__.split('.')[0])
 if _shapefile_major_version < 2:
@@ -81,12 +87,12 @@ _polyparams = [
         " spikes. This option has no effect; it is only used with --variance."),
     PolygonParameter('d', 'directions', int, 5, 2,
        "Number of directional spikes. Default is %(default)d."),
-    PolygonParameter('n', 'vertices', int, None, 3,
+    PolygonParameter('n', 'vertices', int, -1, 3,
         "Average number of vertices per polygon."
         " Default is twice the number of directions (from -d)."),
-    PolygonParameter('r', 'inner-radius', float, 1920.0, 10.0,
+    PolygonParameter('r', 'inner-radius', float, 40.0, 5.0,
         "Average radius of the inner ring. Default %(default)5.1f."),
-    PolygonParameter('R', 'outer-radius', float, 1024.0, 10.0,
+    PolygonParameter('R', 'outer-radius', float, 80.0, 10.0,
         "Average radius of the outer ring. Default %(default)5.1f."),
     PolygonParameter('l', 'layers', int, 1, 0,
         "Number of 'layers' for each polygon. N layers of concentric"
@@ -102,7 +108,7 @@ _polyparams_lookup.update((param.lopt, param) for param in _polyparams)
 # Used mostly for the help message on '--variance'
 _defaults = ['{0}:{1!r}'.format(param.sopt, param.variance)
         for param in _polyparams]
-_default_variance_string = ', '.join(_defaults)
+_default_variance_string = ','.join(_defaults)
 
 def parse_args(*args):
     p = argparse.ArgumentParser(
@@ -150,9 +156,13 @@ the range shown:
     com.add_argument('-s', '--seed', type=int, default=int(1e6*time.time()),
             help='Seed the RNG with the given integer. Default current time.')
 
-    com.add_argument('-W', '--width', type=float, default=1920.0,
+    com.add_argument('-x', '--min-x', type=float, default=0.0,
+            help='Min X coordinate of any point. Default %(default)5.1f.')
+    com.add_argument('-X', '--max-x', type=float, default=1920.0,
             help='Max X coordinate of any point. Default %(default)5.1f.')
-    com.add_argument('-H', '--height', type=float, default=1080.0,
+    com.add_argument('-y', '--min-y', type=float, default=0.0,
+            help='Min Y coordinate of any point. Default %(default)5.1f.')
+    com.add_argument('-Y', '--max-y', type=float, default=1080.0,
             help='Max X coordinate of any point. Default %(default)5.1f.')
     com.add_argument('-o', '--output', metavar='FILE', default='./shape',
             help="Write using basename FILE. Default is '%(default)s'."
@@ -184,6 +194,15 @@ the random range [3,7]). Default string is: {0!r}
     p.add_argument('npoints', type=int, help="Number of points to generate.")
 
     opts = p.parse_args(args)
+    if opts.vertices < 0:
+        opts.vertices = 2 * opts.directions
+
+    # Bounding box.
+    opts.bbox = (
+        ( opts.min_x, opts.max_x ),
+        ( opts.min_y, opts.max_y ),
+    )
+
     if opts.debug:
         import pdb
         pdb.set_trace()
@@ -211,6 +230,13 @@ the random range [3,7]). Default string is: {0!r}
         pv = ply.parse_args(variance_args)
 
     for param in _polyparams:
+        # Set value from regular options.
+        if hasattr(opts, param.sopt):
+            param.value = getattr(opts, param.sopt)
+        if hasattr(opts, param.lopt):
+            param.value = getattr(opts, param.lopt)
+
+        # Set variance from variance options.
         if hasattr(pv, param.sopt):
             param.variance = getattr(pv, param.sopt)
         elif hasattr(pv, param.lopt):
@@ -225,9 +251,19 @@ the random range [3,7]). Default string is: {0!r}
 
     return opts
 
-def generate_points(npoints, width=800.0, height=800.0):
-    return [point(random.random()*width, random.random()*height)
-            for n in xrange(npoints)]
+def randrangef(min_, max_):
+    span = max_ - min_
+    return min_ + (random.random() * span)
+
+def generate_points(npoints, bbox):
+    """Generate points in the given bounding box, which is a simple list as
+    follows:
+        [ [ min x , max x ],
+          [ min y , max y ] ]
+    """
+    return [point(randrangef(bbox[X][0], bbox[X][1]),
+                  randrangef(bbox[Y][0], bbox[Y][1]))
+              for _ in xrange(npoints)]
 
 def write_points(shp, point_list):
     shp.field('pointIndex', 'N')
@@ -237,14 +273,17 @@ def write_points(shp, point_list):
 
 def write_poly_layers(shp, layer_list):
     shp.field('pointIndex', 'N')
+    npoly = 0
     for idx, layer in enumerate(layer_list):
-        write_polygons(shp, idx, layer)
+        npoly += write_polygons(shp, idx, layer)
+    return npoly # number of polygons written
 
 def write_polygons(shp, pidx, polygon_list):
     # All our polygons only have one ring (no holes).
     for poly in polygon_list:
         shp.poly([list(poly)])
         shp.record(pidx)
+    return len(polygon_list) # number of polygons written
 
 class random_variable(object):
     __slots__ = ('center', 'variance', 'type')
@@ -261,7 +300,7 @@ class random_variable(object):
     def __repr__(self):
         return '<random['+repr(self.start)+','+repr(self.stop)+']>'
     def __call__(self):
-        return self.type(self.start + (random.random() * self.stop))
+        return self.type(randrangef(self.start, self.stop))
 
 def deg2rad(degrees):
     return (degrees * math.pi) / 180.0
@@ -281,7 +320,10 @@ def boundingRect(points):
         if pt.y < mincoord.y: mincoord.y = pt.y
         if pt.x > maxcoord.x: maxcoord.x = pt.x
         if pt.y > maxcoord.y: maxcoord.y = pt.y
-    return (mincoord, maxcoord) # bottom-left, top-right
+    return (
+        ( mincoord.x, maxcoord.x ),
+        ( mincoord.y, maxcoord.y ),
+    )
 
 class point(object):
     __slots__ = ('x', 'y')
@@ -338,34 +380,52 @@ class point(object):
         return '<point({}, {})>'.format(self.x, self.y)
 
 class polygon(object):
-    def __init__(self, center, variables):
-        self.center = center
-        # Get a random number of directional spikes and total vertices
-        self.nspikes = variables.directions()
-        self.nvertices = max(self.nspikes+1, variables.vertices())
-        # Get generators for inner/outer ring points and angle steps
-        self.inner = variables.inner_radius
-        self.outer = variables.outer_radius
-        # Fixup the angle variable based on the number of directions.
-        self.angle = variables.angle
-        self.angle.center = 360. / self.nspikes
-        # Generate points
-        self.points = self.generate_points()
-        self.bbox = boundingRect(self.points)
-        self.triangles = None # list() when triangulated
-
     @classmethod
     def copy_of(cls, other_polygon):
         """Return a polygon which is a copy of another polygon."""
         self = polygon.__new__(cls)
         self.center = other_polygon.center
+        self.nspikes = other_polygon.nspikes
+        self.nvertices = other_polygon.nvertices
         self.points = type(other_polygon.points)(other_polygon.points)
         self.bbox = type(other_polygon.bbox)(other_polygon.bbox)
         self.triangles = None
+        self.variables = argparse.Namespace()
         for varname, ov in other_polygon.__dict__.items():
             if isinstance(ov, random_variable):
-                setattr(self, varname, random_variable(ov.center, ov.variance))
+                setattr(self.variables, varname,
+                        random_variable(ov.center, ov.variance))
         return self
+
+    def __init__(self, center, variables):
+        self.center = center
+        # Get a random number of directional spikes and total vertices
+        self.variables = variables
+        self.nspikes = self.variables.directions()
+        self.nvertices = max(2*self.nspikes+1, variables.vertices())
+        # Fixup the angle variable based on the number of directions.
+        self.angle.center = 360. / self.nspikes
+
+        # Generate points
+        self.points = self.generate_points()
+        self.bbox = boundingRect(self.points)
+        self.triangles = None # list() when triangulated
+
+    @property
+    def inner(self):
+        return self.variables.inner_radius
+    @property
+    def outer(self):
+        return self.variables.outer_radius
+    @property
+    def angle(self):
+        return self.variables.angle
+    @property
+    def layers(self):
+        return self.variables.layers
+    @property
+    def layer_factor(self):
+        return self.variables.layer_factor
 
     def triangulate(self):
         """Triangulate the polygon."""
@@ -404,66 +464,86 @@ class polygon(object):
                 in sorted(self.polar, key=itemgetter(0), reverse=True)]
         return self.points
 
-    def translate(self, pt):
-        """Translate all points by the given point or scalar."""
+    def _translafe(self, pt):
+        """Translate without recomputing the bounding box."""
         if isinstance(pt, (tuple, list)):
             pt = point(*pt)
         self.center += pt
         self.points = [p + pt for p in self.points]
+
+    def translate(self, pt):
+        """Translate all points by the given point or scalar."""
+        self._translate(pt)
         self.bbox = boundingRect(self.points)
 
     def min(self, which):
-        return self.bbox[0][which]
+        return self.bbox[which][0]
     def max(self, which):
-        return self.bbox[1][which]
+        return self.bbox[which][1]
+
     @property
-    def width(self):
+    def xspan(self):
         return self.max(X) - self.min(X)
+
     @property
-    def height(self):
+    def yspan(self):
         return self.max(Y) - self.min(Y)
+
+    def _scale(self, factor):
+        """Scale the polygon without recomputing the bounding box."""
+        for pti, pt in enumerate(self.points):
+            self.points[pti] = self.center + ((pt - self.center) * factor)
 
     def scale(self, factor):
         """Scale the polygon, anchoring at the center point."""
-        for pti, pt in enumerate(self.points):
-            self.points[pti] = self.center + ((pt - self.center) * factor)
+        self._scale(factor)
         self.bbox = boundingRect(self.points)
 
-    def adjust(self, width, height):
-        """Adjust so that the entire polygon fits inside a widthxheight box."""
-        # First scale the box so that it fits in WxH if necessary.
-        wfactor = width / float(self.width)
-        hfactor = height / float(self.height)
-        fact = min(wfactor, hfactor)
-        if fact < 1:
-            self.scale(fact)
-        # Then translate the box so it lies inside the WxH box: need 4 passes.
+    def adjust(self, bbox):
+        """Translate and scale such that the entire polygon lies inside a given
+        bounding box.
+        """
+        # First scale our points so that we fit in the box.
+        xfactor = (bbox[X][1] - bbox[X][0]) / self.xspan
+        yfactor = (bbox[Y][1] - bbox[Y][0]) / self.yspan
+        factor = min(xfactor, yfactor)
+        if factor < 1:
+            self._scale(fact)
+
+        # Then translate so we lie inside the bounding box.
+        # We are lazy so we adjust each bound one-by-one in four passes.
         for i in xrange(4):
-            if self.min(X) < 0:
-                self.translate((-self.min(X), 0))
+            if self.min(X) < bbox[X][0]:
+                self._translate((bbox[X][0] - self.min(X), 0))
                 continue
-            if self.max(X) > width:
-                self.translate((width - self.max(X), 0))
+            if self.max(X) > bbox[X][1]:
+                self._translate((bbox[X][1] - self.max(X), 0))
                 continue
             if self.min(Y) < 0:
-                self.translate((0, -self.min(Y)))
+                self._translate((0, bbox[Y][0] - self.min(Y)))
                 continue
             if self.max(Y) > height:
-                self.translate((0, height - self.max(Y)))
+                self._translate((0, bbox[Y][1] - self.max(Y)))
                 continue
 
-    def layer(self, n=1, step=2.0):
+        self.bbox = boundingRect(self.points)
+
+    def layer(self):
         """Create and return a layer of n cocentric polygons (as lists of
         points, not polygon objects) starting with us.
         """
         # The polygon itself is the 'first layer'.
         layer = [self]
-        factor = 1.0 + step
-        for ln in xrange(n):
+        factor = 1.0 + self.layer_factor()
+
+        # Scale and copy each remaining layer.
+        nlayers = max(1, self.layers() - 1) - 1
+        for ln in xrange(nlayers):
             newpoly = polygon.copy_of(self)
             newpoly.scale(factor)
-            factor += step
+            factor += self.layer_factor()
             layer.append(newpoly)
+
         return layer
 
     def __getitem__(self, idx):
@@ -533,8 +613,10 @@ def echo_shapefiles(n, things, path):
     basename = os.path.basename(path)
     filenames = [(basename + '.' + ext) for ext in ('shp', 'shx', 'dbf')]
     dirname = os.path.dirname(path)
-    print('Wrote {0} {1} to {2}/{{{3}}}'.format(
-        n, things, dirname, ', '.join(filenames)))
+    print('Wrote {0} to {1}/{{{2}}}'.format(
+        things, dirname, ', '.join(filenames)))
+    os.system("( shputils '{0}' 2>/dev/null | tail -n +2 ) && echo"
+            .format(quote(path)))
 
 def main(*args):
     # Parse options and args
@@ -545,7 +627,7 @@ def main(*args):
 
     # Generate random points -- write them if we want.
     random.seed(opts.seed)
-    points = list(generate_points(opts.npoints, opts.width, opts.height))
+    points = list(generate_points(opts.npoints, opts.bbox))
     if opts.point_file:
         with ShapefileWriter(opts.point_file, shapeType=shapefile.POINT) as shp:
             write_points(shp, points)
@@ -556,12 +638,12 @@ def main(*args):
     if opts.poly_file:
         # Random variables for each polygon parameter.
         polygons = [polygon(center, opts.variables) for center in points]
-        layers = [
-                p.layer(opts.variables.layers(), opts.variables.layer_factor())
-                for p in polygons]
+        # Layer parameters are taken from the random variables.
+        layers = [p.layer() for p in polygons]
+        npolys = 0
         with ShapefileWriter(opts.poly_file, shapefile.POLYGON) as shp:
-            write_poly_layers(shp, layers)
-        echo_shapefiles(opts.npoints*opts.layers, 'polygons', opts.poly_file)
+            npolys = write_poly_layers(shp, layers)
+        echo_shapefiles(npolys, 'polygons', opts.poly_file)
 
     # Graph them if we want.
     if opts.graph:
