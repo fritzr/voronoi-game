@@ -5,7 +5,12 @@ cmake_minimum_required(VERSION 2.8.12)
 #include(cotire)
 #cmake_policy(POP)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/Modules")
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake/Modules)
+
+# Force OpenCV to use 32-bit configs
+set(OpenCV_DIR /usr/lib/OpenCV)
+set(OpenCV_CONFIG /usr/lib/OpenCV/OpenCVConfig.cmake)
+set(OpenCV_CONFIG_PATH /usr/lib/OpenCV)
 
 project(voronoi-game)
 if(NOT WIN32 AND NOT WIN64 AND NOT APPLE)
@@ -37,6 +42,12 @@ endif()
 if (${MAXRECT_DEBUG})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMAXRECT_DEBUG")
 endif()
+
+# Unfortunately FIST is 32-bit so we must build everything in 32 bits
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32")
+set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32")
+set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -m32")
+set (CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -m32")
 
 set(CXX_STATIC "-static-libgcc -static-libstdc++ ")
 if (GCC_VERSION VERSION_GREATER 5.0 AND GCC_VERSION VERSION_LESS 5.4)

@@ -1,3 +1,5 @@
+set(CMAKE_SYSTEM_PROCESSOR "i686")
+
 find_package(OpenCV REQUIRED)
 find_package(Boost REQUIRED)
 find_package(FIST REQUIRED)
@@ -19,22 +21,28 @@ if (GCC_VERSION VERSION_GREATER 7.0)
 endif()
 
 # for debugging to dump cmake environment variables
-#get_cmake_property(_variableNames VARIABLES)
-#foreach (_variableName ${_variableNames})
-#  message(STATUS "${_variableName}=${${_variableName}}")
-#endforeach()
+get_cmake_property(_variableNames VARIABLES)
+foreach (_variableName ${_variableNames})
+  message(STATUS "${_variableName}=${${_variableName}}")
+endforeach()
 
 set(LIB_INCLUDE "${CMAKE_SOURCE_DIR}/lib")
 
 link_directories(
+  ${LIB_INCLUDE}
   ${FIST_LIBRARY_DIR}
 )
 
 include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}
   ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
   ${LIB_INCLUDE}
   )
+
+add_subdirectory(shapefile)
+add_subdirectory(shapelib)
+add_subdirectory(mathtool)
 
 set(TEST_PROG vgtest)
 
@@ -46,7 +54,6 @@ add_executable(${TEST_PROG}
   util.h
   main.h main.cc
 )
-#add_executable(l23test l23test.cc)
 
 # these are just annoying
 add_definitions(-Wno-parentheses)
@@ -55,11 +62,9 @@ target_link_libraries(${TEST_PROG}
   ${OpenCV_LIBS}
   ${Boost_LIBRARIES}
   ${FIST_LIBRARY}
-  )
-
-#target_link_libraries(l23test ${Boost_LIBRARIES} )
+  shapefile mathtool shapelib
+)
 
 #cotire(${TEST_PROG})
 
 install (TARGETS ${TEST_PROG} DESTINATION bin)
-#install (TARGETS l23test DESTINATION bin)

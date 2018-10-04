@@ -17,7 +17,6 @@
 */
 #include <math.h>
 #include "Basic.h"
-#include "mpreal.h"
 
 using namespace mpfr;
 
