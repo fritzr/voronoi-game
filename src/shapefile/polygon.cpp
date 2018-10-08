@@ -7,6 +7,8 @@
 #include "intersection.h"
 #include <vector>
 
+using namespace cv;
+
 #ifdef WIN32
 extern "C"{
 #include "triangulate.h"
@@ -25,7 +27,7 @@ ply_vertex::~ply_vertex()
 void ply_vertex::computeExtraInfo()
 {
     //compute normal direction
-	Vector2d v=next->pos-pos;
+	Vec2d v=next->pos-pos;
     if( v[0]==0 ){
         if(v[1]>0){ normal[0]=1; normal[1]=0; }
         else{ normal[0]=-1; normal[1]=0; }
@@ -38,10 +40,10 @@ void ply_vertex::computeExtraInfo()
         normal[1]=1;
         normal[0]=-(v[1]/v[0]);
     }
-    normal=normal.normalize();
+    normal=normalize(normal);
 
     //compute if left or right turn
-    Vector2d u=pos-pre->pos;
+    Vec2d u=pos-pre->pos;
     float z=u[0]*v[1]-u[1]*v[0];
 
     if(z<=0) reflex=true;
@@ -51,8 +53,8 @@ void ply_vertex::computeExtraInfo()
 void ply_vertex::negate()
 {
     normal=-normal;
-    pos[0]=-pos[0];
-    pos[1]=-pos[1];
+    pos.x=-pos.x;
+    pos.y=-pos.y;
 }
 
 void ply_vertex::reverse()
@@ -199,19 +201,19 @@ void c_ply::doInit()
 const Point2d& c_ply::getCenter()
 {
     if(radius<0){
-        center.set(0,0);
+        center = Point2d(0,0);
         ply_vertex * ptr=head;
         const Point2d& first=ptr->getPos();
         uint size=0;
         do{
             size++;
-            Vector2d v=ptr->getPos()-first;
-            center[0]+=v[0];
-            center[1]+=v[1];
+            Vec2d v=ptr->getPos()-first;
+            center.x+=v[0];
+            center.y+=v[1];
             ptr=ptr->getNext();
         }while(ptr!=head); //end while
-        center[0]=(center[0]/size)+first[0];
-        center[1]=(center[1]/size)+first[1];
+        center.x=(center.x/size)+first.x;
+        center.y=(center.y/size)+first.y;
 
         radius=0;
     }
@@ -246,19 +248,19 @@ void c_ply::reverse()
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void c_ply::translate(const Vector2d& v)
+void c_ply::translate(const Point2d& p)
 {
     ply_vertex * ptr=head;
     do{
-        ptr->translate(v);
+        ptr->translate(p);
         ptr=ptr->getNext();
     }while(ptr!=head); //end while
 
     //translate box
-    extra_info.box[0]+=v[0];
-    extra_info.box[1]+=v[0];
-    extra_info.box[2]+=v[1];
-    extra_info.box[3]+=v[1];
+    extra_info.box[0]+=p.x;
+    extra_info.box[1]+=p.x;
+    extra_info.box[2]+=p.y;
+    extra_info.box[3]+=p.y;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -270,7 +272,7 @@ float c_ply::getRadius()
     if(radius==0){
         ply_vertex * ptr=head;
         do{
-            float d=(center-ptr->getPos()).normsqr();
+            float d=cv::norm(Vec2d(center-ptr->getPos()), cv::NORM_L2SQR);
             if(d>radius) radius=d;
             ptr=ptr->getNext();
         }while(ptr!=head); //end while
@@ -284,16 +286,7 @@ float c_ply::getRadius()
 float c_ply::getArea()
 {
     if(area==-FLT_MAX){
-        area=0;
-        getCenter();
-        ply_vertex * ptr=head;
-        do{
-            ply_vertex * next=ptr->getNext();
-            const Point2d& p1=ptr->getPos();
-            const Point2d& p2=next->getPos();
-            area+=Area(p1.get(),p2.get(),center.get());
-            ptr=next;
-        }while(ptr!=head); //end while
+      area = cv::contourArea(all);
     }
 
     return area;
@@ -311,9 +304,9 @@ bool c_ply::enclosed(const Point2d& p)
         const Point2d& p1=all[tri.v[0]]->getPos();
         const Point2d& p2=all[tri.v[1]]->getPos();
         const Point2d& p3=all[tri.v[2]]->getPos();
-        double area1=Area(p1.get(),p2.get(),p.get());
-        double area2=Area(p2.get(),p3.get(),p.get());
-        double area3=Area(p3.get(),p1.get(),p.get());
+        double area1=Area(p1,p2,p);
+        double area2=Area(p2,p3,p);
+        double area3=Area(p3,p1,p);
         if(area1>=0 && area2>=0 && area3>=0) return true; //in
         if(area1<=0 && area2<=0 && area3<=0) return true; //in
     }
@@ -330,8 +323,8 @@ Point2d c_ply::findEnclosedPt()
         const Point2d& p1=head->getPos();
         const Point2d& p2=head->getNext()->getPos();
         Point2d pt;
-        pt[0]=(p1[0]+p2[0])/2;
-        pt[1]=(p1[1]+p2[1])/2;
+        pt.x=(p1.x+p2.x)/2;
+        pt.y=(p1.y+p2.y)/2;
         return pt;
     }
 
@@ -343,7 +336,7 @@ Point2d c_ply::findEnclosedPt()
         const Point2d& p1=all[tri.v[0]]->getPos();
         const Point2d& p2=all[tri.v[1]]->getPos();
         const Point2d& p3=all[tri.v[2]]->getPos();
-        double area=fabs(Area(p1.get(),p2.get(),p3.get()));
+        double area=fabs(Area(p1,p2,p3));
         if(area>largest_area){
             largest_area=area;
             largest_tri=i;
@@ -357,8 +350,8 @@ Point2d c_ply::findEnclosedPt()
     const Point2d& p3=(*this)[tri.v[2]]->getPos();
 
     Point2d pt;
-    pt[0]=(p1[0]+p2[0]+p3[0])/3;
-    pt[1]=(p1[1]+p2[1]+p3[1])/3;
+    pt.x=(p1.x+p2.x+p3.x)/3;
+    pt.y=(p1.y+p2.y+p3.y)/3;
 
     return pt;
 }
@@ -393,8 +386,8 @@ void c_ply::triangulate(vector<triangle>& tris)
              ply_vertex * ptr=getHead();
              do{
                  Point2d pt=ptr->getPos();
-                 V[i*2]=pt[0]-O[0];
-                 V[i*2+1]=pt[1]-O[1];
+                 V[i*2]=pt.x-O.x;
+                 V[i*2+1]=pt.y-O.y;
                  ptr=ptr->getNext();
                  i++;
              }while( ptr!=getHead() );
@@ -476,8 +469,8 @@ bool c_ply::identical(c_ply& other)
     bool found_first_match=false;
     do{
         const Point2d& pos=o_ptr->getPos();
-        double dx=fabs(pos[0]-head->getPos()[0]);
-        double dy=fabs(pos[1]-head->getPos()[1]);
+        double dx=fabs(pos.x-head->getPos().x);
+        double dy=fabs(pos.y-head->getPos().y);
 
         if( dx<SMALLNUMBER && dy<SMALLNUMBER){
             found_first_match=true;
@@ -501,8 +494,8 @@ bool c_ply::identical(c_ply& other)
         const Point2d& o_pos=o_ptr->getPos();
         const Point2d& pos=ptr->getPos();
 
-        double dx=fabs(pos[0]-o_pos[0]);
-        double dy=fabs(pos[1]-o_pos[1]);
+        double dx=fabs(pos.x-o_pos.x);
+        double dy=fabs(pos.y-o_pos.y);
 
         if( dx>SMALLNUMBER || dy>SMALLNUMBER){
             return false; //don't match
@@ -528,23 +521,23 @@ void c_plylist::buildBoxAndCenter()
 {
     //typedef list<c_ply>::iterator IT;
     box[0]=box[2]=FLT_MAX;
-    box[1]=box[3]=-FLT_MAX;
+    box[0]=box[3]=-FLT_MAX;
     for(iterator i=begin();i!=end();i++){
 
         ply_vertex * ptr=i->getHead();
         do{
             const Point2d& p=ptr->getPos();
-            if(p[0]<box[0]) box[0]=p[0];
-            if(p[0]>box[1]) box[1]=p[0];
-            if(p[1]<box[2]) box[2]=p[1];
-            if(p[1]>box[3]) box[3]=p[1];
+            if(p.x<box[0]) box[0]=p.x;
+            if(p.x>box[1]) box[1]=p.x;
+            if(p.y<box[2]) box[2]=p.y;
+            if(p.y>box[3]) box[3]=p.y;
             ptr=ptr->getNext();
         }
         while(ptr!=i->getHead()); //end while
     }
 
-    center[0]=(box[0]+box[1])/2;
-    center[1]=(box[2]+box[3])/2;
+    center.x=(box[0]+box[1])/2;
+    center.y=(box[2]+box[3])/2;
 
     is_buildboxandcenter_called=true;
 }
@@ -552,9 +545,9 @@ void c_plylist::buildBoxAndCenter()
 //
 // Compute the center and the box of a list of plys
 //
-void c_plylist::translate(const Vector2d& v)
+void c_plylist::translate(const Point2d& p)
 {
-    for(iterator i=begin();i!=end();i++) i->translate(v);
+    for(iterator i=begin();i!=end();i++) i->translate(p);
 }
 
 void c_polygon::reverse()
@@ -599,9 +592,9 @@ bool c_polygon::enclosed(const Point2d& p)
         const Point2d& p1=(*this)[tri.v[0]]->getPos();
         const Point2d& p2=(*this)[tri.v[1]]->getPos();
         const Point2d& p3=(*this)[tri.v[2]]->getPos();
-        double area1=Area(p1.get(),p2.get(),p.get());
-        double area2=Area(p2.get(),p3.get(),p.get());
-        double area3=Area(p3.get(),p1.get(),p.get());
+        double area1=Area(p1,p2,p);
+        double area2=Area(p2,p3,p);
+        double area3=Area(p3,p1,p);
         if(area1>=0 && area2>=0 && area3>=0) return true; //in
         if(area1<=0 && area2<=0 && area3<=0) return true; //in
     }
@@ -625,7 +618,7 @@ Point2d c_polygon::findEnclosedPt()
         const Point2d& p1=(*this)[tri.v[0]]->getPos();
         const Point2d& p2=(*this)[tri.v[1]]->getPos();
         const Point2d& p3=(*this)[tri.v[2]]->getPos();
-        double area=fabs(Area(p1.get(),p2.get(),p3.get()));
+        double area=fabs(Area(p1,p2,p3));
         if(area>largest_area){
             largest_area=area;
             largest_tri=i;
@@ -639,8 +632,8 @@ Point2d c_polygon::findEnclosedPt()
     const Point2d& p3=(*this)[tri.v[2]]->getPos();
 
     Point2d pt;
-    pt[0]=(p1[0]+p2[0]+p3[0])/3;
-    pt[1]=(p1[1]+p2[1]+p3[1])/3;
+    pt.x=(p1.x+p2.x+p3.x)/3;
+    pt.y=(p1.y+p2.y+p3.y)/3;
 
     return pt;
 }
@@ -683,8 +676,8 @@ void c_polygon::triangulate(vector<triangle>& tris)
              ply_vertex * ptr=ip->getHead();
              do{
                  Point2d pt=ptr->getPos();
-                 V[i*2]=pt[0]-O[0];
-                 V[i*2+1]=pt[1]-O[1];
+                 V[i*2]=pt.x-O.x;
+                 V[i*2+1]=pt.y-O.y;
                  ptr=ptr->getNext();
                  i++;
              }while( ptr!=ip->getHead() );
@@ -834,7 +827,7 @@ ostream& operator<<( ostream& os, c_ply& p)
     os<<p.getSize()<<" "<<((p.type==c_ply::PIN)?"in":"out")<<"\n";
     ply_vertex * ptr=p.head;
     do{
-        os<<ptr->getPos()[0]<<" "<<ptr->getPos()[1]<<"\n";
+        os<<ptr->getPos().x<<" "<<ptr->getPos().y<<"\n";
         ptr=ptr->getNext();
     }while(ptr!=p.head);
 

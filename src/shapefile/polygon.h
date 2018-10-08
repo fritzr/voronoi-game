@@ -10,17 +10,19 @@
 #pragma warning(disable : 4786)
 #endif
 
-#include <Point.h>
-#include <Vector.h>
-using namespace mathtool;
+#include "opencv_compat.h"
 
 #include <list>
 #include <vector>
 #include <cassert>
 #include <float.h>
+#include <iterator>
 using namespace std;
 
 typedef unsigned int uint;
+
+const float  PI2f = 6.2831853071794f;
+const double PI2d = 6.2831853071794;
 
 //
 //a triangle, used in triangulating a polygon
@@ -80,12 +82,12 @@ public:
     void setPos(const Point2d& p) { pos=p; }
     virtual const Point2d& getPos() const { return pos; }
 
-    void translate(const Vector2d& v){ pos=pos+v; }
+    void translate(const Point2d& v){ pos=pos+v; }
 
     virtual ply_vertex * getNext() const { return next; }
     virtual ply_vertex * getPre() const { return pre; }
 
-    const Vector2d& getNormal() const { return normal; }
+    const Vec2d& getNormal() const { return normal; }
     bool isReflex() const { return reflex; }
 
     //get extra information
@@ -104,7 +106,7 @@ private:
     Point2d pos;       //position
     ply_vertex * next; //next vertex in the polygon
     ply_vertex * pre;  //previous vertex in the polygon
-    Vector2d normal;   //normal, the segment normal from this v to the next.
+    Vec2d normal;   //normal, the segment normal from this v to the next.
     bool reflex;
     uint vid;
 };
@@ -114,6 +116,56 @@ private:
 //
 class c_ply{
 public:
+
+    template <typename Pt>
+      class iterator_ : public std::iterator<std::bidirectional_iterator_tag, Pt>
+    {
+    private:
+      ply_vertex *head_;
+      ply_vertex *cur_;
+
+    public:
+      typedef std::iterator<std::bidirectional_iterator_tag, Pt> super;
+      //typedef ... traits;
+      typedef typename super::value_type value_type;
+      typedef typename super::reference reference;
+      typedef typename super::pointer pointer;
+      typedef typename super::difference_type difference_type;
+      typedef size_t size_type;
+
+      iterator_(const c_ply &ply)
+        : head_(ply.head), cur_(ply.head ? ply.head->getNext() : NULL) {}
+      iterator_(ply_vertex *head)
+        : head_(head), cur_(head ? head->getNext() : NULL) {}
+      iterator_(ply_vertex *head, ply_vertex *next)
+        : head_(head), cur_(next) {}
+      iterator_(const iterator_ &other)
+        : head_(other.head_), cur_(other.head_) {}
+
+      inline iterator_& operator++() { cur_ = cur_->getNext(); return *this; }
+      inline iterator_ operator++(int) { return iterator_(*this); ++*this; }
+      inline bool operator==(const iterator_& o) const {
+        return head_ == o.head_ && cur_ == o.cur_; }
+      inline bool operator!=(const iterator_& o) const { return !(*this == o); }
+      //inline bool operator<(iterator_ o) const { return it_ < o.it_; }
+      inline iterator_& operator--() { cur_ = cur_->getPre(); return *this; }
+      inline iterator_ operator--(int) { return iterator_(*this); ++*this; }
+      //inline iterator_ operator+(int i) { return iterator_(it_ + i); }
+      //inline difference_type operator-(iterator_ o) { return it_ - o.it_; }
+      //inline iterator_& operator+=(int i) { it_ += i; return *this; }
+      //inline iterator_& operator-=(int i) { it_ -= i; return *this; }
+      inline value_type operator*() const {
+        return cur_->pos;
+      }
+
+    };
+
+    typedef iterator_<Point2d> iterator;
+
+    ///////
+    // Iterate through points directly.
+    iterator begin(void) { return iterator(*this); }
+    iterator end(void) { return iterator(head, head); }
 
     enum POLYTYPE { UNKNOWN, PIN, POUT };
 
@@ -136,7 +188,7 @@ public:
     void reverse(); //reverse vertex order
 
     ///////////////////////////////////////////////////////////////////////////
-    void translate(const Vector2d& v);
+    void translate(const Point2d& p);
 
     ///////////////////////////////////////////////////////////////////////////
     //
@@ -253,7 +305,7 @@ public:
         is_buildboxandcenter_called=false;
     }
 
-    void translate(const Vector2d& v);
+    void translate(const Point2d& v);
 
     //access
     void buildBoxAndCenter();
@@ -342,7 +394,7 @@ private:
 //
 inline void create_circle(c_polygon& p, double radius, uint res)
 {
-    double delta=PI2/res;
+    double delta=PI2d/res;
     c_ply ply(c_ply::POUT);
     ply.beginPoly();
     for(uint i=0;i<res;i++){

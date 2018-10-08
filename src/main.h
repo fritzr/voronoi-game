@@ -1,11 +1,5 @@
 #pragma once
 
-#include <opencv2/core/core.hpp>
-
-#if CV_VERSION_MAJOR < 3 && !defined(OPENCV2_4_13)
-#include <opencv2/contrib/contrib.hpp>
-typedef int ColormapTypes;
-#endif
 
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
@@ -23,3 +17,5 @@ extern "C" {
 #endif
 
 #include "util.h"
+
+#include "opencv_compat.h"

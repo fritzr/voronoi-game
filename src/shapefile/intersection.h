@@ -1,34 +1,45 @@
 #ifndef _MKSUM_INTERSECTION_H_
 #define _MKSUM_INTERSECTION_H_
 
+#include <iostream>
+#include <cassert>
 
-#include <Basic.h>
-#include <Point.h>
-using namespace mathtool;
+#include <opencv2/core/types.hpp>
+using namespace cv;
+
+/* range of real numbers */
+#define SMALLNUMBER 1.0e-10
+#define HUGENUMBER  1.0e10
 
 // This is copied from CG in C
 
-inline void Assign( double p[2], double a[2])
-{
-   p[0] = a[0];
-   p[1] = a[1];
-}
-
-inline double Area(const double a[2], const double b[2], const double c[2])
+/*
+template <typename T, typename Pt>
+inline T Area(Pt a, Pt b, Pt c)
 {
     return ( b[0] - a[0] ) * ( c[1] - a[1] ) -
            ( c[0] - a[0] ) * ( b[1] - a[1] );
 }
+*/
 
-inline int AreaSign(const double a[2], const double b[2], const double c[2])
+template <typename T>
+inline T Area(Point_<T> a, Point_<T> b, Point_<T> c)
 {
-    double area=Area(a,b,c);
+    return ( b.x - a.x ) * ( c.y - a.y ) -
+           ( c.x - a.x ) * ( b.y - a.y );
+}
+
+template <typename T>
+inline int AreaSign(Point_<T> a, Point_<T> b, Point_<T> c)
+{
+    T area=Area(a,b,c);
     if      ( area >  SMALLNUMBER ) return  1;
     else if ( area < -SMALLNUMBER ) return -1;
     else     return  0;
 }
 
-inline int Collinear(const double a[2], const double b[2], const double c[2])
+template <typename C>
+inline int Collinear(const C a, const C b, const C c)
 {
    return AreaSign( a, b, c ) == 0;
 }
@@ -37,7 +48,8 @@ inline int Collinear(const double a[2], const double b[2], const double c[2])
 Returns TRUE iff point c lies on the closed segement ab.
 Assumes it is already known that abc are collinear.
 ---------------------------------------------------------------------*/
-inline bool Between(const double a[2], const double b[2], const double c[2])
+template <typename C, typename T>
+inline bool Between(const C a, const C b, const C c)
 {
    // If ab not vertical, check betweenness on x; else on y.
    if ( fabs(a[0]-b[0])>fabs(a[1]-b[1]) )
@@ -48,36 +60,40 @@ inline bool Between(const double a[2], const double b[2], const double c[2])
              ((a[1] >= c[1]) && (c[1] >= b[1]));
 }
 
-inline bool Between_strict(const double a[2], const double b[2], const double c[2])
+template <typename C, typename T>
+inline bool Between_strict(const C a, const C b, const C c)
 {
    // If ab not vertical, check betweenness on x; else on y.
     if ( fabs(a[0]-b[0])>SMALLNUMBER ){
-      double c01=c[0]-SMALLNUMBER;
-      double c02=c[0]+SMALLNUMBER;
+      T c01=c[0]-SMALLNUMBER;
+      T c02=c[0]+SMALLNUMBER;
 
       return ((a[0] < c01) && (c02 < b[0])) ||
              ((a[0] > c02) && (c01 > b[0]));
     }
     else{
-        double c11=c[1]-SMALLNUMBER;
-        double c10=c[1]+SMALLNUMBER;
+        T c11=c[1]-SMALLNUMBER;
+        T c10=c[1]+SMALLNUMBER;
         return ((a[1] < c11) && (c10 < b[1])) ||
                ((a[1] > c10) && (c11 > b[1]));
     }
 }
 
 
-inline bool AlmostEqual3(const double a[3], const double b[3])
+template <typename C, typename T>
+inline bool AlmostEqual3(const C a, const C b)
 {
     return (fabs(a[0]-b[0])<SMALLNUMBER &&fabs(a[1]-b[1])<SMALLNUMBER && fabs(a[2]-b[2])<SMALLNUMBER);
 }
 
-inline bool AlmostEqual(const double a[2], const double b[2])
+template <typename C, typename T>
+inline bool AlmostEqual(const C a, const C b)
 {
     return (fabs(a[0]-b[0])<SMALLNUMBER &&fabs(a[1]-b[1])<SMALLNUMBER);
 }
 
-inline bool AlmostEqual(const double a[2], const double b[2], double tau)
+template <typename C, typename T>
+inline bool AlmostEqual(const C a, const C b, T tau)
 {
     return (fabs(a[0]-b[0])<tau &&fabs(a[1]-b[1])<tau);
 }
@@ -86,9 +102,9 @@ inline bool AlmostEqual(const double a[2], const double b[2], double tau)
 // compute union of two colinear  segments ab and cd
 // place the union in p
 // return false if the union is degenerated
-inline bool Union
-(const double a[2], const double b[2], const double c[2], const double d[2],
- const double * p[2])
+template <typename T>
+inline bool Union(
+    const T a, const T b, const T c, const T d, const T * p)
 {
     int id=0;
     if(AlmostEqual(a,c)){ p[id]=a; id++; }
@@ -118,8 +134,9 @@ inline bool Union
 }
 
 
-inline char ParallelInt
-( const double a[2], const double b[2], const double c[2], const double d[2], double p[2])
+template <typename T>
+inline char ParallelInt(
+    const T a, const T b, const T c, const T d, T p)
 {
    if(!Collinear(a, b, c)) return '0';
 
@@ -151,12 +168,14 @@ segments ab and cd.  Returns p and a char with the following meaning:
 Note that two collinear segments that share just one point, an endpoint
 of each, returns 'e' rather than 'v' as one might expect.
 ---------------------------------------------------------------------*/
-inline char SegSegInt( const double a[2], const double b[2], const double c[2], const double d[2], double p[2] )
+template <typename T>
+inline char SegSegInt(
+    const T a, const T b, const T c, const T d, T p )
 {
-   double  s, t;        // The two parameters of the parametric eqns.
-   double  num_s, num_t, denom;   // Numerator and denoninator of equations.
+   T  s, t;        // The two parameters of the parametric eqns.
+   T  num_s, num_t, denom;   // Numerator and denoninator of equations.
    char    code = '?';    // Return char characterizing intersection.
-   const double TINYNUMBER=SMALLNUMBER;
+   const T TINYNUMBER=SMALLNUMBER;
 
    denom = a[0] * ( d[1] - c[1] ) +
            b[0] * ( c[1] - d[1] ) +
@@ -226,9 +245,9 @@ inline char SegSegInt( const double a[2], const double b[2], const double c[2], 
       }
    }
 
-   //double check...
+   //T check...
 //   if(code=='v'){
-//       double q[2];
+//       T q;
 //       q[0] = (c[0] + t*(d[0]-c[0]));
 //       q[1] = (c[1] + t*(d[1]-c[1]));
 //       if(AlmostEqual(p,q)==false){
@@ -246,57 +265,59 @@ inline char SegSegInt( const double a[2], const double b[2], const double c[2], 
 // This is from RAPID and should be simplified
 
 
-inline double
-VdotV(double V1[3], double V2[3])
+template <typename T>
+inline T
+VdotV(T V1[3], T V2[3])
 {
   return (V1[0]*V2[0] + V1[1]*V2[1] + V1[2]*V2[2]);
 }
 
 
 
+template <typename T>
 inline void
-VcrossV(double Vr[3], const double V1[3], const double V2[3])
+VcrossV(T Vr[3], const T V1[3], const T V2[3])
 {
   Vr[0] = V1[1]*V2[2] - V1[2]*V2[1];
   Vr[1] = V1[2]*V2[0] - V1[0]*V2[2];
   Vr[2] = V1[0]*V2[1] - V1[1]*V2[0];
 }
 
-inline double
-max(double a, double b, double c)
+template <typename T>
+inline T
+max(T a, T b, T c)
 {
-  double t = a;
+  T t = a;
   if (b > t) t = b;
   if (c > t) t = c;
   return t;
 }
- 
-inline double
-min(double a, double b, double c)
+
+template <typename T>
+inline T
+min(T a, T b, T c)
 {
-  double t = a;
+  T t = a;
   if (b < t) t = b;
   if (c < t) t = c;
   return t;
 }
 
 
+template <typename T>
 inline int
-my_project6_2(double *ax,
-     double *p1, double *p2, double *p3,
-     double *q1, double *q2, double *q3)
-{
-  double P1 = VdotV(ax, p1);
-  double P2 = VdotV(ax, p2);
-  double P3 = VdotV(ax, p3);
-  double Q1 = VdotV(ax, q1);
-  double Q2 = VdotV(ax, q2);
-  double Q3 = VdotV(ax, q3);
+my_project6_2(T *ax, T *p1, T *p2, T *p3, T *q1, T *q2, T *q3) {
+  T P1 = VdotV(ax, p1);
+  T P2 = VdotV(ax, p2);
+  T P3 = VdotV(ax, p3);
+  T Q1 = VdotV(ax, q1);
+  T Q2 = VdotV(ax, q2);
+  T Q3 = VdotV(ax, q3);
   
-  double mx1 = max(P1, P2, P3);
-  double mn1 = min(P1, P2, P3);
-  double mx2 = max(Q1, Q2, Q3);
-  double mn2 = min(Q1, Q2, Q3);
+  T mx1 = max(P1, P2, P3);
+  T mn1 = min(P1, P2, P3);
+  T mx2 = max(Q1, Q2, Q3);
+  T mn2 = min(Q1, Q2, Q3);
 
   if (mn1 > mx2) return 0;
   if (mn2 > mx1) return 0;
@@ -308,9 +329,10 @@ my_project6_2(double *ax,
 // uses no divisions
 // works on coplanar triangles
 
+template <typename T>
 inline int
-my_tri_contact (const double *P1, const double *P2, const double *P3,
-        const double *Q1, const double *Q2, const double *Q3)
+my_tri_contact (const T *P1, const T *P2, const T *P3,
+        const T *Q1, const T *Q2, const T *Q3)
 {
 
   /*
@@ -324,18 +346,18 @@ my_tri_contact (const double *P1, const double *P2, const double *P3,
      First thing we do is establish a new c.s. so that p1 is at (0,0,0).
      */
 
-  double p1[3], p2[3], p3[3];
-  double q1[3], q2[3], q3[3];
-  double e1[3], e2[3], e3[3];
-  double f1[3], f2[3], f3[3];
-  double g1[3], g2[3], g3[3];
-  double h1[3], h2[3], h3[3];
-  double n1[3], m1[3];
-  double z[3];
+  T p1[3], p2[3], p3[3];
+  T q1[3], q2[3], q3[3];
+  T e1[3], e2[3], e3[3];
+  T f1[3], f2[3], f3[3];
+  T g1[3], g2[3], g3[3];
+  T h1[3], h2[3], h3[3];
+  T n1[3], m1[3];
+  T z[3];
 
-  double ef11[3], ef12[3], ef13[3];
-  double ef21[3], ef22[3], ef23[3];
-  double ef31[3], ef32[3], ef33[3];
+  T ef11[3], ef12[3], ef13[3];
+  T ef21[3], ef22[3], ef23[3];
+  T ef31[3], ef32[3], ef33[3];
   
   z[0] = 0.0;  z[1] = 0.0;  z[2] = 0.0;
   
@@ -403,16 +425,18 @@ my_tri_contact (const double *P1, const double *P2, const double *P3,
 //
 //check if two segments ab and cd overlap
 //
-inline bool is_overlapping(const Point2d& a,const Point2d& b,const Point2d& c,const Point2d& d)
+template <typename T>
+inline bool is_overlapping(
+    const Point2d& a,const Point2d& b,const Point2d& c,const Point2d& d)
 {
-    double area=Area(a.get(),b.get(),c.get());
+    T area=Area(a,b,c);
     if(fabs(area)>SMALLNUMBER) return false;
-    area=Area(a.get(),b.get(),d.get());
+    area=Area(a,b,d);
     if(fabs(area)>SMALLNUMBER) return false;
 
-    const double * u[2]={NULL,NULL};
-    const double * s=a.get(); const double * t=b.get();
-    const double * m=c.get(); const double * n=d.get();
+    const T * u[2]={NULL,NULL};
+    const T * s=a; const T * t=b;
+    const T * m=c; const T * n=d;
 
     return Union(s,t,m,n,u);
 }

@@ -42,7 +42,6 @@ include_directories(
 
 add_subdirectory(shapefile)
 add_subdirectory(shapelib)
-add_subdirectory(mathtool)
 
 set(TEST_PROG vgtest)
 
@@ -62,7 +61,7 @@ target_link_libraries(${TEST_PROG}
   ${OpenCV_LIBS}
   ${Boost_LIBRARIES}
   ${FIST_LIBRARY}
-  shapefile mathtool shapelib
+  shapefile shapelib
 )
 
 #cotire(${TEST_PROG})
