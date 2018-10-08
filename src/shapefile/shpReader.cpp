@@ -12,200 +12,336 @@ using namespace std;
 
 typedef unsigned int uint;
 
-//
-// read from files (both ESRI shp and db files)
-//
-bool ShapeReader::read(const string& filename)
+/* Name of the field which maps polygon/point indexes.  */
+static const char POINT_INDEX_FIELD_NAME[] = "pointIndex";
+
+ShapeReader::ShapeReader()
+  : nShapeType(SHPT_NULL), nShapeFilter(SHPT_NULL), nEntities(-1),
+#ifdef _MSC_VER /* windows */
+    adfMinBound({0.0}), adfMaxBound({0.0}),
+#else
+    adfMinBound{0.0}, adfMaxBound{0.0},
+#endif
+    shp_(NULL), dbf_(NULL)
 {
-  SHPHandle  hSHP;
-  hSHP = SHPOpen( filename.c_str(), "rb" );
+}
 
-  //something is wrong
-  if( hSHP == NULL )
+ShapeReader::~ShapeReader()
+{
+  /* We will just assume our handles are closed properly.  */
+}
+
+void
+ShapeReader::reset(void)
+{
+  nShapeType = SHPT_NULL;
+  nShapeFilter = SHPT_NULL;
+  nEntities = -1;
+  memset (&adfMinBound[0], 0, sizeof(adfMinBound));
+  memset (&adfMaxBound[0], 0, sizeof(adfMaxBound));
+
+  /* These better be closed already.  */
+  shp_ = NULL;
+  dbf_ = NULL;
+}
+
+bool
+ShapeReader::read(const string& filename)
+{
+  bool ret = true;
+  reset();
+
+  shp_ = SHPOpen(filename.c_str(), "rb");
+  if (shp_ == NULL)
   {
-    cout<<"- Error: Unable to open: "<<filename<<endl;
+    cout<<"- Error: Unable to open SHP file "<<filename<<endl;
     return false;
   }
 
-  //Get info
-  int    nShapeType, nEntities;
-  double   adfMinBound[4], adfMaxBound[4];
-  SHPGetInfo( hSHP, &nEntities, &nShapeType, adfMinBound, adfMaxBound );
-
-  //reserve space
-  m_ply_list.reserve(nEntities);
-
-  //  Skim over the list of shapes, printing all the vertices
-  for(int i=0; i<nEntities; i++ )
+  dbf_ = DBFOpen(filename.c_str(), "rb");
+  if (dbf_ == NULL)
   {
+    cout<<"- Error: Unable to open DBF file "<<filename<<endl;
+    SHPClose(shp_);
+    return false;
+  }
 
-    //
-    SHPObject * psShape = SHPReadObject( hSHP, i );
+  // Get info
+  SHPGetInfo(shp_, &nEntities, &nShapeType, &adfMinBound[0], &adfMaxBound[0]);
 
-    //make sure psShape is not null
-    assert(psShape);
+  if (rows() != static_cast<unsigned int>(nEntities))
+  {
+    cerr << "! Error: Number of database rows (" << rows() << ")"
+      " does not match the number of shapes (" << nEntities << ")" << endl;
+    goto fail;
+  }
 
-    //some format check..
-    if( psShape->nParts > 0 && psShape->panPartStart[0] != 0 )
+  // Open callback
+  if (!onOpen())
+    goto fail;
+
+  // Visit database fields.
+  for (unsigned int fieldidx = 0u; fieldidx < fields(); fieldidx++)
+  {
+    char fname[12] = { '\0' };
+    int width = -1, decs = -1;
+    DBFFieldType eType = DBFGetFieldInfo(dbf_, fieldidx, fname, &width, &decs);
+    if (!onField(fieldidx, eType, fname, width, decs))
+      goto fail;
+  }
+
+  // Visit shapes.
+  for (unsigned int row = 0u; row < static_cast<uint>(nEntities); row++)
+  {
+    // Only read non-NULL points that match our filter.
+    // If the filter is NULL, "visit" all shapes.
+    SHPObject *shape = SHPReadObject(shp_, row);
+    if (shape && (nShapeFilter == SHPT_NULL || shape->nSHPType == nShapeFilter))
     {
-      cerr<<"panPartStart[0] = "<<psShape->panPartStart[0]
-        <<", not zero as expected.\n";
-    }
-
-    //read each part
-    int iPart = 1;
-
-    //
-    c_ply ply(c_ply::POUT);
-    ply.beginPoly();
-    ply_extra_info& extra=ply.extra();
-    extra.box[0]=psShape->dfXMin;
-    extra.box[1]=psShape->dfXMax;
-    extra.box[2]=psShape->dfYMin;
-    extra.box[3]=psShape->dfYMax;
-    extra.has_box=true;
-
-    for( int j = 0; j < psShape->nVertices; j++ )
-    {
-      string pszPartType;
-
-      if( j == 0 && psShape->nParts > 0 )
-        pszPartType = SHPPartTypeName( psShape->panPartType[0] );
-
-      //this defines a new loop...
-      if( iPart < psShape->nParts && psShape->panPartStart[iPart] == j )
+      if (!onRecord(row, shape))
       {
-        pszPartType = SHPPartTypeName( psShape->panPartType[iPart] );
-        iPart++;
-        ply.endPoly(true); //remove duplicate
-        add_ply(ply);
-
-        //create a new ply
-        ply=c_ply(c_ply::PIN);
-        ply.beginPoly();
+        SHPDestroyObject(shape);
+        goto fail;
       }
-
-      //Points may duplicate....
-      ply.addVertex(psShape->padfX[j],psShape->padfY[j], true);
     }
 
-    ply.endPoly(true); //use true to set the flag to remove duplicate vertices at the end
-    add_ply(ply);
-
-    SHPDestroyObject( psShape );
+    SHPDestroyObject(shape);
   }
 
-  SHPClose( hSHP );
+  onClose();
+  goto success;
 
-  //done reading shp file
+fail:
+  ret = false;
 
-  //
-  //reading from database now.
-  //
+success:
+  DBFClose(dbf_);
+  SHPClose(shp_);
 
-  DBFHandle hDBF = DBFOpen( filename.c_str(), "rb" );
+  return ret;
+}
 
-  //check
-  if( hDBF == NULL )
+bool
+ShapeReader::onOpen(void)
+{
+  return true;
+}
+
+bool
+ShapeReader::onField(unsigned int index, DBFFieldType type,
+    const char *name, int width, int decimals)
+{
+  return true;
+}
+
+bool
+ShapeReader::onRecord(unsigned int row, SHPObject *shp)
+{
+  return true;
+}
+
+void
+ShapeReader::onClose(void)
+{
+}
+
+/********* PointReader **********/
+
+PointReader::PointReader()
+  : ShapeReader(), fieldIndex(-1), nextPoint(0u), m_points()
+{
+}
+
+bool
+PointReader::onOpen(void)
+{
+  m_points.clear();
+  setFilter(SHPT_POINT);
+  return true;
+}
+
+bool
+PointReader::onField(unsigned int index, DBFFieldType type,
+    const char *name, int width, int decimals)
+{
+  if (0==strncmp(name, POINT_INDEX_FIELD_NAME, sizeof(POINT_INDEX_FIELD_NAME)))
+    fieldIndex = index;
+  return true;
+}
+
+bool
+PointReader::onRecord(unsigned int row, SHPObject *shp)
+{
+  if (row == 0)
   {
-    cerr<<"! Error: DBFOpen("<< filename<<") failed."<<endl;
-    return false;
-  }
-
-  //check
-  if( DBFGetFieldCount(hDBF) == 0 )
-  {
-    cerr<<"! Warning: There are no fields in this table!"<<endl;
-    return true;
-  }
-
-  //check more
-  if((uint)DBFGetRecordCount(hDBF)!=m_ply_list.size()){
-    cerr<<"! Error: Number of rows ("<<DBFGetRecordCount(hDBF)
-      <<") in the database does not match to the number of buildings ("
-      <<m_ply_list.size()<<")"<<endl;
-  }
-
-  //used for reading from db
-  int nWidth, nDecimals;
-
-  //position of these fields in database...
-  uint base_ele_pos=UINT_MAX;
-  uint heigh_pos=UINT_MAX;
-  for(int i = 0; i < DBFGetFieldCount(hDBF); i++ )
-  {
-    char  szTitle[12];
-    DBFFieldType eType = DBFGetFieldInfo( hDBF, i, szTitle, &nWidth, &nDecimals );
-    if(eType!=FTInteger && eType!=FTDouble) continue; //not good...
-    if(base_elevation_tag==szTitle) base_ele_pos=i;
-    if(height_tag==szTitle) heigh_pos=i;
-  }
-
-  //check if we can get the field ids for the information we wanted
-  if(base_ele_pos==UINT_MAX)
-    cerr<<"! Warning: no base elevation found in the database"<<endl;
-
-  if(heigh_pos==UINT_MAX)
-    cerr<<"! Warning: no height found in the database"<<endl;
-
-  //
-  //read data from each row
-  //
-  for( int row = 0; row<DBFGetRecordCount(hDBF); row++ )
-  {
-
-    ply_extra_info& extra=m_ply_list[row].front().extra();
-
-    if(base_ele_pos!=UINT_MAX)
+    if (fieldIndex < 0)
     {
-      //
-      bool is_null=DBFIsAttributeNULL( hDBF, row, base_ele_pos );
-      if(is_null){
-        cerr<<"! Warning: Database for ("<<base_elevation_tag<<") is null at row: "<<row<<endl;
-        continue;
-      }
-      extra.base_height=DBFReadDoubleAttribute( hDBF, row, base_ele_pos );
+      cerr << "No DBF field '" << POINT_INDEX_FIELD_NAME << "'!" << endl;
+      return false;
     }
 
-    if(heigh_pos!=UINT_MAX)
+    /* Fill with points so we can insert the ordered points at the right
+     * location based on the 'pointIndex' field.
+     * Practically, these should be in order anyway but there's no telling. */
+    m_points.resize(entities());
+  }
+
+  bool inserted = false;
+  if (!DBFIsAttributeNULL(dbf(), row, fieldIndex))
+  {
+    unsigned int pointIndex = DBFReadIntegerAttribute(dbf(), row, fieldIndex);
+    if (pointIndex < m_points.size())
     {
-      //
-      bool is_null=DBFIsAttributeNULL( hDBF, row, heigh_pos );
-      if(is_null){
-        cerr<<"! Warning: Database for ("<<height_tag<<") is null at row: "<<row<<endl;
-        continue;
-      }
-
-      extra.height=DBFReadDoubleAttribute( hDBF, row, heigh_pos );
+      m_points[pointIndex] = Point2d(shp->padfX[row], shp->padfY[row]);
+      nextPoint = pointIndex + 1;
+      inserted = true;
     }
+    else
+      cerr << "! Warning: row [" << row << "]: pointIndex " << pointIndex
+        << " out of range!" << endl;
+  }
 
-  }//end row
-
-  DBFClose( hDBF );
+  if (!inserted)
+  {
+    if (nextPoint < m_points.size())
+    {
+      cerr << "! Automatically inserting at last-known index ["
+        << nextPoint << "]" << endl;
+      m_points[nextPoint++] = Point2d(shp->padfX[row], shp->padfY[row]);
+    }
+    else
+    {
+      cerr << "- Can't find next point index, aborting" << endl;
+      return false;
+    }
+  }
 
   return true;
 }
 
+/********* PolyReader **********/
 
-void ShapeReader::add_ply(c_ply& ply)
+bool
+PolyReader::onOpen(void)
+{
+  m_ply_map.clear();
+  setFilter(SHPT_POLYGON);
+  return true;
+}
+
+bool
+PolyReader::onField(unsigned int index, DBFFieldType type,
+    const char *name, int width, int decimals)
+{
+  if (0==strncmp(name, POINT_INDEX_FIELD_NAME, sizeof(POINT_INDEX_FIELD_NAME)))
+    fieldIndex = index;
+  return true;
+}
+
+bool
+PolyReader::onRecord(unsigned int row, SHPObject *shp)
+{
+  if (row == 0)
+  {
+    if (fieldIndex < 0)
+    {
+      cerr << "No DBF field '" << POINT_INDEX_FIELD_NAME << "'!" << endl;
+      return false;
+    }
+  }
+
+  //some format check..
+  if (shp->nParts > 0 && shp->panPartStart[0] != 0)
+  {
+    cerr << "panPartStart[0] = " << shp->panPartStart[0]
+      << " not zero as expected" << endl;
+    return false;
+  }
+
+  //read each part
+  int iPart = 1;
+
+  //
+  c_ply ply(c_ply::POUT);
+  ply.beginPoly();
+  ply_extra_info& extra=ply.extra();
+  extra.box[0]=shp->dfXMin;
+  extra.box[1]=shp->dfXMax;
+  extra.box[2]=shp->dfYMin;
+  extra.box[3]=shp->dfYMax;
+  extra.has_box=true;
+
+  int j = 0;
+  for (; j < shp->nVertices; j++ )
+  {
+    string pszPartType;
+
+    /* Get the index of this polygon's associated point.  */
+    unsigned int pointIndex = UINT_MAX;
+    if (!DBFIsAttributeNULL(dbf(), j, fieldIndex))
+      pointIndex = DBFReadIntegerAttribute(dbf(), j, fieldIndex);
+
+    if( j == 0 && shp->nParts > 0 )
+      pszPartType = SHPPartTypeName( shp->panPartType[0] );
+
+    //this defines a new loop...
+    if( iPart < shp->nParts && shp->panPartStart[iPart] == j )
+    {
+      pszPartType = SHPPartTypeName( shp->panPartType[iPart] );
+      iPart++;
+      ply.endPoly(true); //remove duplicate
+      add_ply(j, ply, pointIndex);
+
+      //create a new ply
+      ply=c_ply(c_ply::PIN);
+      ply.beginPoly();
+    }
+
+    //Points may duplicate....
+    ply.addVertex(shp->padfX[j],shp->padfY[j], true);
+  }
+
+  // use true to set the flag to remove duplicate vertices at the end
+  ply.endPoly(true);
+  return add_ply(j, ply, lastIndex);
+}
+
+bool
+PolyReader::add_ply(int row, c_ply& ply, unsigned int index)
 {
   if(ply.getType()==c_ply::POUT){
     //create a new polygon
     c_polygon polygon;
     polygon.push_back(ply);
-    m_ply_list.push_back(polygon);
+    m_ply_map[index].push_back(polygon);
+    lastIndex = static_cast<int>(index);
   }
-  else{ //c_ply::PIN
+
+  else
+  {
+    //c_ply::PIN
     //add to the last polygon
     //make sure that this hole is inside the last polygon...
-    c_polygon& polygon=m_ply_list.back();
+    if (lastIndex < 0)
+    {
+      cerr << "! Error: row [" << row << "]: "
+        "got a hole as the first layer" << endl;
+      return false;
+    }
+
+    auto it = m_ply_map.find(static_cast<uint>(lastIndex));
+    assert(it != m_ply_map.end());
+
+    c_polygon& polygon = (it->second).back();
     Point2d pt=ply.findEnclosedPt();
     bool b=polygon.enclosed(pt);
     if(b)
       polygon.push_back(ply);
     else
-      cerr<<"! WARNING: Input Error: hole is ignored due improper nesting."<<endl;
+      cerr<<"! Warning: row [" << row << "]: "
+        "hole is ignored due improper nesting"<<endl;
   }
+  return true;
 }
 
 

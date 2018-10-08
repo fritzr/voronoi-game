@@ -17,6 +17,7 @@
 #include "voronoi.h"
 #include "maxrect.h"
 #include "vgame.h"
+#include "shpReader.h"
 
 #define i2f(...) static_cast<float>(__VA_ARGS__)
 #define i2u(...) static_cast<unsigned int>(__VA_ARGS__)
@@ -332,23 +333,11 @@ template <class It>
 static size_t
 readPoints(const string &path, It out)
 {
-  ifstream inf;
-  inf.exceptions(ifstream::failbit | ifstream::badbit);
-  inf.open(path);
-  inf >> std::skipws;
-  size_t npts = 0u;
-  while (!inf.fail() && !inf.eof())
-  {
-    Point pt;
-    inf >> pt.x;
-    inf >> pt.y;
-    if (!inf.fail())
-    {
-      *out++ = pt;
-      ++npts;
-    }
-  }
-  return npts;
+  PointReader r;
+  r.read(path);
+  vector<Point2d> &pts = r.getPoints();
+  std::copy(pts.begin(), pts.end(), out);
+  return pts.size();
 }
 
 template<class It>
@@ -427,7 +416,7 @@ int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
 
-  vector<Point> users, p1sites, p2sites;
+  vector<Point2d> users, p1sites, p2sites;
 
   readOrDie(opts.users_path, back_inserter(users));
   readOrDie(opts.p1sites_path, back_inserter(p1sites));

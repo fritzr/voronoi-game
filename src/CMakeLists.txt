@@ -35,6 +35,8 @@ link_directories(
 
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/shapefile
+  ${CMAKE_CURRENT_SOURCE_DIR}/shapelib
   ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
   ${LIB_INCLUDE}
