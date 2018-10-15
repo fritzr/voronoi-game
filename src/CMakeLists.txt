@@ -16,13 +16,13 @@ set(OpenCV_LIB_DIR_OPT ${OpenCV_LIB_DIR})
 set(OpenCV_LIB_DIR_DBG ${OpenCV_LIB_DIR})
 
 find_package(OpenCV REQUIRED)
-find_package(Boost REQUIRED)
-find_package(FIST REQUIRED)
 
-# require boost 1.47.0 for polygon and geometry packages
-if (Boost_VERSION LESS 105200)
-  message (FATAL_ERROR "${PROJECT_NAME} requires boost 1.52.0")
-endif()
+# >= 1.47.0 for polygon and geometry packages
+# >= 1.54.0 for boost::geomtry::index::rtree
+# >= 1.59.0 for boost::geometry::index::rtree::const_iterator
+find_package(Boost 1.54.0 REQUIRED)
+
+find_package(FIST REQUIRED)
 
 set(CXX_STATIC "-static-libgcc -static-libstdc++ ")
 if (GCC_VERSION VERSION_GREATER 5.0 AND GCC_VERSION VERSION_LESS 5.4)
