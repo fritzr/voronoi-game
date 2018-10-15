@@ -26,13 +26,16 @@ using namespace std;
 using namespace cv;
 using namespace voronoi;
 
-typedef typename cfla::MaxRect<double> MaxRect;
-typedef typename MaxRect::coordinate_type coordinate_type;
-typedef typename bp::rectangle_data<coordinate_type> rect_type;
-typedef typename MaxRect::solution_type solution_type;
+typedef double coordinate_type;
+typedef typename cv::Point_<coordinate_type> point_type;
 
-typedef typename cfla::cfla_traits<cv::Point2f> vgtraits;
-typedef typename cfla::VGame<vgtraits> VGame;
+typedef typename cfla::L2NN1<coordinate_type, point_type> L2NN1;
+typedef typename cfla::L1NN1<coordinate_type, point_type> L1NN1;
+
+/* L1 max-depth solver. TODO implement others.  */
+typedef typename cfla::MaxRectSolver<coordinate_type, L1NN1> solver_type;
+typedef typename cfla::cfla_traits<point_type, solver_type> cfla_traits;
+typedef typename cfla::VGame<cfla_traits> VGame;
 
 enum DrawRects {
   RECTS_NONE = 0,

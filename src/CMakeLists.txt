@@ -21,10 +21,12 @@ if (GCC_VERSION VERSION_GREATER 7.0)
 endif()
 
 # for debugging to dump cmake environment variables
-get_cmake_property(_variableNames VARIABLES)
-foreach (_variableName ${_variableNames})
-  message(STATUS "${_variableName}=${${_variableName}}")
-endforeach()
+if (${CMAKE_DEBUG})
+  get_cmake_property(_variableNames VARIABLES)
+  foreach (_variableName ${_variableNames})
+    message(STATUS "${_variableName}=${${_variableName}}")
+  endforeach()
+endif()
 
 set(LIB_INCLUDE "${CMAKE_SOURCE_DIR}/lib")
 
@@ -48,12 +50,19 @@ add_subdirectory(shapelib)
 set(TEST_PROG vgtest)
 
 add_executable(${TEST_PROG}
-  voronoi.h voronoi.cc
+  boost_cv_compat.h
+  main.cc
+  main.h
+  maxrect.cc
+  maxrect.h
+  nn1.h
+  opencv_compat.h
   sweep.h
-  maxrect.h maxrect.cc
-  vgame.h #vgame.cc
   util.h
-  main.h main.cc
+  #vgame.cc
+  vgame.h
+  voronoi.cc
+  voronoi.h
 )
 
 # these are just annoying

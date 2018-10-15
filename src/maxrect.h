@@ -19,7 +19,9 @@
 
 #include <boost/graph/adjacency_list.hpp>
 
+#include "boost_cv_compat.h"
 #include "sweep.h"
+#include "nn1.h"
 
 template <class Container>
   class push_insert_iterator:
@@ -454,6 +456,161 @@ public:
   inline solution_iterator sol_begin(void) const { return solutions().cbegin(); }
   inline solution_iterator sol_end(void) const { return solutions().cend(); }
   inline solution_type const& solution(size_t i) const { return solutions()[i]; }
+};
+
+/* Adapter for MaxRect which conforms to the cfla_traits::solver_type
+ * interface. That is, defines Point operator()(facilities...) and
+ * iterator methods that iterate over input user points.
+ */
+template<class Tp_,
+  typename PointContainer=std::list<typename MaxDepthRectTraits<Tp_>::Point>
+>
+class MaxRectSolver
+{
+public:
+  typedef MaxDepthRectTraits<Tp_> traits;
+  typedef typename traits::coordinate_type coordinate_type;
+  typedef typename traits::point_type      point_type;
+  typedef typename traits::rect_type       rect_type;
+  typedef typename traits::edge_type       edge_type;
+  typedef typename traits::edge_compare    edge_compare;
+  typedef typename rect_type::super_type   pure_rect_type;
+
+  typedef PointContainer point_list;
+  typedef typename point_list::iterator       iterator;
+  typedef typename point_list::const_iterator const_iterator;
+
+  typedef cfla::L1NN1<coordinate_type, point_type> nn1_type;
+  typedef typename nn1_type::size_type size_type;
+
+private:
+  typedef MaxRect<coordinate_type> solver_type;
+
+  solver_type solver_;
+  point_list users_;
+
+  // Build an "L1 ball" (square) for each user point to pass to the maxrect
+  // algorithm. The rectangles (squares) are formed using the L1 distance from
+  // the user to its nearest facility.
+  template<typename point_filter>
+  void build_rects(const nn1_type& nn1, point_filter filter)
+  {
+    for (auto userp = begin(); userp != end(); ++userp)
+    {
+      // Only build rects for certain points.
+      if (!filter(*userp))
+        continue;
+
+      point_type user = *userp;
+      point_type site = nn1(user); /* nearest neighbor */
+
+      /* This is actually the distance to the corner points from   o      o o
+       * the center.  The left and right points become top-left  o---o =>  \
+       * and bottom-right when rotated.                            o      o o */
+      auto l1dist = nn1.distance(site, user);
+      point_type tl = point_type(user.x - l1dist, user.y);
+      point_type br = point_type(user.x + l1dist, user.y);
+#if 0
+//#ifdef DEBUG
+      point_type tr = point_type(user.x, user.y + l1dist);
+      point_type bl = point_type(user.x, user.y - l1dist);
+      if (img_) {
+        cv::line(*img_, tl, tr, cv::Scalar(0xcc, 0xcc, 0xcc), 1);
+        cv::line(*img_, tr, br, cv::Scalar(0xcc, 0xcc, 0xcc), 1);
+        cv::line(*img_, br, bl, cv::Scalar(0xcc, 0xcc, 0xcc), 1);
+        cv::line(*img_, bl, tl, cv::Scalar(0xcc, 0xcc, 0xcc), 1);
+        cv::imshow("rectangles", *img_);
+        cv::waitKey(0);
+      }
+#endif
+      tl = rotateZ2f_pos(tl);
+      br = rotateZ2f_pos(br);
+
+      // Build the upright rectangle.
+      pure_rect_type l1rect(bp::construct<pure_rect_type>(tl.x, tl.y, br.x, br.y));
+      solver_.add_event(l1rect);
+    }
+  }
+
+  // Return the ideal location for player 2 among some player 1 facilities.
+  template<typename point_filter>
+  point_type compute(const nn1_type &nn1, point_filter filter)
+  {
+    // To solve for player 2, build L1 (rotated) rectangles from the
+    // opposing player's facilities and solve for max-depth region(s).
+    // We first rotate the space about the origin so we solve with axis-up
+    // rectangles.
+    build_rects(nn1, filter);
+    solver_.compute();
+
+    // We have potentially multiple solution cells.
+    // Pick a randome one and return its center.
+    if (solver_.size() == 0)
+    {
+      std::cerr << "warning: empty solution" << std::endl;
+      return point_type(0, 0);
+    }
+
+    size_type chosen_one = randrange(size_type(0), solver_.size()-1);
+#ifdef DEBUG
+    // Dump all possible solutions.
+    std::cerr << "solutions:" << std::endl;
+    size_type cellidx = size_type(0);
+    for (auto cellp = solver_.begin(); cellp != solver_.end(); ++cellp)
+    {
+      pure_rect_type solution = *cellp;
+      point_type ctmp(0, 0);
+      bp::center(ctmp, solution);
+      std::cerr << "[" << std::setw(2) << std::setfill(' ') << std::dec
+        << cellidx << "] (depth=" << solver_.solution(cellidx).depth()
+        << ") " << ctmp << std::endl;
+    }
+#endif
+
+    // Instead of the center, choose a random point in the cell.
+    pure_rect_type solution = solver_.cell(chosen_one);
+
+    coordinate_type randx = randrange(
+        bp::get(solution, bp::HORIZONTAL, bp::LOW),
+        bp::get(solution, bp::HORIZONTAL, bp::HIGH));
+    coordinate_type randy = randrange(
+        bp::get(solution, bp::VERTICAL, bp::LOW),
+        bp::get(solution, bp::VERTICAL, bp::HIGH));
+    point_type next(randx, randy);;
+#ifdef DEBUG
+    // Dump our chosen solution.
+    std::cerr << "chose [" << std::setw(2) << std::setfill(' ') << std::dec
+      << chosen_one << "] " << next << std::endl;
+#endif
+
+    // Make sure to rotate the solution point back to the original space, since
+    // the solution space itself is rotated.
+    return rotateZ2f_neg(next);
+  }
+
+
+public:
+
+  template<typename UserIter>
+    MaxRectSolver(UserIter begin, UserIter end)
+      : solver_(), users_(begin, end)
+    {}
+
+  iterator begin(void) const { return users_.begin(); }
+  iterator end(void) const { return users_.end(); }
+  //const_iterator cbegin(void) const { return users_.cbegin(); }
+  //const_iterator cend(void) const { return users_.cend(); }
+
+  template<typename point_filter>
+  point_type operator()(const nn1_type &facilities, point_filter filter) {
+    return compute(facilities, filter);
+  }
+
+  inline static coordinate_type
+    distance(const point_type &p1, const point_type &p2) {
+      return nn1_type::distance(p1, p2);
+    }
+
 };
 
 extern template class MaxRect<double>;
