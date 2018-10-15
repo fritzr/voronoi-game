@@ -340,6 +340,14 @@ readPoints(const string &path, It out)
   r.read(path);
   vector<Point2d> &pts = r.getPoints();
   std::copy(pts.begin(), pts.end(), out);
+
+#ifdef DEBUG
+  cerr << "READ shapefile '" << path << "'" << endl;
+  unsigned int idx = 0u;
+  for (auto pti = pts.begin(); pti != pts.end(); ++pti)
+    cerr << "  [" << setw(2) << setfill(' ') << idx++ << "] " << *pti << endl;
+#endif
+
   return pts.size();
 }
 
