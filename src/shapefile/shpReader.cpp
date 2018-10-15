@@ -186,33 +186,38 @@ PointReader::onRecord(unsigned int row, SHPObject *shp)
     m_points.resize(entities());
   }
 
-  bool inserted = false;
-  if (!DBFIsAttributeNULL(dbf(), row, fieldIndex))
+  // Really for SHPT_POINT, there should not be more than 1 vertex,
+  // but read all reported vertices anyway.
+  for (int vidx = 0; vidx < shp->nVertices; ++vidx)
   {
-    unsigned int pointIndex = DBFReadIntegerAttribute(dbf(), row, fieldIndex);
-    if (pointIndex < m_points.size())
+    bool inserted = false;
+    if (!DBFIsAttributeNULL(dbf(), row, fieldIndex))
     {
-      m_points[pointIndex] = Point2d(shp->padfX[row], shp->padfY[row]);
-      nextPoint = pointIndex + 1;
-      inserted = true;
+      unsigned int pointIndex = DBFReadIntegerAttribute(dbf(), row, fieldIndex);
+      if (pointIndex < m_points.size())
+      {
+        m_points[pointIndex] = Point2d(shp->padfX[vidx], shp->padfY[vidx]);
+        nextPoint = pointIndex + 1;
+        inserted = true;
+      }
+      else
+        cerr << "! Warning: row [" << row << "]: pointIndex " << pointIndex
+          << " out of range!" << endl;
     }
-    else
-      cerr << "! Warning: row [" << row << "]: pointIndex " << pointIndex
-        << " out of range!" << endl;
-  }
 
-  if (!inserted)
-  {
-    if (nextPoint < m_points.size())
+    if (!inserted)
     {
-      cerr << "! Automatically inserting at last-known index ["
-        << nextPoint << "]" << endl;
-      m_points[nextPoint++] = Point2d(shp->padfX[row], shp->padfY[row]);
-    }
-    else
-    {
-      cerr << "- Can't find next point index, aborting" << endl;
-      return false;
+      if (nextPoint < m_points.size())
+      {
+        cerr << "! Automatically inserting at last-known index ["
+          << nextPoint << "]" << endl;
+        m_points[nextPoint++] = Point2d(shp->padfX[vidx], shp->padfY[vidx]);
+      }
+      else
+      {
+        cerr << "- Can't find next point index, aborting" << endl;
+        return false;
+      }
     }
   }
 
