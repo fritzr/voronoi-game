@@ -4,7 +4,7 @@
 #include <iostream>
 #include <cassert>
 
-#include <opencv2/core/types.hpp>
+#include "opencv_compat.h"
 using namespace cv;
 
 /* range of real numbers */

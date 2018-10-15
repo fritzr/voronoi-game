@@ -53,9 +53,6 @@ enum DrawCell {
   CELL_BAD = 4,
 };
 
-static ColormapTypes COLORMAP_BAD
-  = static_cast<ColormapTypes>(((unsigned int)COLORMAP_PARULA) + 1);
-
 struct options_t
 {
   // Global configurable options

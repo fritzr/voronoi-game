@@ -1,3 +1,4 @@
+#pragma once
 /* Compatibility for different versions of OpenCV.  */
 
 #include <opencv2/core/core.hpp>
@@ -5,17 +6,33 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-#if CV_VERSION_MAJOR < 3 && !defined(OPENCV2_4_13)
+#if CV_MAJOR_VERSION < 3
 #include <opencv2/contrib/contrib.hpp>
+#include <opencv2/legacy/legacy.hpp>
+
+#if !defined(OPENCV2_4_13)
 typedef int ColormapTypes;
 #endif
 
-#if defined(CV_VERSION_EPOCH)
-#include <opencv2/contrib/contrib.hpp>
-#include <opencv2/legacy/legacy.hpp>
-#if CV_VERSION_MINOR < 13
-typedef int ColormapTypes;
+const ColormapTypes COLORMAP_BAD
+  = static_cast<ColormapTypes>(((unsigned int)cv::COLORMAP_HOT) + 1);
 
+#else // >= 3.0
+const ColormapTypes COLORMAP_BAD
+  = static_cast<ColormapTypes>(((unsigned int)cv::COLORMAP_PARULA) + 1);
+
+#endif // end < 3.0
+
+// version < 2.4.13
+#if CV_MAJOR_VERSION < 3 && !defined(OPENCV2_4_13)
+
+// Point order from RotatedRect::points()
+#define RRBL 1
+#define RRTL 0
+#define RRTR 3
+#define RRBR 2
+
+// With older OpenCV, you can't construct Point2d from Point
 template <typename It, typename Pt>
 struct pointiter : public std::iterator<
     typename std::iterator_traits<It>::iterator_category,
@@ -51,31 +68,18 @@ struct pointiter : public std::iterator<
     return Pt(pt.x, pt.y);
   }
 };
-#endif
-#endif
 
-#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
-// With older OpenCV, you can't construct Point2d from Point
 typedef pointiter<typename std::vector<cv::Point>::iterator, cv::Point2d> p2di;
-#else
+
+#else // >= 2.13
 typedef typename std::vector<cv::Point>::iterator p2di;
-#endif
-
-#if defined(CV_VERSION_EPOCH) && CV_VERSION_MINOR < 13
-
-// Point order from RotatedRect::points()
-#define RRBL 1
-#define RRTL 0
-#define RRTR 3
-#define RRBR 2
-
-#else
 
 // Point order from RotatedRect::points()
 #define RRBL 0
 #define RRTL 1
 #define RRTR 2
 #define RRBR 3
+
 #endif
 
 using namespace cv;
