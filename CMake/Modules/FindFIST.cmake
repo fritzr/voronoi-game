@@ -25,6 +25,10 @@ get_filename_component(FIST_LIBRARY_DIR ${FIST_LIBRARY} DIRECTORY)
 
 set(FIST_VERSION 1.0)
 
+if ( ${CMAKE_MAJOR_VERSION} VERSION_LESS 3 )
+  include(FindPackageHandleStandardArgs)
+endif()
+
 find_package_handle_standard_args(FIST
   FOUND_VAR FIST_FOUND
   REQUIRED_VARS
