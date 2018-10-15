@@ -1,4 +1,19 @@
-set(CMAKE_SYSTEM_PROCESSOR "i686")
+set(CMAKE_SYSTEM_PROCESSOR "i686") # 32-bit build required for FIST
+
+# Force OpenCV to use 32-bit configs
+if (EXISTS /usr/lib/OpenCV)
+  set(OpenCV_DIR /usr/lib/OpenCV)
+  set(OpenCV_LIB_DIR ${OpenCV_DIR})
+  set(OpenCV_CONFIG_PATH ${OpenCV_DIR})
+else()
+  set(OpenCV_DIR /usr/lib/cmake/OpenCV)
+  set(OpenCV_CONFIG_PATH ${OpenCV_DIR})
+  set(OpenCV_LIB_DIR /usr/lib)
+endif()
+
+set(OpenCV_CONFIG ${OpenCV_CONFIG_PATH}/OpenCVConfig.cmake)
+set(OpenCV_LIB_DIR_OPT ${OpenCV_LIB_DIR})
+set(OpenCV_LIB_DIR_DBG ${OpenCV_LIB_DIR})
 
 find_package(OpenCV REQUIRED)
 find_package(Boost REQUIRED)

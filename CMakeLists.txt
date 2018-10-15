@@ -7,11 +7,6 @@ cmake_minimum_required(VERSION 2.8.12)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake/Modules)
 
-# Force OpenCV to use 32-bit configs
-set(OpenCV_DIR /usr/lib/OpenCV)
-set(OpenCV_CONFIG /usr/lib/OpenCV/OpenCVConfig.cmake)
-set(OpenCV_CONFIG_PATH /usr/lib/OpenCV)
-
 project(voronoi-game)
 if(NOT WIN32 AND NOT WIN64 AND NOT APPLE)
   set(CMAKE_CXX_COMPILER "g++")
