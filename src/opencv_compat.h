@@ -3,10 +3,16 @@
 
 #include <opencv2/core/core.hpp>
 
+#if CV_MAJOR_VERSION >= 3
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+
+#else /* CV_MAJOR_VERSION < 3 */
+#include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-#if CV_MAJOR_VERSION < 3
 #include <opencv2/contrib/contrib.hpp>
 #include <opencv2/legacy/legacy.hpp>
 
@@ -14,14 +20,15 @@
 typedef int ColormapTypes;
 #endif
 
-const ColormapTypes COLORMAP_BAD
-  = static_cast<ColormapTypes>(((unsigned int)cv::COLORMAP_HOT) + 1);
-
-#else // >= 3.0
-const ColormapTypes COLORMAP_BAD
-  = static_cast<ColormapTypes>(((unsigned int)cv::COLORMAP_PARULA) + 1);
-
 #endif // end < 3.0
+
+#if CV_MAJOR_VERSION >= 3
+const int COLORMAP_BAD
+  = static_cast<int>(cv::COLORMAP_PARULA) + 1;
+#else
+const int COLORMAP_BAD
+  = static_cast<int>(cv::COLORMAP_HOT) + 1;
+#endif
 
 // version < 2.4.13
 #if CV_MAJOR_VERSION < 3 && !defined(OPENCV2_4_13)
@@ -81,5 +88,3 @@ typedef typename std::vector<cv::Point>::iterator p2di;
 #define RRBR 3
 
 #endif
-
-using namespace cv;
