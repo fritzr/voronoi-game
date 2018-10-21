@@ -698,6 +698,17 @@ void c_polygon::triangulate(vector<triangle>& tris)
     tris=triangulation;
 }
 
+void c_polygon::pop_front()
+{
+  c_ply &ply = front();
+  ply.indexing(); // reset vertex IDs
+  c_plylist::pop_front();
+  /* These must be recomputed */
+  all.clear();
+  triangulation.clear();
+  indexing();
+}
+
 void c_polygon::destroy()
 {
     for(iterator i=begin();i!=end();i++){
@@ -822,10 +833,10 @@ istream& operator>>( istream& is, c_plylist& p)
     return is;
 }
 
-ostream& operator<<( ostream& os, c_ply& p)
+ostream& operator<<( ostream& os, const c_ply& p)
 {
     os<<p.getSize()<<" "<<((p.type==c_ply::PIN)?"in":"out")<<"\n";
-    ply_vertex * ptr=p.head;
+    const ply_vertex * ptr=p.head;
     do{
         os<<ptr->getPos().x<<" "<<ptr->getPos().y<<"\n";
         ptr=ptr->getNext();
@@ -836,10 +847,17 @@ ostream& operator<<( ostream& os, c_ply& p)
     return os;
 }
 
-ostream& operator<<( ostream& out, c_plylist& p)
+ostream& operator<<( ostream& out, const c_plylist& p)
 {
     out<<p.size()<<"\n";
-    typedef c_plylist::iterator PIT;
-    for(PIT i=p.begin();i!=p.end();i++) out<<*i;
+    typedef c_plylist::const_iterator PIT;
+    for(PIT i=p.cbegin();i!=p.cend();i++) out<<*i;
     return out;
+}
+
+std::ostream &operator<<(std::ostream &os, const std::vector<c_polygon> &v)
+{
+  for (auto it = v.cbegin(); it != v.cend(); ++it)
+    os << *it;
+  return os;
 }

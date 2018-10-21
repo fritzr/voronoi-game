@@ -12,12 +12,17 @@
 
 #include "opencv_compat.h"
 
+#ifdef DEBUG
+#include <iostream>
+#endif
+
 #include <list>
 #include <vector>
 #include <cassert>
 #include <float.h>
 #include <iterator>
 using namespace std;
+using namespace cv;
 
 typedef unsigned int uint;
 
@@ -40,17 +45,16 @@ struct ply_extra_info
 {
     ply_extra_info()
     {
-        base_height=height=0;
+        ftt=0.0;
         has_box=false;
         box[0]=box[1]=box[2]=box[3]=0;
-        flag=UINT_MAX;
+        pointIndex=UINT_MAX;
     }
 
     bool has_box;
-    double base_height;
-    double height;
+    double ftt;
     double box[4];
-    uint flag;
+    uint pointIndex;
 };
 
 
@@ -77,6 +81,8 @@ public:
 
     //copy
     void copy(ply_vertex * other);
+
+    operator Point2d(void) const { return getPos(); }
 
     ///////////////////////////////////////////////////////////////////////////
     void setPos(const Point2d& p) { pos=p; }
@@ -116,6 +122,7 @@ private:
 //
 class c_ply{
 public:
+  friend class c_polygon;
 
     template <typename Pt>
       class iterator_ : public std::iterator<std::bidirectional_iterator_tag, Pt>
@@ -159,6 +166,11 @@ public:
       }
 
     };
+
+    operator cv::InputArray() const {
+      // FIXME reference to temporary??
+      return InputArray(all);
+    }
 
     typedef iterator_<Point2d> iterator;
 
@@ -215,6 +227,10 @@ public:
         return all.size();
     }
 
+    int getSize() const {
+        return all.size();
+    }
+
     ply_vertex * operator[](unsigned int id){
         if(all.empty()) indexing();
         return all[id];
@@ -258,7 +274,7 @@ public:
     bool identical(c_ply& other);
 
     friend istream& operator>>( istream&, c_ply& );
-    friend ostream& operator<<( ostream&, c_ply& );
+    friend ostream& operator<<( ostream&, const c_ply& );
 
 protected:
 
@@ -294,7 +310,7 @@ private:
 //a c_plylist is a list of c_ply
 class c_plylist : public list<c_ply>
 {
-    friend ostream& operator<<( ostream&, c_plylist& );
+    friend ostream& operator<<( ostream&, const c_plylist& );
     friend istream& operator>>( istream&, c_plylist& );
 
 public:
@@ -356,7 +372,14 @@ public:
         return all[id];
     }
 
+    ply_vertex * operator[](unsigned int id) const {
+      return all.at(id); // checked
+    }
+
     double getArea();
+
+    // Remove the first c_ply.
+    void pop_front();
 
     //destroy
     void destroy();
@@ -376,6 +399,19 @@ public:
     //check if polygons are identical (or not)
     bool identical(c_polygon& p);
 
+    friend inline std::ostream &operator<<(std::ostream &os, const c_polygon &p)
+    {
+      unsigned int idx = 0u;
+      for (auto ply_it = p.cbegin(); ply_it != p.cend(); ++ply_it)
+      {
+        const c_ply &cp = *ply_it;
+        if (idx++ != 0)
+          os << ", ";
+        os << "[" << idx << "]" << cp;
+      }
+      return os;
+    }
+
 private:
 
     //indexing the vertices and store them in vector<ply_vertex*> all
@@ -388,6 +424,9 @@ private:
 
     float area;
 };
+
+extern std::ostream &
+operator<<(std::ostream &os, const std::vector<c_polygon> &v);
 
 //
 // Given radius and resolution (# of vertices), create a circle in polygon format

@@ -17,17 +17,19 @@
 #include <opencv2/legacy/legacy.hpp>
 
 #if !defined(OPENCV2_4_13)
-typedef int ColormapTypes;
+namespace cv {
+  typedef int ColormapTypes;
+}
 #endif
 
 #endif // end < 3.0
 
 #if CV_MAJOR_VERSION >= 3
-const int COLORMAP_BAD
-  = static_cast<int>(cv::COLORMAP_PARULA) + 1;
+const cv::ColormapTypes COLORMAP_BAD
+  = cv::ColormapTypes(static_cast<int>(cv::COLORMAP_PARULA) + 1);
 #else
 const int COLORMAP_BAD
-  = static_cast<int>(cv::COLORMAP_HOT) + 1;
+  = cv::ColormapTypes(static_cast<int>(cv::COLORMAP_HOT) + 1);
 #endif
 
 // version < 2.4.13

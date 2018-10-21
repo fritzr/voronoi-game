@@ -25,6 +25,7 @@
 using namespace std;
 using namespace cv;
 using namespace voronoi;
+using namespace shp;
 
 typedef double coordinate_type;
 typedef typename cv::Point_<coordinate_type> point_type;
@@ -74,7 +75,8 @@ struct options_t
   string output_path;
   long unsigned int seed = 0u;
 
-  string users_path;
+  string user_points_path;
+  string user_rings_path;
   string p1sites_path;
   string p2sites_path;
 };
@@ -102,9 +104,14 @@ static void usage(const char *prog, const char *errmsg=NULL)
 void
 usage(const char *prog, const char *errmsg)
 {
-  cerr << "usage: " << prog << " [OPTIONS] <users> <sites>" << endl
-    << "       " << prog << " [OPTIONS] -p<N> <users> <p1sites> <p2sites>"
-    << endl
+  cerr << "usage: " << prog
+    << " [OPTIONS] [-p<N>] <user_points> <user_rings> <p1_sites> <p2_sites>"
+    << endl << endl
+    << "Read users and their fixed-travel-time (FTT) rings, along with some "
+       "known facilities/sites for players 1 and 2. Then successively find the"
+       " optimal location to place sites for the second player. With -p, play"
+       " N rounds, considering each player alternatively as 'player 2'."
+    << endl << endl
     << "OPTIONS are:" << endl
     << "  -F			Fill input polygons (default: trace)" << endl
     << "  -C COLORMAP		Give a colormap index" << endl
@@ -279,7 +286,7 @@ get_options(int argc, char *argv[], options_t &o)
   if (o.drawRects)
     usage(argv[0], "-r is no longer implemented");
 
-  int nargs = 3;
+  int nargs = 4;
   if (argc - optind < nargs) {
     usage(argv[0], "not enough arguments");
   }
@@ -291,10 +298,11 @@ get_options(int argc, char *argv[], options_t &o)
   // Disable interactive mode with file output.
   if (!o.output_path.empty()) o.interactive = false;
 
-  o.users_path = string(argv[optind]);
-  o.p1sites_path = string(argv[optind+1]);
+  o.user_points_path = string(argv[optind]);
+  o.user_rings_path = string(argv[optind+1]);
+  o.p1sites_path = string(argv[optind+2]);
   if (nargs > 2)
-    o.p2sites_path = string(argv[optind+2]);
+    o.p2sites_path = string(argv[optind+3]);
 }
 
 // Draw grid lines.
@@ -324,42 +332,6 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
       ostringstream ss; ss << (sz.height - ypos - dy);
       putText(img, ss.str(), Point(FONT_XSPACE, ypos + dy - FONT_YSPACE),
           FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
-    }
-  }
-}
-
-// Read points from a file (one point per line) and write to out.
-template <class It>
-static size_t
-readPoints(const string &path, It out)
-{
-  PointReader r;
-  r.read(path);
-  vector<Point2d> &pts = r.getPoints();
-  std::copy(pts.begin(), pts.end(), out);
-
-#ifdef DEBUG
-  cerr << "READ shapefile '" << path << "'" << endl;
-  unsigned int idx = 0u;
-  for (auto pti = pts.begin(); pti != pts.end(); ++pti)
-    cerr << "  [" << setw(2) << setfill(' ') << idx++ << "] " << *pti << endl;
-#endif
-
-  return pts.size();
-}
-
-template<class It>
-static void
-readOrDie(const string &path, It out)
-{
-  try {
-    errno = 0;
-    readPoints(path, out);
-  } catch (exception&) { // should be ios_base::failure; PR libstdc++/66145
-    if (errno) {
-      cerr << "error opening file '" << path << "': ";
-      perror(NULL);
-      exit(2);
     }
   }
 }
@@ -424,19 +396,9 @@ int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
 
-  vector<Point2d> users, p1sites, p2sites;
-
-  readOrDie(opts.users_path, back_inserter(users));
-  readOrDie(opts.p1sites_path, back_inserter(p1sites));
-  if (p1sites.empty()) {
-    cerr << "error: empty sites file (" << opts.p1sites_path << ")" << endl;
-    exit(2);
-  }
-  readOrDie(opts.p2sites_path, back_inserter(p2sites));
-  if (p2sites.empty()) {
-    cerr << "error: empty sites file (" << opts.p2sites_path << ")" << endl;
-    exit(2);
-  }
+  vector<User> users(readUsers(opts.user_points_path, opts.user_rings_path));
+  vector<Point2d> p1sites(readPoints(opts.p1sites_path));
+  vector<Point2d> p2sites(readPoints(opts.p2sites_path));
 
   // We got resolution (x, y) as (width, height); flip to (rows, cols)
   Size resolution(opts.screenWidth, opts.screenHeight);
@@ -451,6 +413,9 @@ int main(int argc, char *argv[])
   if (opts.dogrid)
     drawGrid(img, opts.ngridx, opts.ngridy, gridColor, opts.gridThickness,
         opts.gridLabels);
+
+#if 0
+  /*** Disable test code for now while I'm doing maintenance on stuff. ***/
 
   // Play the game one round at a time.
   VGame vg(users.begin(), users.end());
@@ -508,8 +473,10 @@ int main(int argc, char *argv[])
   }
   else
     imwrite(opts.output_path, img);
+#endif // 0
 
   if (rng != nullptr)
     delete rng;
+
   return 0;
 }

@@ -48,7 +48,7 @@ inline int Collinear(const C a, const C b, const C c)
 Returns TRUE iff point c lies on the closed segement ab.
 Assumes it is already known that abc are collinear.
 ---------------------------------------------------------------------*/
-template <typename C, typename T>
+template <typename C>
 inline bool Between(const C a, const C b, const C c)
 {
    // If ab not vertical, check betweenness on x; else on y.
@@ -170,7 +170,7 @@ of each, returns 'e' rather than 'v' as one might expect.
 ---------------------------------------------------------------------*/
 template <typename T>
 inline char SegSegInt(
-    const T a, const T b, const T c, const T d, T p )
+    const T a, const T b, const T c, const T d, T& p )
 {
    T  s, t;        // The two parameters of the parametric eqns.
    T  num_s, num_t, denom;   // Numerator and denoninator of equations.

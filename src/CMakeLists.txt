@@ -74,6 +74,8 @@ add_executable(${TEST_PROG}
   opencv_compat.h
   sweep.h
   util.h
+  user.h
+  #user.cc
   #vgame.cc
   vgame.h
   voronoi.cc

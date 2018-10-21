@@ -17,5 +17,6 @@ extern "C" {
 #endif
 
 #include "util.h"
+#include "user.h"
 
 #include "opencv_compat.h"
