@@ -75,7 +75,7 @@ add_executable(${TEST_PROG}
   sweep.h
   util.h
   user.h
-  #user.cc
+  user.cc
   #vgame.cc
   vgame.h
   voronoi.cc

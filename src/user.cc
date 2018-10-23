@@ -5,11 +5,6 @@
 using namespace cv;
 using namespace std;
 
-vector<Point2d>
-User::intersect(Vec2d ray, const c_ply &ring) const
-{
-}
-
 /* Find the travel time given fixed-travel-time (FTT) rings.  */
 double
 User::travelTime(Point2d query) const
@@ -56,17 +51,17 @@ User::travelTime(Point2d query) const
   {
     dl = distance(center, query);
     fttl = 0.0;
-    du = distance(query, upper_ring->first());
-    fttu = upper_ring->first().extra().ftt;
+    du = distance(query, upper_ring->front());
+    fttu = upper_ring->front().extra().ftt;
   }
 
   /* Case 2. Interpolate between the bounding rings.  */
   if (lower_ring != rings.end() && upper_ring != rings.end())
   {
-    dl = distance(lower_ring->first(), query);
-    fttl = lower_ring->first().extra().fft;
-    du = distance(query, upper_ring->first());
-    fttu = upper_ring->first().extra().ftt;
+    dl = distance(lower_ring->front(), query);
+    fttl = lower_ring->front().extra().ftt;
+    du = distance(query, upper_ring->front());
+    fttu = upper_ring->front().extra().ftt;
   }
 
   /* Case 3. No upper bound -- extrapolate past lower bound.  */
@@ -74,8 +69,8 @@ User::travelTime(Point2d query) const
   {
     dl = distance(center, query);
     fttl = 0.0;
-    du = distance(query, lower_ring->first());
-    fttu = lower_ring->first().extra().ftt;
+    du = distance(query, lower_ring->front());
+    fttu = lower_ring->front().extra().ftt;
   }
 
   /* Time-to-travel.  */

@@ -358,6 +358,11 @@ public:
     //triangulate the polygon
     void triangulate(vector<triangle>& tris);
 
+    // cache the triangulation for later
+    void triangulate(void) {
+      triangulate(triangulation);
+    }
+
     void reverse(); //reverse the vertex order (not the list order)
 
     //access the vertices of the polygon as an array
@@ -386,7 +391,14 @@ public:
 
     //check if a point is enclosed
     //the behavior is unknown if pt is on the boundary of the polygon
-    bool enclosed(const Point2d& pt);
+    bool enclosed(const Point2d& pt) const;
+
+    // We need to triangulate first to get the right answer.
+    bool enclosed(const Point2d& pt) {
+      if (triangulation.empty())
+          triangulate(triangulation);
+      return const_cast<const c_polygon*>(this)->enclosed(pt);
+    }
 
     //find a point inside the polygon
     Point2d findEnclosedPt();

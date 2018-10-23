@@ -390,6 +390,48 @@ show_score(Mat& img, VGame& vg)
   }
 }
 
+#ifdef DEBUG
+static ostream&
+dumpDistances(ostream& os, const vector<User> &users,
+    const vector<Point2d> &p1sites, const vector<Point2d> &p2sites)
+{
+  os << "===== USERS =====" << endl;
+  for (auto uit = users.begin(); uit != users.end(); ++uit)
+    os << "    " << *uit << endl;
+
+  unsigned int idx = 0u;
+
+  typedef vector<Point2d>::const_iterator piterator;
+  typedef pair<const piterator, const piterator> iter_range;
+  typedef pair<const string, const iter_range> packed_value;
+  array<packed_value, 2> players = {
+      packed_value(string("===== PLAYER ONE ====="),
+          iter_range(p1sites.cbegin(), p1sites.cend())),
+      packed_value(string("===== PLAYER TWO ====="),
+          iter_range(p2sites.cbegin(), p2sites.cend())),
+  };
+
+  /* Output both players..  */
+  for (auto pn = players.cbegin(); pn != players.cend(); ++pn)
+  {
+    const string &title(pn->first);
+    os << endl << title << endl;
+
+    const iter_range &range(pn->second);
+    for (auto pp = range.first; pp != range.second; ++pp)
+    {
+      os << "[" << setw(2) << setfill(' ') << idx++ << "]    " << *pp << endl;
+      unsigned int uidx = 0u;
+      for (auto uit = users.begin(); uit != users.end(); ++uit)
+        os << "    (" << setw(2) << uidx++ << ") "
+          << *uit << " range " << uit->travelTime(*pp) << endl;
+    }
+  }
+
+  return os;
+}
+#endif
+
 std::default_random_engine* rng = nullptr;
 
 int main(int argc, char *argv[])
@@ -399,6 +441,10 @@ int main(int argc, char *argv[])
   vector<User> users(readUsers(opts.user_points_path, opts.user_rings_path));
   vector<Point2d> p1sites(readPoints(opts.p1sites_path));
   vector<Point2d> p2sites(readPoints(opts.p2sites_path));
+
+#ifdef DEBUG
+  dumpDistances(cout, users, p1sites, p2sites);
+#endif
 
   // We got resolution (x, y) as (width, height); flip to (rows, cols)
   Size resolution(opts.screenWidth, opts.screenHeight);

@@ -581,14 +581,11 @@ void c_polygon::copy(const c_polygon& other)
 
 //check if a point is enclosed
 //the behavior is unknown if pt is on the boundary of the polygon
-bool c_polygon::enclosed(const Point2d& p)
+bool c_polygon::enclosed(const Point2d& p) const
 {
-    if(triangulation.empty())
-        triangulate(triangulation);
-
     //find the largest triangle
     for(uint i=0;i<triangulation.size();i++){
-        triangle & tri=triangulation[i];
+        const triangle & tri=triangulation[i];
         const Point2d& p1=(*this)[tri.v[0]]->getPos();
         const Point2d& p2=(*this)[tri.v[1]]->getPos();
         const Point2d& p3=(*this)[tri.v[2]]->getPos();

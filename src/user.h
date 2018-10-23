@@ -2,6 +2,10 @@
 #include <set>
 #include <array>
 
+#ifdef DEBUG
+#include <iostream>
+#endif
+
 #include "opencv_compat.h"
 
 #include "polygon.h"
@@ -113,15 +117,10 @@ public:
   User(const Point2d& pt, vector<c_polygon> plys)
     : center(pt), rings(plys)
   {
-#if 0
-    for (auto pply = plys.begin(); pply != plys.end(); ++pply)
-    {
-      /* Take only the outermost ring of the polygon.  */
-      c_polygon &polygon = *pply;
-      c_ply &ply = polygon.front(); /* outer ring */
-      rings.emplace_back(pt, ply); /* convert to user_ring */
-    }
-#endif
+    // Go ahead and triangulate now -- this will be needed for computing
+    // travel time later.
+    for (auto rit = rings.begin(); rit != rings.end(); ++rit)
+      rit->triangulate();
   }
 
   /* To identify the travel time to a point, we first have to draw a ray from
@@ -134,6 +133,23 @@ public:
    * is in traversing the rings.
    */
   double travelTime(Point2d pt) const;
+
+#ifdef DEBUG
+  friend inline ostream& operator<<(ostream& os, const User &u)
+  {
+    os << u.center << " [ ftts: ";
+    auto cpi = u.rings.cbegin();
+    while (cpi != u.rings.cend())
+    {
+      if (cpi != u.rings.cbegin())
+        os << ", ";
+      os << cpi->front().extra().ftt;
+      ++cpi;
+    }
+    os << " ]";
+    return os;
+  }
+#endif // DEBUG
 
 private:
   Point2d center;
