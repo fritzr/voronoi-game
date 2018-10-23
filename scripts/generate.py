@@ -280,7 +280,7 @@ def generate_points(npoints, bbox):
                   randrangef(bbox[Y][0], bbox[Y][1]))
               for _ in xrange(npoints)]
 
-def write_points(shp, point_list):
+def write_points(shp, point_list, opts):
     # index of this point, to associate it with a set of rings in a sister file
     shp.field('pointIndex', 'N')
 
@@ -658,7 +658,7 @@ def main(*args):
     points = list(generate_points(opts.npoints, opts.bbox))
     if opts.point_file:
         with ShapefileWriter(opts.point_file, shapeType=shapefile.POINT) as shp:
-            write_points(shp, points)
+            write_points(shp, points, opts)
         echo_shapefiles(opts.npoints, 'points', opts.point_file)
 
     # Generate polygons and write them if we want.
