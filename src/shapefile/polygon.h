@@ -64,10 +64,18 @@ struct ply_extra_info
 class ply_vertex
 {
 public:
-    
+    typedef cv::Point2d point_type;
+#if CV_MAJOR_VERSION >= 3
+    enum {
+      depth = cv::traits::Depth<double>::value,
+      channels = 2,
+      type = CV_MAKETYPE(depth, channels)
+    };
+#endif
+
     ///////////////////////////////////////////////////////////////////////////
     ply_vertex(){ init(); }
-    ply_vertex( const Point2d& p ){ pos=p; init(); }
+    ply_vertex( const point_type& p ){ pos=p; init(); }
     virtual ~ply_vertex();
     void setNext(ply_vertex * n){next=n; if(n!=NULL) n->pre=this; }
     void setPre(ply_vertex * n){pre=n; if(n!=NULL) n->next=this; }
@@ -82,13 +90,13 @@ public:
     //copy
     void copy(ply_vertex * other);
 
-    operator Point2d(void) const { return getPos(); }
+    operator point_type(void) const { return getPos(); }
 
     ///////////////////////////////////////////////////////////////////////////
-    void setPos(const Point2d& p) { pos=p; }
-    virtual const Point2d& getPos() const { return pos; }
+    void setPos(const point_type& p) { pos=p; }
+    virtual const point_type& getPos() const { return pos; }
 
-    void translate(const Point2d& v){ pos=pos+v; }
+    void translate(const point_type& v){ pos=pos+v; }
 
     virtual ply_vertex * getNext() const { return next; }
     virtual ply_vertex * getPre() const { return pre; }
@@ -109,13 +117,33 @@ private:
     }
     
     //basic info
-    Point2d pos;       //position
+    point_type pos;       //position
     ply_vertex * next; //next vertex in the polygon
     ply_vertex * pre;  //previous vertex in the polygon
     Vec2d normal;   //normal, the segment normal from this v to the next.
     bool reflex;
     uint vid;
 };
+
+#if CV_MAJOR_VERSION >= 3
+namespace cv
+{
+  namespace traits
+  {
+    template<>
+    struct Type<ply_vertex*>
+    {
+      enum { value = ply_vertex::type };
+    };
+
+    template<>
+    struct Depth<ply_vertex*>
+    {
+      enum { value = ply_vertex::depth };
+    };
+  } // end namespace traits
+} // end namespace cv
+#endif
 
 //
 // Polygon chain
