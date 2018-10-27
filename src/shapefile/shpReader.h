@@ -171,7 +171,7 @@ private:
 template <typename First, typename Second>
 std::ostream& operator<<(std::ostream& os, const std::pair<First, Second> &p)
 {
-  return os << p.first << p.second;
+  return os << p.first << " => " << p.second;
 }
 
 template<typename Pt_>

@@ -917,15 +917,16 @@ template<typename Pt_>
 ostream&
 operator<<( ostream& os, const c_ply<Pt_>& p)
 {
-    os<<p.getSize()<<" "<<((p.type==c_ply<Pt_>::PIN)?"in":"out")<<"\n";
+    os<<p.getSize()<<" "<<((p.type==c_ply<Pt_>::PIN)?"PIN  ":"POUT ");
     const typename c_ply<Pt_>::vertex_type * ptr=p.head;
-    do{
-        os<<ptr->getPos().x<<" "<<ptr->getPos().y<<"\n";
+    os << "< " << ptr->getPos();
+    ptr = ptr->getNext();
+    while(ptr!=p.head)
+    {
+        os<< ", " << ptr->getPos();
         ptr=ptr->getNext();
-    }while(ptr!=p.head);
+    }
 
-    for(int i=0;i<p.getSize();i++) os<<i+1<<" ";
-    os<<"\n";
     return os;
 }
 
@@ -943,13 +944,10 @@ ostream &
 operator<<(ostream &os, const c_polygon<Pt_> &p)
 {
   unsigned int idx = 0u;
+  os << "c_polygon({" << endl;
   for (auto ply_it = p.cbegin(); ply_it != p.cend(); ++ply_it)
-  {
-    const typename c_polygon<Pt_>::ring_type &cp = *ply_it;
-    if (idx++ != 0)
-      os << ", ";
-    os << "[" << idx << "] " << cp;
-  }
+    os << "    [" << setw(2) << idx++ << "] " << *ply_it << endl;
+  os << "})";
   return os;
 }
 
@@ -957,13 +955,11 @@ template<typename Pt_>
 ostream &
 operator<<(ostream &os, const vector<c_polygon<Pt_> > &v)
 {
-  os << "[ ";
-  auto it = v.begin();
-  if (it++ != v.end())
-    os << *it;
-  for (; it != v.end(); ++it)
-    os << ", " << *it;
-  os << " ]";
+  os << "vector<c_polygon>({" << endl;
+  unsigned int idx = 0u;
+  for (auto it = v.begin(); it != v.end(); ++it)
+    os << "  [" << setw(2) << idx++ << "] " << *it << endl;
+  os << "})";
   return os;
 }
 
