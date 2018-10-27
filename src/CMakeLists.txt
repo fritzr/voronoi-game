@@ -65,21 +65,25 @@ add_subdirectory(shapelib)
 set(TEST_PROG vgtest)
 
 add_executable(${TEST_PROG}
-  boost_cv_compat.h
-  main.cc
-  main.h
-  maxrect.cc
-  maxrect.h
-  nn1.h
   opencv_compat.h
-  sweep.h
+  boost_cv_compat.h
   util.h
+
+  sweep.h
+  nn1.h
+  voronoi.h
+  voronoi.cc
+  maxrect.h
+  maxrect.cc
+
+  vgame.h
+  #vgame.cc
+
   user.h
   user.cc
-  #vgame.cc
-  vgame.h
-  voronoi.cc
-  voronoi.h
+
+  main.h
+  main.cc
 )
 
 # these are just annoying

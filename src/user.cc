@@ -6,25 +6,26 @@ using namespace cv;
 using namespace std;
 
 /* Find the travel time given fixed-travel-time (FTT) rings.  */
-double
-User::travelTime(Point2d query) const
+template<typename Pt_>
+typename User<Pt_>::coordinate_type
+User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
 {
-  if (rings.empty())
+  if (isolines.empty())
     return HUGE_VAL;
 
   /* Find the upper/lower rings between which this point is contained.  */
-  auto lower_ring = rings.end();
-  auto upper_ring = rings.begin();
+  auto lower_ring = isolines.end();
+  auto upper_ring = isolines.begin();
 
   /* Keep going until we find the first ring that encloses the query point. */
-  while (upper_ring != rings.end() && !upper_ring->enclosed(query))
+  while (upper_ring != isolines.end() && !upper_ring->enclosed(query))
   {
     lower_ring = upper_ring;
     ++upper_ring;
   }
 
   /* This should already be captured by rings.empty() above. */
-  if (upper_ring == rings.end() && lower_ring == rings.end())
+  if (upper_ring == isolines.end() && lower_ring == isolines.end())
     return HUGE_VAL;
 
   /* Interpolate the travel time using the FTT endpoints and distance.
@@ -47,7 +48,7 @@ User::travelTime(Point2d query) const
    */
 
   /* Case 1. No lower ring -- lower distance is from center point (origin).  */
-  if (lower_ring == rings.end() /* && upper_ring != rings.end() */)
+  if (lower_ring == isolines.end() /* && upper_ring != rings.end() */)
   {
     dl = distance(center, query);
     fttl = 0.0;
@@ -56,7 +57,7 @@ User::travelTime(Point2d query) const
   }
 
   /* Case 2. Interpolate between the bounding rings.  */
-  if (lower_ring != rings.end() && upper_ring != rings.end())
+  if (lower_ring != isolines.end() && upper_ring != isolines.end())
   {
     dl = distance(lower_ring->front(), query);
     fttl = lower_ring->front().extra().ftt;
@@ -65,7 +66,7 @@ User::travelTime(Point2d query) const
   }
 
   /* Case 3. No upper bound -- extrapolate past lower bound.  */
-  if (lower_ring != rings.end() && upper_ring == rings.end())
+  if (lower_ring != isolines.end() && upper_ring == isolines.end())
   {
     dl = distance(center, query);
     fttl = 0.0;
@@ -76,3 +77,5 @@ User::travelTime(Point2d query) const
   /* Time-to-travel.  */
   return abs(dl / (du + dl)) * abs(fttu - fttl);
 }
+
+template class User<cv::Point2d>;

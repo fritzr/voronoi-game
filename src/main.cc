@@ -38,6 +38,8 @@ typedef typename cfla::MaxRectSolver<coordinate_type, L1NN1> solver_type;
 typedef typename cfla::cfla_traits<point_type, solver_type> cfla_traits;
 typedef typename cfla::VGame<cfla_traits> VGame;
 
+typedef User<point_type> User2d;
+
 enum DrawRects {
   RECTS_NONE = 0,
   RECTS_ROTATED = 1,
@@ -350,6 +352,7 @@ static inline pt rotn(pt p)
   return rotateZ2f_neg(p) - nbias;
 }
 
+#if 0
 template<class pt>
 static inline pt check_rot(pt p)
 {
@@ -389,10 +392,11 @@ show_score(Mat& img, VGame& vg)
       << setw(2) << setfill(' ') << player.score() << endl;
   }
 }
+#endif
 
 #ifdef DEBUG
 static ostream&
-dumpDistances(ostream& os, const vector<User> &users,
+dumpDistances(ostream& os, const vector<User2d> &users,
     const vector<Point2d> &p1sites, const vector<Point2d> &p2sites)
 {
   os << "===== USERS =====" << endl;
@@ -438,9 +442,10 @@ int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
 
-  vector<User> users(readUsers(opts.user_points_path, opts.user_rings_path));
-  vector<Point2d> p1sites(readPoints(opts.p1sites_path));
-  vector<Point2d> p2sites(readPoints(opts.p2sites_path));
+  vector<User2d> users(readUsers<Point2d>(
+        opts.user_points_path, opts.user_rings_path));
+  vector<Point2d> p1sites(readPoints<Point2d>(opts.p1sites_path));
+  vector<Point2d> p2sites(readPoints<Point2d>(opts.p2sites_path));
 
 #ifdef DEBUG
   dumpDistances(cout, users, p1sites, p2sites);

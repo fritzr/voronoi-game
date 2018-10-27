@@ -236,12 +236,12 @@ inline char SegSegInt(
       else if(t==0){p[0]=c[0]; p[1]=c[1]; }
       else if(t==1){p[0]=d[0]; p[1]=d[1]; }
       else{
-          cout<<"s="<<s<<" t="<<t<<endl;
-          cout<<"a="<<a[0]<<","<<a[1]<<endl;
-          cout<<"b="<<b[0]<<","<<b[1]<<endl;
-          cout<<"c="<<c[0]<<","<<c[1]<<endl;
-          cout<<"d="<<d[0]<<","<<d[1]<<endl;
-          assert(false);
+        std::cerr<<"s="<<s<<" t="<<t<<std::endl;
+        std::cerr<<"a="<<a[0]<<","<<a[1]<<std::endl;
+        std::cerr<<"b="<<b[0]<<","<<b[1]<<std::endl;
+        std::cerr<<"c="<<c[0]<<","<<c[1]<<std::endl;
+        std::cerr<<"d="<<d[0]<<","<<d[1]<<std::endl;
+        assert(false);
       }
    }
 

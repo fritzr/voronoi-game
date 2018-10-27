@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef MSVC
+#define __attribute__()
+#endif
+
 template<typename T>
 inline T deg2rad(T deg) {
   return (deg * static_cast<T>(M_PI)) / static_cast<T>(180.0);

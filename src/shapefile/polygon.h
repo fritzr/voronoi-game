@@ -11,23 +11,36 @@
 #endif
 
 #include "opencv_compat.h"
+#include "boost_cv_compat.h"
 
-#ifdef DEBUG
 #include <iostream>
-#endif
-
 #include <list>
 #include <vector>
 #include <cassert>
 #include <float.h>
 #include <iterator>
-using namespace std;
 using namespace cv;
+
+#if CV_MAJOR_VERSION < 3
+using namespace cv::traits;
+#endif
+
+namespace bp = boost::polygon;
 
 typedef unsigned int uint;
 
-const float  PI2f = 6.2831853071794f;
-const double PI2d = 6.2831853071794;
+template<typename T>
+struct PI { };
+
+template<>
+struct PI<float> {
+  float value = 6.2831853071794f;
+};
+
+template<>
+struct PI<double> {
+  double value = 6.2831853071794;
+};
 
 //
 //a triangle, used in triangulating a polygon
@@ -37,41 +50,74 @@ struct triangle
     uint v[3]; // id to the vertices
 };
 
+// Forward declarations
+template<typename Pt_>
+class ply_vertex;
+
+template<typename Pt_>
+class c_ply;
+
+template<typename Pt_>
+class c_plylist;
+
+template<typename Pt_>
+class c_polygon;
+
+template<typename Pt_>
+class PlyMat;
+
+template <typename Pt_> std::istream &
+  operator>>(std::istream&, c_ply<Pt_>&);
+
+template <typename Pt_> std::ostream &
+  operator<<(std::ostream &, const c_ply<Pt_> &);
+
+template <typename Pt_> std::istream &
+  operator>>(std::istream&, c_plylist<Pt_>&);
+
+template <typename Pt_> std::ostream &
+  operator<<(std::ostream &, const c_plylist<Pt_> &);
+
+template <typename Pt_> std::ostream & \
+  operator<<(std::ostream &, const c_polygon<Pt_> &);
+
+template <typename Pt_> std::ostream & \
+  operator<<(std::ostream &, const std::vector<c_polygon<Pt_> >&);
+
 //
 // extra information about the polygon
 //
 
+template<typename Pt_>
 struct ply_extra_info
 {
-    ply_extra_info()
-    {
-        ftt=0.0;
-        has_box=false;
-        box[0]=box[1]=box[2]=box[3]=0;
-        pointIndex=UINT_MAX;
-    }
+  typedef typename ply_vertex<Pt_>::coordinate_type coordinate_type;
 
-    bool has_box;
-    double ftt;
-    double box[4];
-    uint pointIndex;
+  ply_extra_info()
+  {
+      ftt=0.0;
+      has_box=false;
+      box[0]=box[1]=box[2]=box[3]=0;
+      pointIndex=UINT_MAX;
+  }
+
+  bool has_box;
+  coordinate_type ftt; // fixed-travel-time for this isoline
+  coordinate_type box[4];
+  uint pointIndex; // index of the corresponding center point
 };
 
 
 //
 // Vertex of polygon
 //
+template<typename Pt_>
 class ply_vertex
 {
 public:
-    typedef cv::Point2d point_type;
-#if CV_MAJOR_VERSION >= 3
-    enum {
-      depth = cv::traits::Depth<double>::value,
-      channels = 2,
-      type = CV_MAKETYPE(depth, channels)
-    };
-#endif
+    typedef Pt_ point_type;
+    typedef typename bp::point_traits<point_type>::coordinate_type
+      coordinate_type;
 
     ///////////////////////////////////////////////////////////////////////////
     ply_vertex(){ init(); }
@@ -101,7 +147,7 @@ public:
     virtual ply_vertex * getNext() const { return next; }
     virtual ply_vertex * getPre() const { return pre; }
 
-    const Vec2d& getNormal() const { return normal; }
+    const Vec<coordinate_type, 2>& getNormal() const { return normal; }
     bool isReflex() const { return reflex; }
 
     //get extra information
@@ -115,92 +161,84 @@ private:
         reflex=false;
         vid=UINT_MAX;
     }
-    
+
     //basic info
     point_type pos;       //position
     ply_vertex * next; //next vertex in the polygon
     ply_vertex * pre;  //previous vertex in the polygon
-    Vec2d normal;   //normal, the segment normal from this v to the next.
+    //normal, the segment normal from this v to the next.
+    Vec<coordinate_type, 2> normal;
     bool reflex;
     uint vid;
 };
 
-#if CV_MAJOR_VERSION >= 3
-namespace cv
-{
-  namespace traits
-  {
-    template<>
-    struct Type<ply_vertex*>
-    {
-      enum { value = ply_vertex::type };
-    };
 
-    template<>
-    struct Depth<ply_vertex*>
-    {
-      enum { value = ply_vertex::depth };
-    };
-  } // end namespace traits
-} // end namespace cv
-#endif
+template <typename Pt>
+  class vertex_iterator
+  : public std::iterator<std::bidirectional_iterator_tag, Pt>
+{
+public:
+  typedef std::iterator<std::bidirectional_iterator_tag, Pt> super;
+  //typedef ... traits;
+  typedef typename super::value_type value_type;
+  typedef typename super::reference reference;
+  typedef typename super::pointer pointer;
+  typedef typename super::difference_type difference_type;
+  typedef size_t size_type;
+
+  typedef c_ply<Pt> ring_type;
+  typedef ply_vertex<value_type> vertex_type;
+
+private:
+  vertex_type *head_;
+  vertex_type *cur_;
+
+public:
+  typedef vertex_iterator it;
+
+  vertex_iterator(const ring_type &ply)
+    : head_(ply.head), cur_(ply.head ? ply.head->getNext() : NULL) {}
+  vertex_iterator(vertex_type *head)
+    : head_(head), cur_(head ? head->getNext() : NULL) {}
+  vertex_iterator(vertex_type *head, vertex_type *next)
+    : head_(head), cur_(next) {}
+  vertex_iterator(const it &other)
+    : head_(other.head_), cur_(other.head_) {}
+
+  inline it& operator++() { cur_ = cur_->getNext(); return *this; }
+  inline it operator++(int) { return it(*this); ++*this; }
+  inline bool operator==(const it& o) const {
+    return head_ == o.head_ && cur_ == o.cur_; }
+  inline bool operator!=(const it& o) const { return !(*this == o); }
+  //inline bool operator<(it o) const { return it_ < o.it_; }
+  inline it& operator--() { cur_ = cur_->getPre(); return *this; }
+  inline it operator--(int) { return it(*this); ++*this; }
+  //inline it operator+(int i) { return it(it_ + i); }
+  //inline difference_type operator-(it o) { return it_ - o.it_; }
+  //inline it& operator+=(int i) { it_ += i; return *this; }
+  //inline it& operator-=(int i) { it_ -= i; return *this; }
+  inline value_type operator*() const {
+    return cur_->pos;
+  }
+
+};
 
 //
 // Polygon chain
 //
-class c_ply{
+template<typename Pt_>
+class c_ply
+{
 public:
-  friend class c_polygon;
+    typedef Pt_ point_type;
+    typedef ply_vertex<Pt_> vertex_type;
+    typedef typename vertex_type::coordinate_type coordinate_type;
 
-    template <typename Pt>
-      class iterator_ : public std::iterator<std::bidirectional_iterator_tag, Pt>
-    {
-    private:
-      ply_vertex *head_;
-      ply_vertex *cur_;
+    friend class vertex_iterator<Pt_>;
+    friend class c_polygon<Pt_>;
+    friend class PlyMat<Pt_>;
 
-    public:
-      typedef std::iterator<std::bidirectional_iterator_tag, Pt> super;
-      //typedef ... traits;
-      typedef typename super::value_type value_type;
-      typedef typename super::reference reference;
-      typedef typename super::pointer pointer;
-      typedef typename super::difference_type difference_type;
-      typedef size_t size_type;
-
-      iterator_(const c_ply &ply)
-        : head_(ply.head), cur_(ply.head ? ply.head->getNext() : NULL) {}
-      iterator_(ply_vertex *head)
-        : head_(head), cur_(head ? head->getNext() : NULL) {}
-      iterator_(ply_vertex *head, ply_vertex *next)
-        : head_(head), cur_(next) {}
-      iterator_(const iterator_ &other)
-        : head_(other.head_), cur_(other.head_) {}
-
-      inline iterator_& operator++() { cur_ = cur_->getNext(); return *this; }
-      inline iterator_ operator++(int) { return iterator_(*this); ++*this; }
-      inline bool operator==(const iterator_& o) const {
-        return head_ == o.head_ && cur_ == o.cur_; }
-      inline bool operator!=(const iterator_& o) const { return !(*this == o); }
-      //inline bool operator<(iterator_ o) const { return it_ < o.it_; }
-      inline iterator_& operator--() { cur_ = cur_->getPre(); return *this; }
-      inline iterator_ operator--(int) { return iterator_(*this); ++*this; }
-      //inline iterator_ operator+(int i) { return iterator_(it_ + i); }
-      //inline difference_type operator-(iterator_ o) { return it_ - o.it_; }
-      //inline iterator_& operator+=(int i) { it_ += i; return *this; }
-      //inline iterator_& operator-=(int i) { it_ -= i; return *this; }
-      inline value_type operator*() const {
-        return cur_->pos;
-      }
-
-    };
-
-    operator cv::InputArray() const {
-      // FIXME reference to temporary??
-      return InputArray(all);
-    }
-
-    typedef iterator_<Point2d> iterator;
+    typedef vertex_iterator<point_type> iterator;
 
     ///////
     // Iterate through points directly.
@@ -213,38 +251,43 @@ public:
     c_ply(POLYTYPE t){ head=tail=NULL; type=t; radius=-1; area=-FLT_MAX; }
 
     ///////////////////////////////////////////////////////////////////////////
-    void copy(const c_ply& ply); //copy from the other ply
+    void copy(const c_ply<Pt_>& ply); //copy from the other ply
     void destroy();
 
     ///////////////////////////////////////////////////////////////////////////
     // create c_ply
     void beginPoly();
-    void addVertex( double x, double y, bool remove_duplicate=false );
-    void addVertex( ply_vertex * v );
-    void endPoly(bool remove_duplicate=false);
+    void addVertex(coordinate_type x, coordinate_type y, bool remove_duplicate);
+    inline void addVertex(coordinate_type x, coordinate_type y) {
+      return addVertex(x, y, false);
+    }
+    void addVertex( vertex_type * v );
+
+    void endPoly(bool remove_duplicate);
+    inline void endPoly(void) { endPoly(false); }
 
     ///////////////////////////////////////////////////////////////////////////
     void negate();
     void reverse(); //reverse vertex order
 
     ///////////////////////////////////////////////////////////////////////////
-    void translate(const Point2d& p);
+    void translate(const point_type& p);
 
     ///////////////////////////////////////////////////////////////////////////
     //
-    Point2d findEnclosedPt(); //find a point that is enclosed by this polychain
+    point_type findEnclosedPt(); //find a point that is enclosed by this polychain
 
     //triangulate the polygon
-    void triangulate(vector<triangle>& tris);
+    void triangulate(std::vector<triangle>& tris);
 
     ///////////////////////////////////////////////////////////////////////////
     // Access functions
-    ply_vertex * getHead() const { return head; }
+    vertex_type * getHead() const { return head; }
 
     //hole or external boundary
     POLYTYPE getType() const { return type; }
 
-    void set(POLYTYPE t,ply_vertex * h){ 
+    void set(POLYTYPE t,vertex_type * h){ 
         type=t; head=h; 
         if(h!=NULL){ tail=h->getPre(); }
         else{ tail=NULL; }
@@ -259,19 +302,24 @@ public:
         return all.size();
     }
 
-    ply_vertex * operator[](unsigned int id){
+    vertex_type * operator[](unsigned int id){
         if(all.empty()) indexing();
         return all[id];
     }
 
     //get com //center of mass
-    const Point2d& getCenter();
+    const point_type& getCenter();
 
 	//compute the Radius of the poly chain
-	float getRadius();
+	coordinate_type getRadius();
 	
 	//area
-	float getArea();
+        coordinate_type getArea();
+        inline coordinate_type getArea() const { return area; }
+
+    // Convert to a cv::Matrix
+    operator PlyMat<Pt_>() { return mat(); }
+    inline PlyMat<Pt_> mat(void) const { return PlyMat<Pt_>(*this); }
 
     //
 	// additional functions
@@ -279,30 +327,33 @@ public:
 
 	//check if a point is enclosed
 	//the behavior is unknown if pt is on the boundary of the polygon
-	bool enclosed(const Point2d& pt);
+	bool enclosed(const point_type& pt);
 
 	//check if convex
 	bool is_convex() const;
 
 	//delete a vertex
-	void delete_vertex(ply_vertex * p);
+	void delete_vertex(vertex_type * p);
 
 	//get extra info
-	ply_extra_info& extra(){ return extra_info; }
-	const ply_extra_info& extra() const { return extra_info; }
+	ply_extra_info<Pt_>& extra(){ return extra_info; }
+	const ply_extra_info<Pt_>& extra() const { return extra_info; }
 
     ///////////////////////////////////////////////////////////////////////////
     // Operator
     //check if give poly line is the same as this
-    bool operator==( const c_ply& other ){ return other.head==head; }
+    bool operator==( const c_ply<Pt_>& other ){ return other.head==head; }
 
     //
     //this is a more general check if other and this ply are identical
     //
-    bool identical(c_ply& other);
+    bool identical(const c_ply<Pt_>& other);
 
-    friend istream& operator>>( istream&, c_ply& );
-    friend ostream& operator<<( ostream&, const c_ply& );
+    friend std::istream &
+      operator>> <Pt_>(std::istream&, c_ply<Pt_>&);
+
+    friend std::ostream &
+      operator<< <Pt_>(std::ostream &os, const c_ply<Pt_> &p);
 
 protected:
 
@@ -314,32 +365,85 @@ protected:
 
 private:
 
-    ply_vertex * head; //the head of vertex list
-    ply_vertex * tail; //end of the vertex list
+    vertex_type * head; //the head of vertex list
+    vertex_type * tail; //end of the vertex list
 
-	vector<ply_vertex*> all; //all vertices
+    std::vector<vertex_type*> all; //all vertices
 	
 	//additional info
-	Point2d center;
-	float radius;
-	float area;
+	point_type center;
+	coordinate_type radius;
+	coordinate_type area;
 
     //In, out or unknown.
     POLYTYPE type;
 
     //extrac info
-    ply_extra_info extra_info;
+    ply_extra_info<Pt_> extra_info;
 
     //triangulation
-    vector<triangle> triangulation; //catched triangulation, calculated by triangulate
+    std::vector<triangle> triangulation; //catched triangulation, calculated by triangulate
 };
 
 
-//a c_plylist is a list of c_ply
-class c_plylist : public list<c_ply>
+/* This is just a viewport into a c_ply to provide a CV adapter.  */
+template<typename Pt_>
+class PlyMat : public cv::Mat_<typename c_ply<Pt_>::point_type >
 {
-    friend ostream& operator<<( ostream&, const c_plylist& );
-    friend istream& operator>>( istream&, c_plylist& );
+private:
+  typedef cv::Mat_<typename c_ply<Pt_>::point_type > super;
+
+public:
+  typedef c_ply<Pt_> ring_type;
+  typedef typename ring_type::vertex_type vertex_type;
+  typedef typename vertex_type::point_type point_type;
+  typedef typename vertex_type::coordinate_type coordinate_type;
+
+private:
+  const ring_type &ply_;
+
+public:
+  PlyMat(const ring_type &ply)
+    : ply_(ply) {}
+
+  // Copy assignment
+  PlyMat &operator=(const PlyMat &m);
+
+  const point_type &at(int pos) {
+    return ply_.all[pos]->getPos();
+  }
+};
+
+//a c_plylist is a list of c_ply
+template <typename Pt_>
+class c_plylist : public std::list<c_ply<Pt_> >
+{
+public:
+    typedef std::list<c_ply<Pt_> > super;
+    typedef c_ply<Pt_> ring_type;
+    typedef typename ring_type::vertex_type vertex_type;
+    typedef typename ring_type::point_type point_type;
+    typedef typename vertex_type::coordinate_type coordinate_type;
+
+    using super::iterator;
+    using super::const_iterator;
+    using super::empty;
+    using super::size;
+    using super::begin;
+    using super::cbegin;
+    using super::end;
+    using super::cend;
+    using super::front;
+    using super::back;
+    using super::clear;
+    using super::push_back;
+
+private:
+    friend std::ostream&
+      operator<< <Pt_> (std::ostream&, const c_plylist<Pt_>&);
+
+    friend std::istream&
+      operator>> <Pt_>(std::istream&, c_plylist<Pt_>& );
 
 public:
 
@@ -349,17 +453,17 @@ public:
         is_buildboxandcenter_called=false;
     }
 
-    void translate(const Point2d& v);
+    void translate(const point_type& v);
 
     //access
     void buildBoxAndCenter();
-    double * getBBox() { assert(is_buildboxandcenter_called); return box; }
-    const Point2d& getCenter() { assert(is_buildboxandcenter_called); return center; }
+    coordinate_type * getBBox() { assert(is_buildboxandcenter_called); return box; }
+    const point_type& getCenter() { assert(is_buildboxandcenter_called); return center; }
 
 protected:
 
-    Point2d center;
-    double box[4];
+    point_type center;
+    coordinate_type box[4];
 
 private:
 
@@ -372,19 +476,40 @@ private:
 // the first element much be a POUT c_ply and
 // the rest ply lines are holes
 //
-class c_polygon : public c_plylist
+template<typename Pt>
+class c_polygon : public c_plylist<Pt>
 {
 public:
+    typedef c_plylist<Pt> super;
+    typedef Pt point_type;
+
+    typedef c_ply<point_type> ring_type;
+    typedef c_plylist<point_type> list_type;
+    typedef typename ring_type::vertex_type vertex_type;
+    typedef typename vertex_type::coordinate_type coordinate_type;
+
+    using super::iterator;
+    using super::const_iterator;
+    using super::empty;
+    using super::size;
+    using super::begin;
+    using super::cbegin;
+    using super::end;
+    using super::cend;
+    using super::front;
+    using super::back;
+    using super::clear;
+    using super::push_back;
 
     c_polygon() { area=0; }
 
-    bool valid(); //check if this is a valid polygon
+    bool valid() const; //check if this is a valid polygon
 
     //copy from the given polygon
     void copy(const c_polygon& other);
 
     //triangulate the polygon
-    void triangulate(vector<triangle>& tris);
+    void triangulate(std::vector<triangle>& tris);
 
     // cache the triangulation for later
     void triangulate(void) {
@@ -400,16 +525,17 @@ public:
         return all.size();
     }
 
-    ply_vertex * operator[](unsigned int id){
+    vertex_type * operator[](unsigned int id){
         if(all.empty()) indexing();
         return all[id];
     }
 
-    ply_vertex * operator[](unsigned int id) const {
+    vertex_type * operator[](unsigned int id) const {
       return all.at(id); // checked
     }
 
-    double getArea();
+    coordinate_type getArea();
+    inline coordinate_type getArea() const { return area; }
 
     // Remove the first c_ply.
     void pop_front();
@@ -419,17 +545,17 @@ public:
 
     //check if a point is enclosed
     //the behavior is unknown if pt is on the boundary of the polygon
-    bool enclosed(const Point2d& pt) const;
+    bool enclosed(const point_type& pt) const;
 
     // We need to triangulate first to get the right answer.
-    bool enclosed(const Point2d& pt) {
+    bool enclosed(const point_type& pt) {
       if (triangulation.empty())
           triangulate(triangulation);
       return const_cast<const c_polygon*>(this)->enclosed(pt);
     }
 
     //find a point inside the polygon
-    Point2d findEnclosedPt();
+    point_type findEnclosedPt();
 
     //get number of vertices
     uint getSize() const;
@@ -439,47 +565,42 @@ public:
     //check if polygons are identical (or not)
     bool identical(c_polygon& p);
 
-    friend inline std::ostream &operator<<(std::ostream &os, const c_polygon &p)
-    {
-      unsigned int idx = 0u;
-      for (auto ply_it = p.cbegin(); ply_it != p.cend(); ++ply_it)
-      {
-        const c_ply &cp = *ply_it;
-        if (idx++ != 0)
-          os << ", ";
-        os << "[" << idx << "]" << cp;
-      }
-      return os;
-    }
+    friend std::ostream &
+      operator<< <Pt>(std::ostream &os, const c_polygon<Pt> &p);
+
+    friend std::ostream &
+      operator<< <Pt>(std::ostream &os, const std::vector<c_polygon<Pt> > &v);
 
 private:
 
     //indexing the vertices and store them in vector<ply_vertex*> all
     void indexing();
 
-    vector<ply_vertex*> all; //all vertices
+    std::vector<vertex_type*> all; //all vertices
 
     //triangulation
-    vector<triangle> triangulation; //catched triangulation, calculated by triangulate
+    std::vector<triangle> triangulation; //catched triangulation, calculated by triangulate
 
-    float area;
+    coordinate_type area;
 };
-
-extern std::ostream &
-operator<<(std::ostream &os, const std::vector<c_polygon> &v);
 
 //
 // Given radius and resolution (# of vertices), create a circle in polygon format
 //
-inline void create_circle(c_polygon& p, double radius, uint res)
+template <typename Pt_>
+inline void create_circle(c_polygon<Pt_>& p,
+    typename c_polygon<Pt_>::coordinate_type radius, uint res)
 {
-    double delta=PI2d/res;
-    c_ply ply(c_ply::POUT);
+    typedef typename c_polygon<Pt_>::coordinate_type T;
+    typedef typename c_polygon<Pt_>::ring_type ring_type;
+
+    T delta = PI<T>::value / res;
+    ring_type ply(ring_type::POUT);
     ply.beginPoly();
     for(uint i=0;i<res;i++){
-        double r=delta*i;
-        double x=cos(r)*radius;
-        double y=sin(r)*radius;
+        T r=delta*i;
+        T x=cos(r)*radius;
+        T y=sin(r)*radius;
         ply.addVertex(x,y);
     }//end for i
     ply.endPoly();
@@ -487,6 +608,29 @@ inline void create_circle(c_polygon& p, double radius, uint res)
 }
 
 
+// PLY_INSTANTIATE(point_type, [extern])
+//
+// Declare (with extern) or instantiate (with empty second arg) polygon classes
+// using the given point type.
+#define PLY_INSTANTIATE(Pt, E) \
+  E template std::istream& \
+    operator>> <Pt>(std::istream&, c_ply<Pt>& ); \
+  E template std::ostream & \
+    operator<< <Pt>(std::ostream &, const c_ply<Pt> &);\
+  E template std::istream& \
+    operator>> <Pt>(std::istream&, c_plylist<Pt>& ); \
+  E template std::ostream & \
+    operator<< <Pt>(std::ostream &, const c_plylist<Pt> &);\
+  E template std::ostream & \
+    operator<< <Pt>(std::ostream &, const c_polygon<Pt> &);\
+  E template std::ostream & \
+    operator<< <Pt>(std::ostream &, const std::vector<c_polygon<Pt> > &);\
+  E template class ply_vertex<Pt>; \
+  E template class c_ply<Pt>; \
+  E template class c_plylist<Pt>; \
+  E template class c_polygon<Pt>; \
+
+PLY_INSTANTIATE(cv::Point2d, extern);
+PLY_INSTANTIATE(cv::Point2f, extern);
+
 #endif //_POLYGON_H_
-
-

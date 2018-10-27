@@ -171,7 +171,7 @@ template<typename Val>
 bool
 PointReader<Val>::onOpen(void)
 {
-  ShapeReader<Val>::setFilter(SHPT_POINT);
+  super::setFilter(SHPT_POINT);
   return true;
 }
 
@@ -189,8 +189,9 @@ PointReader<Val>::onRecord(unsigned int row, SHPObject *shp)
 
 /********* IndexedPointReader *********/
 
+template<typename Pt_>
 bool
-IndexedPointReader::onField(unsigned int index, DBFFieldType type,
+IndexedPointReader<Pt_>::onField(unsigned int index, DBFFieldType type,
     const char *name, int width, int decimals)
 {
   if (0==strncmp(name, POINT_INDEX_FIELD_NAME, sizeof(POINT_INDEX_FIELD_NAME)))
@@ -198,8 +199,9 @@ IndexedPointReader::onField(unsigned int index, DBFFieldType type,
   return true;
 }
 
+template<typename Pt_>
 bool
-IndexedPointReader::onPoint(unsigned int row, double x, double y)
+IndexedPointReader<Pt_>::onPoint(unsigned int row, double x, double y)
 {
   if (row == 0)
   {
@@ -210,12 +212,12 @@ IndexedPointReader::onPoint(unsigned int row, double x, double y)
     }
   }
 
-  if (!DBFIsAttributeNULL(dbf(), row, fieldIndex))
+  if (!DBFIsAttributeNULL(super::dbf(), row, fieldIndex))
   {
-    int pointIndex = DBFReadIntegerAttribute(dbf(), row, fieldIndex);
+    int pointIndex = DBFReadIntegerAttribute(super::dbf(), row, fieldIndex);
     if (pointIndex >= 0)
     {
-      m_points.emplace(static_cast<unsigned int>(pointIndex), Point2d(x, y));
+      m_points.emplace(static_cast<unsigned int>(pointIndex), Pt_(x, y));
       nextPoint = pointIndex + 1;
       return true;
     }
@@ -233,7 +235,7 @@ IndexedPointReader::onPoint(unsigned int row, double x, double y)
     cerr << "! Warning: row [" << row << "]: "
       "Automatically inserting at last-known index [" << nextPoint << "]"
       << endl;
-    m_points.emplace(nextPoint++, Point2d(x, y));
+    m_points.emplace(nextPoint++, Pt_(x, y));
   }
   else
   {
@@ -249,21 +251,24 @@ IndexedPointReader::onPoint(unsigned int row, double x, double y)
 
 static const char FTT_FIELD_NAME[] = "FTT";
 
-PolyReader::PolyReader()
+template<typename Pt_>
+PolyReader<Pt_>::PolyReader()
   : fieldIndex(-1), FTTindex(-1), lastIndex(-1), m_ply_map()
 {
 }
 
+template<typename Pt_>
 bool
-PolyReader::onOpen(void)
+PolyReader<Pt_>::onOpen(void)
 {
   m_ply_map.clear();
-  setFilter(SHPT_POLYGON);
+  super::setFilter(SHPT_POLYGON);
   return true;
 }
 
+template<typename Pt_>
 bool
-PolyReader::onField(unsigned int index, DBFFieldType type,
+PolyReader<Pt_>::onField(unsigned int index, DBFFieldType type,
     const char *name, int width, int decimals)
 {
   if (0==strncmp(name, POINT_INDEX_FIELD_NAME, sizeof(POINT_INDEX_FIELD_NAME)))
@@ -273,8 +278,9 @@ PolyReader::onField(unsigned int index, DBFFieldType type,
   return true;
 }
 
+template<typename Pt_>
 bool
-PolyReader::onRecord(unsigned int row, SHPObject *shp)
+PolyReader<Pt_>::onRecord(unsigned int row, SHPObject *shp)
 {
   // Check fields before the first record
   if (row == 0)
@@ -303,9 +309,9 @@ PolyReader::onRecord(unsigned int row, SHPObject *shp)
   int iPart = 1;
 
   //
-  c_ply ply(c_ply::POUT);
+  c_ply<Pt_> ply(c_ply<Pt_>::POUT);
   ply.beginPoly();
-  ply_extra_info& extra=ply.extra();
+  ply_extra_info<Pt_>& extra=ply.extra();
   extra.box[0]=shp->dfXMin;
   extra.box[1]=shp->dfXMax;
   extra.box[2]=shp->dfYMin;
@@ -318,9 +324,9 @@ PolyReader::onRecord(unsigned int row, SHPObject *shp)
     string pszPartType;
 
     /* Get the index of this polygon's associated point.  */
-    if (!DBFIsAttributeNULL(dbf(), j, fieldIndex))
+    if (!DBFIsAttributeNULL(super::dbf(), j, fieldIndex))
     {
-      int pidx = DBFReadIntegerAttribute(dbf(), j, fieldIndex);
+      int pidx = DBFReadIntegerAttribute(super::dbf(), j, fieldIndex);
       if (pidx < 0)
         cerr << "[" << row << "] negative point index!" << endl;
       else
@@ -328,10 +334,10 @@ PolyReader::onRecord(unsigned int row, SHPObject *shp)
     }
 
     /* Get the travel time to this ring from the point.  */
-    if (!DBFIsAttributeNULL(dbf(), j, FTTindex))
+    if (!DBFIsAttributeNULL(super::dbf(), j, FTTindex))
     {
       /* This should also be positive.  */
-      double ftt = DBFReadDoubleAttribute(dbf(), j, FTTindex);
+      double ftt = DBFReadDoubleAttribute(super::dbf(), j, FTTindex);
       if (ftt < 0.0)
         cerr << "[" << row << "] negative FTT!" << endl;
       extra.ftt = ftt;
@@ -349,7 +355,7 @@ PolyReader::onRecord(unsigned int row, SHPObject *shp)
       add_ply(j, ply);
 
       //create a new ply
-      ply=c_ply(c_ply::PIN);
+      ply=c_ply<Pt_>(c_ply<Pt_>::PIN);
       ply.beginPoly();
     }
 
@@ -362,12 +368,13 @@ PolyReader::onRecord(unsigned int row, SHPObject *shp)
   return add_ply(j, ply);
 }
 
+template<typename Pt_>
 bool
-PolyReader::add_ply(int row, c_ply& ply)
+PolyReader<Pt_>::add_ply(int row, c_ply<Pt_>& ply)
 {
-  if(ply.getType()==c_ply::POUT){
+  if(ply.getType()==c_ply<Pt_>::POUT){
     //create a new polygon
-    c_polygon polygon;
+    c_polygon<Pt_> polygon;
     polygon.push_back(ply);
     m_ply_map[ply.extra().pointIndex].push_back(polygon);
     lastIndex = static_cast<int>(ply.extra().pointIndex);
@@ -388,8 +395,8 @@ PolyReader::add_ply(int row, c_ply& ply)
     auto it = m_ply_map.find(static_cast<uint>(lastIndex));
     assert(it != m_ply_map.end());
 
-    c_polygon& polygon = (it->second).back();
-    Point2d pt=ply.findEnclosedPt();
+    c_polygon<Pt_>& polygon = (it->second).back();
+    Pt_ pt=ply.findEnclosedPt();
     bool b=polygon.enclosed(pt);
     if(b)
       polygon.push_back(ply);
@@ -439,19 +446,6 @@ readShapefile(const string& path, Reader& r)
   return r.value();
 }
 
-template class ShapeReader<point_vector>;
-template class PointReader<point_vector>;
-template class ShapeReader<point_map>;
-template class PointReader<point_map>;
-template class ShapeReader<polygon_map>;
-
-template VecPointReader::value_type
-  readShapefile(const string& path, VecPointReader& r);
-
-template IndexedPointReader::value_type
-  readShapefile(const string& path, IndexedPointReader& r);
-
-template PolyReader::value_type
-  readShapefile(const string& path, PolyReader& r);
-
 } // end namespace shp
+
+SHP_INSTANTIATE(cv::Point2d, );

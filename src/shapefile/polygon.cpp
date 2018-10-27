@@ -8,6 +8,7 @@
 #include <vector>
 
 using namespace cv;
+using namespace std;
 
 #ifdef WIN32
 extern "C"{
@@ -17,17 +18,20 @@ extern "C"{
 #include "triangulate.h"
 #endif
 
-ply_vertex::~ply_vertex()
+template<typename Pt_>
+ply_vertex<Pt_>::~ply_vertex()
 {
     //doing nothing for now
 }
 
 // - compute normal
 // - check if the vertex is reflex or not
-void ply_vertex::computeExtraInfo()
+template<typename Pt_>
+void
+ply_vertex<Pt_>::computeExtraInfo()
 {
     //compute normal direction
-	Vec2d v=next->pos-pos;
+	Vec<coordinate_type, 2> v=next->pos-pos;
     if( v[0]==0 ){
         if(v[1]>0){ normal[0]=1; normal[1]=0; }
         else{ normal[0]=-1; normal[1]=0; }
@@ -43,28 +47,34 @@ void ply_vertex::computeExtraInfo()
     normal=normalize(normal);
 
     //compute if left or right turn
-    Vec2d u=pos-pre->pos;
-    float z=u[0]*v[1]-u[1]*v[0];
+    Vec<coordinate_type, 2> u=pos-pre->pos;
+    coordinate_type z=u[0]*v[1]-u[1]*v[0];
 
     if(z<=0) reflex=true;
     else reflex=false;
 }
 
-void ply_vertex::negate()
+template<typename Pt_>
+void
+ply_vertex<Pt_>::negate()
 {
     normal=-normal;
     pos.x=-pos.x;
     pos.y=-pos.y;
 }
 
-void ply_vertex::reverse()
+template<typename Pt_>
+void
+ply_vertex<Pt_>::reverse()
 {
     swap(next,pre);
     //normal=-normal;
     computeExtraInfo();
 }
 
-void ply_vertex::copy(ply_vertex * other)
+template<typename Pt_>
+void
+ply_vertex<Pt_>::copy(ply_vertex * other)
 {
     pos=other->pos;
     normal=other->normal;
@@ -75,14 +85,16 @@ void ply_vertex::copy(ply_vertex * other)
 ///////////////////////////////////////////////////////////////////////////////
 
 //copy from the given ply
-void c_ply::copy(const c_ply& other)
+template<typename Pt_>
+void
+c_ply<Pt_>::copy(const c_ply<Pt_>& other)
 {
     destroy();//detroy myself first
 
-    ply_vertex* ptr=other.head;
+    vertex_type* ptr=other.head;
     beginPoly();
     do{
-        ply_vertex * v=new ply_vertex();
+        vertex_type * v=new vertex_type();
         assert(v); //check for memory
         v->copy(ptr);
         addVertex(v);
@@ -103,12 +115,14 @@ void c_ply::copy(const c_ply& other)
 }
 
 // clean up the space allocated
-void c_ply::destroy()
+template<typename Pt_>
+void
+c_ply<Pt_>::destroy()
 {
     if( head==NULL ) return;
-    ply_vertex* ptr=head;
+    vertex_type* ptr=head;
     do{
-        ply_vertex * n=ptr->getNext();
+        vertex_type * n=ptr->getNext();
         delete ptr;
         ptr=n;
     }while( ptr!=head );
@@ -119,7 +133,9 @@ void c_ply::destroy()
 }
 
 // Create a empty polygon
-void c_ply::beginPoly()
+template<typename Pt_>
+void
+c_ply<Pt_>::beginPoly()
 {
     head=tail=NULL;
     all.clear();
@@ -127,15 +143,20 @@ void c_ply::beginPoly()
 }
 
 // Add a vertex to the polygonal chian
-void c_ply::addVertex( double x, double y, bool remove_duplicate )
+template<typename Pt_>
+void
+c_ply<Pt_>::addVertex(
+    typename c_ply<Pt_>::coordinate_type x,
+    typename c_ply<Pt_>::coordinate_type y,
+    bool remove_duplicate )
 {
-    Point2d pt(x,y);
+    point_type pt(x,y);
 
     if(tail!=NULL){
         if(tail->getPos()==pt && remove_duplicate) return; //don't add
     }
 
-    ply_vertex * v=new ply_vertex(pt);
+    vertex_type * v=new vertex_type(pt);
     if( tail!=NULL ){
         tail->setNext(v);
     }
@@ -147,7 +168,9 @@ void c_ply::addVertex( double x, double y, bool remove_duplicate )
 }
 
 // Add a vertex to the polygonal chian
-void c_ply::addVertex( ply_vertex * v )
+template<typename Pt_>
+void
+c_ply<Pt_>::addVertex( vertex_type * v )
 {
     if( tail!=NULL ){
         tail->setNext(v);
@@ -159,7 +182,9 @@ void c_ply::addVertex( ply_vertex * v )
 }
 
 // finish building the polygon
-void c_ply::endPoly(bool remove_duplicate)
+template<typename Pt_>
+void
+c_ply<Pt_>::endPoly(bool remove_duplicate)
 {
     if(head!=NULL && tail!=NULL){
         if(remove_duplicate){
@@ -177,7 +202,9 @@ void c_ply::endPoly(bool remove_duplicate)
 
 // initialize property of the this polychain
 // Compute normals and find reflective vertices
-void c_ply::doInit()
+template<typename Pt_>
+void
+c_ply<Pt_>::doInit()
 {
     //compute area
     getArea();
@@ -191,23 +218,25 @@ void c_ply::doInit()
     }
 
     //compute normals
-    ply_vertex* ptr=head;
+    vertex_type* ptr=head;
     do{
         ptr->computeExtraInfo();
         ptr=ptr->getNext();
     }while( ptr!=head );
 }
 
-const Point2d& c_ply::getCenter()
+template<typename Pt_>
+const typename c_ply<Pt_>::point_type&
+c_ply<Pt_>::getCenter()
 {
     if(radius<0){
-        center = Point2d(0,0);
-        ply_vertex * ptr=head;
-        const Point2d& first=ptr->getPos();
+        center = point_type(0,0);
+        vertex_type * ptr=head;
+        const point_type& first=ptr->getPos();
         uint size=0;
         do{
             size++;
-            Vec2d v=ptr->getPos()-first;
+            Vec<coordinate_type, 2> v=ptr->getPos()-first;
             center.x+=v[0];
             center.y+=v[1];
             ptr=ptr->getNext();
@@ -223,9 +252,11 @@ const Point2d& c_ply::getCenter()
 
 
 ///////////////////////////////////////////////////////////////////////////
-void c_ply::negate()
+template<typename Pt_>
+void
+c_ply<Pt_>::negate()
 {
-    ply_vertex * ptr=head;
+    vertex_type * ptr=head;
     do{
         ptr->negate();
         ptr=ptr->getNext();
@@ -233,9 +264,11 @@ void c_ply::negate()
 }
 
 //reverse the order of the vertices
-void c_ply::reverse()
+template<typename Pt_>
+void
+c_ply<Pt_>::reverse()
 {
-    ply_vertex * ptr=head;
+    vertex_type * ptr=head;
     do{
         ptr->reverse();
         ptr=ptr->getNext();
@@ -248,9 +281,11 @@ void c_ply::reverse()
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void c_ply::translate(const Point2d& p)
+template<typename Pt_>
+void
+c_ply<Pt_>::translate(const point_type& p)
 {
-    ply_vertex * ptr=head;
+    vertex_type * ptr=head;
     do{
         ptr->translate(p);
         ptr=ptr->getNext();
@@ -265,14 +300,18 @@ void c_ply::translate(const Point2d& p)
 
 ///////////////////////////////////////////////////////////////////////////
 //compute the Radius of the poly chain
-float c_ply::getRadius()
+template<typename Pt_>
+typename c_ply<Pt_>::coordinate_type
+c_ply<Pt_>::getRadius()
 {
     if(radius<0) getCenter();
 
     if(radius==0){
-        ply_vertex * ptr=head;
+        vertex_type * ptr=head;
         do{
-            float d=cv::norm(Vec2d(center-ptr->getPos()), cv::NORM_L2SQR);
+            coordinate_type d = cv::norm(
+                Vec<coordinate_type, 2>(center-ptr->getPos()),
+                cv::NORM_L2SQR);
             if(d>radius) radius=d;
             ptr=ptr->getNext();
         }while(ptr!=head); //end while
@@ -283,17 +322,20 @@ float c_ply::getRadius()
 }
 
 
-float c_ply::getArea()
+template<typename Pt_>
+typename c_ply<Pt_>::coordinate_type
+c_ply<Pt_>::getArea()
 {
-    if(area==-FLT_MAX){
+    if (area == numeric_limits<coordinate_type>::lowest())
       area = cv::contourArea(all);
-    }
 
     return area;
 }
 
 
-bool c_ply::enclosed(const Point2d& p)
+template<typename Pt_>
+bool
+c_ply<Pt_>::enclosed(const typename c_ply<Pt_>::point_type& p)
 {
     if(triangulation.empty())
         triangulate(triangulation);
@@ -301,12 +343,12 @@ bool c_ply::enclosed(const Point2d& p)
     //find the largest triangle
     for(uint i=0;i<triangulation.size();i++){
         triangle & tri=triangulation[i];
-        const Point2d& p1=all[tri.v[0]]->getPos();
-        const Point2d& p2=all[tri.v[1]]->getPos();
-        const Point2d& p3=all[tri.v[2]]->getPos();
-        double area1=Area(p1,p2,p);
-        double area2=Area(p2,p3,p);
-        double area3=Area(p3,p1,p);
+        const point_type& p1=all[tri.v[0]]->getPos();
+        const point_type& p2=all[tri.v[1]]->getPos();
+        const point_type& p3=all[tri.v[2]]->getPos();
+        coordinate_type area1=Area(p1,p2,p);
+        coordinate_type area2=Area(p2,p3,p);
+        coordinate_type area3=Area(p3,p1,p);
         if(area1>=0 && area2>=0 && area3>=0) return true; //in
         if(area1<=0 && area2<=0 && area3<=0) return true; //in
     }
@@ -314,29 +356,31 @@ bool c_ply::enclosed(const Point2d& p)
     return false; //out
 }
 
-Point2d c_ply::findEnclosedPt()
+template<typename Pt_>
+typename c_ply<Pt_>::point_type
+c_ply<Pt_>::findEnclosedPt()
 {
     if(triangulation.empty())
         triangulate(triangulation);
 
     if(triangulation.empty()){ //too few points...
-        const Point2d& p1=head->getPos();
-        const Point2d& p2=head->getNext()->getPos();
-        Point2d pt;
+        const point_type& p1=head->getPos();
+        const point_type& p2=head->getNext()->getPos();
+        point_type pt;
         pt.x=(p1.x+p2.x)/2;
         pt.y=(p1.y+p2.y)/2;
         return pt;
     }
 
     //find the largest triangle
-    double largest_area=-1;
+    coordinate_type largest_area=-1;
     uint   largest_tri=0;
     for(uint i=0;i<triangulation.size();i++){
         triangle & tri=triangulation[i];
-        const Point2d& p1=all[tri.v[0]]->getPos();
-        const Point2d& p2=all[tri.v[1]]->getPos();
-        const Point2d& p3=all[tri.v[2]]->getPos();
-        double area=fabs(Area(p1,p2,p3));
+        const point_type& p1=all[tri.v[0]]->getPos();
+        const point_type& p2=all[tri.v[1]]->getPos();
+        const point_type& p3=all[tri.v[2]]->getPos();
+        coordinate_type area=fabs(Area(p1,p2,p3));
         if(area>largest_area){
             largest_area=area;
             largest_tri=i;
@@ -345,22 +389,24 @@ Point2d c_ply::findEnclosedPt()
 
     //find a node near the vertex of the triangle
     triangle & tri=triangulation[largest_tri];
-    const Point2d& p1=(*this)[tri.v[0]]->getPos();
-    const Point2d& p2=(*this)[tri.v[1]]->getPos();
-    const Point2d& p3=(*this)[tri.v[2]]->getPos();
+    const point_type& p1=(*this)[tri.v[0]]->getPos();
+    const point_type& p2=(*this)[tri.v[1]]->getPos();
+    const point_type& p3=(*this)[tri.v[2]]->getPos();
 
-    Point2d pt;
+    point_type pt;
     pt.x=(p1.x+p2.x+p3.x)/3;
     pt.y=(p1.y+p2.y+p3.y)/3;
 
     return pt;
 }
 
-void c_ply::triangulate(vector<triangle>& tris)
+template<typename Pt_>
+void
+c_ply<Pt_>::triangulate(vector<triangle>& tris)
 {
      if(triangulation.empty()){
 
-         const Point2d& O=getHead()->getPos();
+         const point_type& O=getHead()->getPos();
 
          int * ringVN=new int[1];     //number of vertices for each ring
          assert(ringVN);
@@ -376,17 +422,17 @@ void c_ply::triangulate(vector<triangle>& tris)
 
          //more than 3 vertices
          int tN=(vN-2);                   //# of triangles
-         double * V=new double[vN*2];     //to hold vertices pos
+         double * V = new double[vN*2]; //to hold vertices pos
          int *T=new int[3*tN];            //to hold resulting triangles
          assert(T&&V);
 
          //copy vertices
          {
              int i=0;
-             ply_vertex * ptr=getHead();
+             vertex_type * ptr=getHead();
              do{
-                 Point2d pt=ptr->getPos();
-                 V[i*2]=pt.x-O.x;
+                 point_type pt=ptr->getPos();
+                 V[i*2]=pt.x-O.x;    // potential implicit conversion
                  V[i*2+1]=pt.y-O.y;
                  ptr=ptr->getNext();
                  i++;
@@ -413,9 +459,11 @@ void c_ply::triangulate(vector<triangle>& tris)
 }
 
 //check if convex
-bool c_ply::is_convex() const
+template<typename Pt_>
+bool
+c_ply<Pt_>::is_convex() const
 {
-    ply_vertex * ptr=head;
+    vertex_type * ptr=head;
     do{
         if(ptr->isReflex()) return false;
         ptr=ptr->getNext();
@@ -424,10 +472,12 @@ bool c_ply::is_convex() const
     return true;
 }
 
-void c_ply::delete_vertex(ply_vertex * v)
+template<typename Pt_>
+void
+c_ply<Pt_>::delete_vertex(vertex_type * v)
 {
-    ply_vertex *pre=v->getPre();
-    ply_vertex *next=v->getNext();
+    vertex_type *pre=v->getPre();
+    vertex_type *next=v->getNext();
 
     pre->setNext(next);
     next->setPre(pre);
@@ -443,11 +493,13 @@ void c_ply::delete_vertex(ply_vertex * v)
     all.clear(); //not valid anymore
 }
 
-void c_ply::indexing()
+template<typename Pt_>
+void
+c_ply<Pt_>::indexing()
 {
     uint vid=0;
     all.clear();
-    ply_vertex * ptr=head;
+    vertex_type * ptr=head;
     do{
         ptr->setVID(vid++);
         all.push_back(ptr);
@@ -455,7 +507,9 @@ void c_ply::indexing()
     }while(ptr!=head); //end while
 }
 
-bool c_ply::identical(c_ply& other)
+template<typename Pt_>
+bool
+c_ply<Pt_>::identical(const c_ply<Pt_>& other)
 {
 
     //do some basic checks
@@ -465,12 +519,12 @@ bool c_ply::identical(c_ply& other)
     if( fabs(getArea()-other.getArea())>SMALLNUMBER ) return false;
 
     //find the first match
-    ply_vertex * o_ptr=other.head;
+    const vertex_type * o_ptr=other.head;
     bool found_first_match=false;
     do{
-        const Point2d& pos=o_ptr->getPos();
-        double dx=fabs(pos.x-head->getPos().x);
-        double dy=fabs(pos.y-head->getPos().y);
+        const point_type& pos=o_ptr->getPos();
+        coordinate_type dx=fabs(pos.x-head->getPos().x);
+        coordinate_type dy=fabs(pos.y-head->getPos().y);
 
         if( dx<SMALLNUMBER && dy<SMALLNUMBER){
             found_first_match=true;
@@ -483,7 +537,7 @@ bool c_ply::identical(c_ply& other)
     if(!found_first_match) return false;
 
     //check the rest of the match
-    ply_vertex * ptr=head;
+    const vertex_type * ptr=head;
 
     //since we are sure that ptr matches to o_ptr, we first advance
     ptr=ptr->getNext();
@@ -491,11 +545,11 @@ bool c_ply::identical(c_ply& other)
 
     do
     {
-        const Point2d& o_pos=o_ptr->getPos();
-        const Point2d& pos=ptr->getPos();
+        const point_type& o_pos=o_ptr->getPos();
+        const point_type& pos=ptr->getPos();
 
-        double dx=fabs(pos.x-o_pos.x);
-        double dy=fabs(pos.y-o_pos.y);
+        coordinate_type dx=fabs(pos.x-o_pos.x);
+        coordinate_type dy=fabs(pos.y-o_pos.y);
 
         if( dx>SMALLNUMBER || dy>SMALLNUMBER){
             return false; //don't match
@@ -516,17 +570,17 @@ bool c_ply::identical(c_ply& other)
 // Compute the center and the box of a list of plys
 //
 //
-
-void c_plylist::buildBoxAndCenter()
+template<typename Pt_>
+void
+c_plylist<Pt_>::buildBoxAndCenter()
 {
-    //typedef list<c_ply>::iterator IT;
-    box[0]=box[2]=FLT_MAX;
-    box[0]=box[3]=-FLT_MAX;
-    for(iterator i=begin();i!=end();i++){
+    box[0] = box[2] = std::numeric_limits<coordinate_type>::max();
+    box[0] = box[3] = std::numeric_limits<coordinate_type>::lowest();
+    for(auto i=begin();i!=end();i++){
 
-        ply_vertex * ptr=i->getHead();
+        const vertex_type * ptr=i->getHead();
         do{
-            const Point2d& p=ptr->getPos();
+            const point_type& p=ptr->getPos();
             if(p.x<box[0]) box[0]=p.x;
             if(p.x>box[1]) box[1]=p.x;
             if(p.y<box[2]) box[2]=p.y;
@@ -542,38 +596,44 @@ void c_plylist::buildBoxAndCenter()
     is_buildboxandcenter_called=true;
 }
 
-//
-// Compute the center and the box of a list of plys
-//
-void c_plylist::translate(const Point2d& p)
+template<typename Pt_>
+void
+c_plylist<Pt_>::translate(const typename c_plylist<Pt_>::point_type& p)
 {
-    for(iterator i=begin();i!=end();i++) i->translate(p);
+    for (auto i=begin();i!=end();i++) i->translate(p);
 }
 
-void c_polygon::reverse()
+template<typename Pt_>
+void
+c_polygon<Pt_>::reverse()
 {
-    for(iterator i=begin();i!=end();i++) i->reverse();
+    for(auto i=begin();i!=end();i++) i->reverse();
     triangulation.clear();
     all.clear();
 }
 
-bool c_polygon::valid() //check if this is a valid polygon
+template<typename Pt_>
+bool
+c_polygon<Pt_>::valid() const
 {
-    //typedef list<c_ply>::iterator IT;
     if(empty()) return false;
-    if(front().getType()!=c_ply::POUT) return false;
-    for(iterator i=++begin();i!=end();i++) if(i->getType()!=c_ply::PIN) return false;
+    if(front().getType()!=ring_type::POUT) return false;
+    for(auto i=++begin();i!=end();i++)
+      if(i->getType()!=ring_type::PIN)
+        return false;
 
     return true;
 }
 
 //copy from the given polygon
-void c_polygon::copy(const c_polygon& other)
+template<typename Pt_>
+void
+c_polygon<Pt_>::copy(const c_polygon& other)
 {
     destroy();
 
-    for(const_iterator i=other.begin();i!=other.end();i++){
-        c_ply p(c_ply::UNKNOWN);
+    for(auto i=other.cbegin();i!=other.cend();i++){
+        ring_type p(ring_type::UNKNOWN);
         p.copy(*i);
         push_back(p);
     }
@@ -581,17 +641,19 @@ void c_polygon::copy(const c_polygon& other)
 
 //check if a point is enclosed
 //the behavior is unknown if pt is on the boundary of the polygon
-bool c_polygon::enclosed(const Point2d& p) const
+template<typename Pt_>
+bool
+c_polygon<Pt_>::enclosed(const typename c_polygon<Pt_>::point_type& p) const
 {
     //find the largest triangle
     for(uint i=0;i<triangulation.size();i++){
         const triangle & tri=triangulation[i];
-        const Point2d& p1=(*this)[tri.v[0]]->getPos();
-        const Point2d& p2=(*this)[tri.v[1]]->getPos();
-        const Point2d& p3=(*this)[tri.v[2]]->getPos();
-        double area1=Area(p1,p2,p);
-        double area2=Area(p2,p3,p);
-        double area3=Area(p3,p1,p);
+        const point_type& p1=(*this)[tri.v[0]]->getPos();
+        const point_type& p2=(*this)[tri.v[1]]->getPos();
+        const point_type& p3=(*this)[tri.v[2]]->getPos();
+        coordinate_type area1=Area(p1,p2,p);
+        coordinate_type area2=Area(p2,p3,p);
+        coordinate_type area3=Area(p3,p1,p);
         if(area1>=0 && area2>=0 && area3>=0) return true; //in
         if(area1<=0 && area2<=0 && area3<=0) return true; //in
     }
@@ -599,7 +661,9 @@ bool c_polygon::enclosed(const Point2d& p) const
     return false; //out
 }
 
-Point2d c_polygon::findEnclosedPt()
+template<typename Pt_>
+typename c_polygon<Pt_>::point_type
+c_polygon<Pt_>::findEnclosedPt()
 {
     if(triangulation.empty())
         triangulate(triangulation);
@@ -608,14 +672,14 @@ Point2d c_polygon::findEnclosedPt()
         return front().findEnclosedPt();
 
     //find the largest triangle
-    double largest_area=-1;
+    coordinate_type largest_area=-1;
     uint   largest_tri=0;
     for(uint i=0;i<triangulation.size();i++){
         triangle & tri=triangulation[i];
-        const Point2d& p1=(*this)[tri.v[0]]->getPos();
-        const Point2d& p2=(*this)[tri.v[1]]->getPos();
-        const Point2d& p3=(*this)[tri.v[2]]->getPos();
-        double area=fabs(Area(p1,p2,p3));
+        const point_type& p1=(*this)[tri.v[0]]->getPos();
+        const point_type& p2=(*this)[tri.v[1]]->getPos();
+        const point_type& p3=(*this)[tri.v[2]]->getPos();
+        coordinate_type area=fabs(Area(p1,p2,p3));
         if(area>largest_area){
             largest_area=area;
             largest_tri=i;
@@ -624,23 +688,24 @@ Point2d c_polygon::findEnclosedPt()
 
     //find a node near the vertex of the triangle
     triangle & tri=triangulation[largest_tri];
-    const Point2d& p1=(*this)[tri.v[0]]->getPos();
-    const Point2d& p2=(*this)[tri.v[1]]->getPos();
-    const Point2d& p3=(*this)[tri.v[2]]->getPos();
+    const point_type& p1=(*this)[tri.v[0]]->getPos();
+    const point_type& p2=(*this)[tri.v[1]]->getPos();
+    const point_type& p3=(*this)[tri.v[2]]->getPos();
 
-    Point2d pt;
+    point_type pt;
     pt.x=(p1.x+p2.x+p3.x)/3;
     pt.y=(p1.y+p2.y+p3.y)/3;
 
     return pt;
 }
 
-void c_polygon::triangulate(vector<triangle>& tris)
+template<typename Pt_>
+void
+c_polygon<Pt_>::triangulate(vector<triangle>& tris)
 {
     if(triangulation.empty())
     {
-         const Point2d& O=front().getHead()->getPos();
-         typedef iterator   PIT;
+         const point_type& O=front().getHead()->getPos();
 
          int ringN=size();             //number of rings
          int * ringVN=new int[ringN];     //number of vertices for each ring
@@ -649,7 +714,7 @@ void c_polygon::triangulate(vector<triangle>& tris)
          int vN=0;             //total number of vertices
          {
              int i=0;
-             for(PIT ip=begin();ip!=end();ip++,i++){
+             for(auto ip=begin();ip!=end();ip++,i++){
                  vN+=ip->getSize();
                  ringVN[i]=ip->getSize();
              }
@@ -669,18 +734,19 @@ void c_polygon::triangulate(vector<triangle>& tris)
 
          //copy vertices
          int i=0;
-         for(PIT ip=begin();ip!=end();ip++){
-             ply_vertex * ptr=ip->getHead();
+         for(auto ip=begin();ip!=end();ip++){
+             vertex_type * ptr=ip->getHead();
              do{
-                 Point2d pt=ptr->getPos();
-                 V[i*2]=pt.x-O.x;
+                 point_type pt=ptr->getPos();
+                 V[i*2]=pt.x-O.x;    // potential implicit conversion to double
                  V[i*2+1]=pt.y-O.y;
                  ptr=ptr->getNext();
                  i++;
              }while( ptr!=ip->getHead() );
          }
 
-         FIST_PolygonalArray(ringN, ringVN, (double (*)[2])V, &tN, (int (*)[3])T);
+         FIST_PolygonalArray(ringN, ringVN,
+             (double (*)[2])V, &tN, (int (*)[3])T);
 
          for(int i=0;i<tN;i++){
              triangle tri;
@@ -695,20 +761,24 @@ void c_polygon::triangulate(vector<triangle>& tris)
     tris=triangulation;
 }
 
-void c_polygon::pop_front()
+template<typename Pt_>
+void
+c_polygon<Pt_>::pop_front()
 {
-  c_ply &ply = front();
+  ring_type &ply = front();
   ply.indexing(); // reset vertex IDs
-  c_plylist::pop_front();
+  c_plylist<Pt_>::pop_front();
   /* These must be recomputed */
   all.clear();
   triangulation.clear();
   indexing();
 }
 
-void c_polygon::destroy()
+template<typename Pt_>
+void
+c_polygon<Pt_>::destroy()
 {
-    for(iterator i=begin();i!=end();i++){
+    for(auto i=begin();i!=end();i++){
         i->destroy();
     }
     clear(); //remove all ply from this list
@@ -716,16 +786,20 @@ void c_polygon::destroy()
     triangulation.clear();
 }
 
-bool c_polygon::is_convex() const
+template<typename Pt_>
+bool
+c_polygon<Pt_>::is_convex() const
 {
     if(size()>1) return false; //contains hole
     return front().is_convex();
 }
 
-void c_polygon::indexing()
+template<typename Pt_>
+void
+c_polygon<Pt_>::indexing()
 {
     uint vid=0;
-    for(iterator i=begin();i!=end();i++){
+    for(auto i=begin();i!=end();i++){
         uint vsize=i->getSize();
         for(uint j=0;j<vsize;j++){
             (*i)[j]->setVID(vid++);       //id of vertex in the polygons
@@ -734,10 +808,12 @@ void c_polygon::indexing()
     }//end for i
 }
 
-double c_polygon::getArea()
+template<typename Pt_>
+typename c_polygon<Pt_>::coordinate_type
+c_polygon<Pt_>::getArea()
 {
     if(area==0){
-        for(iterator i=begin();i!=end();i++){
+        for(auto i=begin();i!=end();i++){
             area+=i->getArea();
         }//end for i
     }
@@ -746,20 +822,22 @@ double c_polygon::getArea()
 }
 
 
-bool c_polygon::identical(c_polygon& p)
+template<typename Pt_>
+bool
+c_polygon<Pt_>::identical(c_polygon& p)
 {
-    if(this->size()!=p.size()) return false;
+    if(size()!=p.size()) return false;
 
-    double a1=getArea();
-    double a2=p.getArea();
+    coordinate_type a1=getArea();
+    coordinate_type a2=p.getArea();
     if( fabs(a1-a2)>SMALLNUMBER ) return false;
 
 
 
-    for(iterator i=begin();i!=end();i++)
+    for(auto i=begin();i!=end();i++)
     {
         bool match=false;
-        for(iterator j=p.begin();j!=p.end();j++){
+        for(auto j=p.begin();j!=p.end();j++){
             if( i->identical(*j) ){
                 match=true;
                 break;
@@ -771,36 +849,41 @@ bool c_polygon::identical(c_polygon& p)
     return true;
 }
 
-istream& operator>>( istream& is, c_ply& poly)
+template<typename Pt_>
+istream& operator>>( istream& is, c_ply<Pt_>& poly)
 {
+    typedef typename c_ply<Pt_>::coordinate_type coordinate_type;
+    typedef typename c_ply<Pt_>::point_type point_type;
+
     int vsize; string str_type;
     is>>vsize>>str_type;
 
     if( str_type.find("out")!=string::npos )
-        poly.type=c_ply::POUT;
-    else poly.type=c_ply::PIN;
+        poly.type=c_ply<Pt_>::POUT;
+    else poly.type=c_ply<Pt_>::PIN;
 
     poly.beginPoly();
     //read in all the vertices
     int iv;
-    vector< pair<double,double> > pts; pts.reserve(vsize);
+    vector<point_type> pts; pts.reserve(vsize);
     for( iv=0;iv<vsize;iv++ ){
-        double x,y;
+        coordinate_type x,y;
         is>>x>>y;
-        pts.push_back(pair<double,double>(x,y));
-        //double d=x*x+y*y;
+        pts.emplace_back(x,y);
+        //coordinate_type d=x*x+y*y;
     }
     int id;
     for( iv=0;iv<vsize;iv++ ){
         is>>id; id=id-1;
-        poly.addVertex(pts[id].first,pts[id].second);
+        poly.addVertex(pts[id].x, pts[id].y);
     }
 
     poly.endPoly();
     return is;
 }
 
-istream& operator>>( istream& is, c_plylist& p)
+template<typename Pt_>
+istream& operator>>( istream& is, c_plylist<Pt_>& p)
 {
     //remove header commnets
     do{
@@ -818,7 +901,7 @@ istream& operator>>( istream& is, c_plylist& p)
     is>>size;
     uint vid=0;
     for(uint i=0;i<size;i++){
-        c_ply poly(c_ply::UNKNOWN);
+        c_ply<Pt_> poly(c_ply<Pt_>::UNKNOWN);
         is>>poly;
         p.push_back(poly);
         uint vsize=poly.getSize();
@@ -830,10 +913,12 @@ istream& operator>>( istream& is, c_plylist& p)
     return is;
 }
 
-ostream& operator<<( ostream& os, const c_ply& p)
+template<typename Pt_>
+ostream&
+operator<<( ostream& os, const c_ply<Pt_>& p)
 {
-    os<<p.getSize()<<" "<<((p.type==c_ply::PIN)?"in":"out")<<"\n";
-    const ply_vertex * ptr=p.head;
+    os<<p.getSize()<<" "<<((p.type==c_ply<Pt_>::PIN)?"in":"out")<<"\n";
+    const typename c_ply<Pt_>::vertex_type * ptr=p.head;
     do{
         os<<ptr->getPos().x<<" "<<ptr->getPos().y<<"\n";
         ptr=ptr->getNext();
@@ -844,17 +929,43 @@ ostream& operator<<( ostream& os, const c_ply& p)
     return os;
 }
 
-ostream& operator<<( ostream& out, const c_plylist& p)
+template<typename Pt_>
+ostream&
+operator<<( ostream& out, const c_plylist<Pt_>& p)
 {
     out<<p.size()<<"\n";
-    typedef c_plylist::const_iterator PIT;
-    for(PIT i=p.cbegin();i!=p.cend();i++) out<<*i;
+    for(auto i=p.cbegin();i!=p.cend();i++) out<<*i;
     return out;
 }
 
-std::ostream &operator<<(std::ostream &os, const std::vector<c_polygon> &v)
+template<typename Pt_>
+ostream &
+operator<<(ostream &os, const c_polygon<Pt_> &p)
 {
-  for (auto it = v.cbegin(); it != v.cend(); ++it)
-    os << *it;
+  unsigned int idx = 0u;
+  for (auto ply_it = p.cbegin(); ply_it != p.cend(); ++ply_it)
+  {
+    const typename c_polygon<Pt_>::ring_type &cp = *ply_it;
+    if (idx++ != 0)
+      os << ", ";
+    os << "[" << idx << "] " << cp;
+  }
   return os;
 }
+
+template<typename Pt_>
+ostream &
+operator<<(ostream &os, const vector<c_polygon<Pt_> > &v)
+{
+  os << "[ ";
+  auto it = v.begin();
+  if (it++ != v.end())
+    os << *it;
+  for (; it != v.end(); ++it)
+    os << ", " << *it;
+  os << " ]";
+  return os;
+}
+
+PLY_INSTANTIATE(cv::Point2d, );
+PLY_INSTANTIATE(cv::Point2f, );

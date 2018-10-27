@@ -1,6 +1,8 @@
+#pragma once
+
 #include <vector>
-#include <set>
-#include <array>
+#include <string>
+// #include <set>
 
 #ifdef DEBUG
 #include <iostream>
@@ -10,9 +12,6 @@
 
 #include "polygon.h"
 #include "shpReader.h"
-
-using namespace std;
-using namespace cv;
 
 /* A user has a center point and several layers of rings (like a topological
  * map). Each ring approximates a known fixed travel time (FTT) radius.
@@ -84,64 +83,67 @@ private:
 };
 #endif
 
+template<typename Pt_>
 class User
 {
+public:
+  typedef Pt_ point_type;
+  typedef c_ply<point_type> ring_type;
+  typedef c_polygon<point_type> polygon_type;
+  typedef typename polygon_type::coordinate_type coordinate_type;
+
 private:
   /* Return the distance from one point to another.  */
-  static inline double distance(Point2d p1, Point2d p2) {
+  static inline coordinate_type distance(point_type p1, point_type p2) {
     return cv::norm(p2 - p1);
   }
 
   /* Return the distance from a center point to the line segment a-b.  */
-  static inline double distance(Point2d p, Point2d l1, Point2d l2)
+  static inline coordinate_type
+    distance(point_type p, point_type l1, point_type l2)
   {
-    Point3d aa(l1.x, l1.y, 1.0);
-    Point3d bb(l2.x, l2.y, 1.0);
-    Point3d l(aa.cross(bb));
-    return std::abs((p.x * l.x + p.y * l.y + l.z)) * 1.0
-      / std::sqrt(double(l.x * l.x + l.y * l.y));
+    cv::Point3d aa(l1.x, l1.y, 1.0);
+    cv::Point3d bb(l2.x, l2.y, 1.0);
+    cv::Point3d l(aa.cross(bb));
+    return coordinate_type(
+        std::abs((p.x * l.x + p.y * l.y + l.z)) * 1.0
+        / std::sqrt(double(l.x * l.x + l.y * l.y)));
   }
 
   /* Return the distance from a point to the closest point on a ring.  */
-  static inline double distance(Point2d p, const c_ply &ring) {
-    return cv::pointPolygonTest(ring, p, true); // measureDistance=true
+  static inline coordinate_type distance(point_type p, const ring_type &ring) {
+    return cv::pointPolygonTest(ring.mat(), p, true); // measureDistance=true
   }
 
   /* Commutative with above.  */
-  static inline double distance(const c_ply &ring, Point2d p) {
+  static inline coordinate_type distance(const ring_type &ring, point_type p) {
     return distance(p, ring);
   }
 
 public:
-  /* Each c_polygon must contain only one ring.  */
-  User(const Point2d& pt, vector<c_polygon> plys)
-    : center(pt), rings(plys)
+  /* Each c_polygon must contain only one ring for now.  */
+  User(const point_type& pt, std::vector<polygon_type> plys)
+    : center(pt), isolines(plys)
   {
     // Go ahead and triangulate now -- this will be needed for computing
     // travel time later.
-    for (auto rit = rings.begin(); rit != rings.end(); ++rit)
+    for (auto rit = isolines.begin(); rit != isolines.end(); ++rit)
       rit->triangulate();
   }
 
-  /* To identify the travel time to a point, we first have to draw a ray from
-   * our center point to the query point. Then we must intersect our rings with
-   * the ray to find the upper and lower bound points along two known rings.
-   * Then we can interpolate between the FTT of the two rings based on the
-   * linear distance between the two rings. This approximation should be "close
-   * enough" - of course it is a tradeoff. The more rings, the more accurate
-   * the travel time interpolation, but the higher the computation overhead
-   * is in traversing the rings.
-   */
-  double travelTime(Point2d pt) const;
+  /* Interpolate the travel time to a point based on the nearest isoline(s)
+   * with a known fixed travel time.  */
+  coordinate_type travelTime(point_type pt) const;
 
 #ifdef DEBUG
-  friend inline ostream& operator<<(ostream& os, const User &u)
+  template<typename Pt__>
+  friend inline std::ostream& operator<<(std::ostream& os, const User<Pt__> &u)
   {
     os << u.center << " [ ftts: ";
-    auto cpi = u.rings.cbegin();
-    while (cpi != u.rings.cend())
+    auto cpi = u.isolines.cbegin();
+    while (cpi != u.isolines.cend())
     {
-      if (cpi != u.rings.cbegin())
+      if (cpi != u.isolines.cbegin())
         os << ", ";
       os << cpi->front().extra().ftt;
       ++cpi;
@@ -152,21 +154,22 @@ public:
 #endif // DEBUG
 
 private:
-  Point2d center;
-  /* Fixed-travel-time (FTT) rings.  */
-  vector<c_polygon> rings;
+  point_type center;
+  /* Fixed-travel-time (FTT) isolines.  */
+  std::vector<polygon_type> isolines;
 };
 
-static vector<User>
-readUsers(const string &points_path, const string &rings_path)
+template<typename Pt_>
+extern std::vector<User<Pt_> >
+readUsers(const std::string &points_path, const std::string &rings_path)
 {
-  shp::point_map upoints = shp::readIndexedPoints(points_path);
-  shp::polygon_map rings = shp::readPolygons(rings_path);
-  vector<User> users;
+  auto /* point_map */ upoints = shp::readIndexedPoints<Pt_>(points_path);
+  auto /* polygon_map */ rings = shp::readPolygons<Pt_>(rings_path);
+  std::vector<User<Pt_> > users;
   for (auto uit = upoints.begin(); uit != upoints.end(); ++uit)
   {
     unsigned int pointIndex = uit->first;
-    Point2d center = uit->second;
+    typename User<Pt_>::point_type center = uit->second;
     /* Match a ring list with the user.  */
     auto ring_lookup = rings.find(pointIndex);
     if (ring_lookup != rings.end())
@@ -175,7 +178,10 @@ readUsers(const string &points_path, const string &rings_path)
       users.emplace_back(center, ring_list);
     }
     else
-      users.emplace_back(center, vector<c_polygon>());
+      users.emplace_back(center,
+          std::vector<typename User<Pt_>::polygon_type>());
   }
   return users;
 }
+
+extern template class User<cv::Point2d>;
