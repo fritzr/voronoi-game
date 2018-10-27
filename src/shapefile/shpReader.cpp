@@ -182,7 +182,7 @@ PointReader<Val>::onRecord(unsigned int row, SHPObject *shp)
   // Really for SHPT_POINT, there should not be more than 1 vertex,
   // but read all reported vertices anyway.
   for (int vidx = 0; vidx < shp->nVertices; ++vidx)
-    if (!onPoint(static_cast<uint>(vidx), shp->padfX[vidx], shp->padfY[vidx]))
+    if (!onPoint(row, shp->padfX[vidx], shp->padfY[vidx]))
       return false;
   return true;
 }
