@@ -99,9 +99,12 @@ _polyparams = [
         " polygons are generated around each point. Default %(default)d."),
     PolygonParameter('L', 'layer_factor', float, 2.0, 0.0,
         "Additive scale factor between layers. Default %(default)5.1f."),
-    PolygonParameter('t', 'ftt', float, 1.0, 0.0,
+    PolygonParameter('T', 'ftt_factor', float, 1.0, 0.0,
         "Fixed Travel Time (FTT) between polygon layers, in minutes."
-        " Default %(default)2.1f minutes."),
+        " Default %(default)2.1f minute(s)."),
+    PolygonParameter('t', 'ftt', float, 1.0, 0.0,
+        "Initial Fixed Travel Time (FTT) for the first isoline, in minutes."
+        " Default %(default)2.1f minute(s)."),
 ]
 
 _polyparams_lookup = dict()
@@ -305,10 +308,11 @@ def write_poly_layers(shp, poly_layers_list, opts):
 
 def write_polygons(shp, point_idx, polygon_list, opts):
     # All our polygons only have one ring (no holes).
+    ftt = opts.variables.ftt()
     for layer_idx, poly in enumerate(polygon_list):
         poly.adjust(opts.bbox)
         shp.poly([list(poly)])
-        ftt = float(opts.variables.ftt() * layer_idx)
+        ftt += float(opts.variables.ftt_factor())
         shp.record(point_idx, ftt) # pointIndex, FTT
     return len(polygon_list) # number of polygons written
 
