@@ -318,30 +318,30 @@ PolyReader<Pt_>::onRecord(unsigned int row, SHPObject *shp)
   extra.box[3]=shp->dfYMax;
   extra.has_box=true;
 
+  /* Get the index of this polygon's associated center point.  */
+  if (!DBFIsAttributeNULL(super::dbf(), row, fieldIndex))
+  {
+    int pidx = DBFReadIntegerAttribute(super::dbf(), row, fieldIndex);
+    if (pidx < 0)
+      cerr << "[" << row << "] negative point index!" << endl;
+    else
+      extra.pointIndex = static_cast<uint>(pidx);
+  }
+
+  /* Get the travel time to this ring from the point.  */
+  if (!DBFIsAttributeNULL(super::dbf(), row, FTTindex))
+  {
+    /* This should also be positive.  */
+    double ftt = DBFReadDoubleAttribute(super::dbf(), row, FTTindex);
+    if (ftt < 0.0)
+      cerr << "[" << row << "] negative FTT!" << endl;
+    extra.ftt = ftt;
+  }
+
   int j = 0;
   for (; j < shp->nVertices; j++ )
   {
     string pszPartType;
-
-    /* Get the index of this polygon's associated point.  */
-    if (!DBFIsAttributeNULL(super::dbf(), j, fieldIndex))
-    {
-      int pidx = DBFReadIntegerAttribute(super::dbf(), j, fieldIndex);
-      if (pidx < 0)
-        cerr << "[" << row << "] negative point index!" << endl;
-      else
-        extra.pointIndex = static_cast<uint>(pidx);
-    }
-
-    /* Get the travel time to this ring from the point.  */
-    if (!DBFIsAttributeNULL(super::dbf(), j, FTTindex))
-    {
-      /* This should also be positive.  */
-      double ftt = DBFReadDoubleAttribute(super::dbf(), j, FTTindex);
-      if (ftt < 0.0)
-        cerr << "[" << row << "] negative FTT!" << endl;
-      extra.ftt = ftt;
-    }
 
     if( j == 0 && shp->nParts > 0 )
       pszPartType = SHPPartTypeName( shp->panPartType[0] );
