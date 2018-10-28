@@ -86,3 +86,7 @@ BOOST_POLY_REGISTER_MPOINT(cv::Point2d, double);
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point, int, cs::cartesian, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point2f, float, cs::cartesian, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D(cv::Point2d, double, cs::cartesian, x, y);
+
+namespace bp = boost::polygon;
+namespace bg = boost::geometry;
+namespace bgm = boost::geometry::model;

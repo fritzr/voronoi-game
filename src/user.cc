@@ -1,6 +1,7 @@
 #include "user.h"
 
 #include "opencv_compat.h"
+#include "adapt_boost_poly.h"
 
 using namespace cv;
 using namespace std;
@@ -50,27 +51,27 @@ User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
   /* Case 1. No lower ring -- lower distance is from center point (origin).  */
   if (lower_ring == isolines.end() /* && upper_ring != rings.end() */)
   {
-    dl = distance(center, query);
+    dl = bg::distance(center, query);
     fttl = 0.0;
-    du = distance(query, upper_ring->front());
+    du = bg::distance(query, upper_ring->front());
     fttu = upper_ring->front().extra().ftt;
   }
 
   /* Case 2. Interpolate between the bounding rings.  */
   if (lower_ring != isolines.end() && upper_ring != isolines.end())
   {
-    dl = distance(lower_ring->front(), query);
+    dl = bg::distance(lower_ring->front(), query);
     fttl = lower_ring->front().extra().ftt;
-    du = distance(query, upper_ring->front());
+    du = bg::distance(query, upper_ring->front());
     fttu = upper_ring->front().extra().ftt;
   }
 
   /* Case 3. No upper bound -- extrapolate past lower bound.  */
   if (lower_ring != isolines.end() && upper_ring == isolines.end())
   {
-    dl = distance(center, query);
+    dl = bg::distance(center, query);
     fttl = 0.0;
-    du = distance(query, lower_ring->front());
+    du = bg::distance(query, lower_ring->front());
     fttu = lower_ring->front().extra().ftt;
   }
 

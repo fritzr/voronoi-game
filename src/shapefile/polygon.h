@@ -55,7 +55,7 @@ struct triangle
 template<typename Pt_>
 class ply_vertex;
 
-template<typename Pt_>
+template <typename Pt, bool is_const>
 class vertex_iterator;
 
 template<typename Pt_>
@@ -123,7 +123,8 @@ public:
     typedef typename bp::point_traits<point_type>::coordinate_type
       coordinate_type;
 
-    friend class vertex_iterator<Pt_>;
+    friend class vertex_iterator<Pt_, false>;
+    friend class vertex_iterator<Pt_, true>;
 
     ///////////////////////////////////////////////////////////////////////////
     ply_vertex(){ init(); }
@@ -180,53 +181,87 @@ private:
     uint vid;
 };
 
-
-template <typename Pt>
+template <typename Pt, bool is_const>
   class vertex_iterator
-  : public std::iterator<std::bidirectional_iterator_tag, Pt>
+    : public boost::iterator_facade<
+        /* Derived */ vertex_iterator<Pt, is_const>
+        /* Value */, typename std::conditional<is_const, const Pt&, Pt&>::type
+        /* Category */, boost::random_access_traversal_tag
+      >
 {
 public:
-  typedef std::iterator<std::bidirectional_iterator_tag, Pt> super;
-  //typedef ... traits;
+  typedef boost::iterator_facade<vertex_iterator,
+          Pt, boost::random_access_traversal_tag,
+          typename std::conditional<is_const, const Pt&, Pt&>::type>
+    super;
+
   typedef typename super::value_type value_type;
   typedef typename super::reference reference;
-  typedef typename super::pointer pointer;
   typedef typename super::difference_type difference_type;
-  typedef size_t size_type;
 
   typedef c_ply<Pt> ring_type;
-  typedef ply_vertex<value_type> vertex_type;
+  typedef typename std::conditional<
+    is_const, const ply_vertex<Pt>, ply_vertex<Pt>
+    >::type vertex_type;
 
 private:
   vertex_type *head_;
   vertex_type *cur_;
+  size_t sz_;
+
+  struct enabler{};
 
 public:
-  typedef vertex_iterator it;
-
+  vertex_iterator() : head_(nullptr), cur_(nullptr), sz_(0u) {}
   vertex_iterator(const ring_type &ply)
-    : head_(ply.head), cur_(ply.head ? ply.head->getNext() : NULL) {}
-  vertex_iterator(vertex_type *head)
-    : head_(head), cur_(head ? head->getNext() : NULL) {}
-  vertex_iterator(vertex_type *head, vertex_type *next)
-    : head_(head), cur_(next) {}
-  vertex_iterator(const it &other)
-    : head_(other.head_), cur_(other.head_) {}
+    : head_(ply.head), cur_(ply.head ? ply.head->getNext() : NULL),
+      sz_(ply.getSize()) {}
+  vertex_iterator(vertex_type *head, size_t size)
+    : head_(head), cur_(head ? head->getNext() : NULL), sz_(size) {}
+  vertex_iterator(vertex_type *head, vertex_type *next, size_t size)
+    : head_(head), cur_(next), sz_(size) {}
 
-  inline it& operator++() { cur_ = cur_->getNext(); return *this; }
-  inline it operator++(int) { return it(*this); ++*this; }
-  inline bool operator==(const it& o) const {
-    return head_ == o.head_ && cur_ == o.cur_; }
-  inline bool operator!=(const it& o) const { return !(*this == o); }
-  //inline bool operator<(it o) const { return it_ < o.it_; }
-  inline it& operator--() { cur_ = cur_->getPre(); return *this; }
-  inline it operator--(int) { return it(*this); ++*this; }
-  //inline it operator+(int i) { return it(it_ + i); }
-  //inline difference_type operator-(it o) { return it_ - o.it_; }
-  //inline it& operator+=(int i) { it_ += i; return *this; }
-  //inline it& operator-=(int i) { it_ -= i; return *this; }
-  inline value_type operator*() const {
-    return cur_->pos;
+  // copy from const vertex iterator
+  template<bool other_const>
+  vertex_iterator(vertex_iterator<Pt, other_const> const& other,
+      typename std::enable_if<other_const, enabler>::type = enabler())
+    : head_(other.head_), cur_(other.head_), sz_(other.sz_) {}
+
+private:
+  friend class boost::iterator_core_access;
+  friend class vertex_iterator<Pt, !is_const>;
+
+  inline reference dereference(void) const { return cur_->pos; }
+  template <bool other_const>
+  inline bool equal(vertex_iterator<Pt, other_const> const& o) const {
+    return head_ == o.head_ && cur_ == o.cur_;
+  }
+  inline vertex_iterator &increment() { cur_ = cur_->getNext(); return *this; }
+  inline vertex_iterator &decrement() { cur_ = cur_->getPre(); return *this; }
+  inline vertex_iterator &advance(difference_type n) {
+    std::advance(*this, n); return *this;
+  }
+
+  template <bool other_const>
+  inline difference_type distance_to(vertex_iterator<Pt, other_const> const& o)
+    const
+  {
+    difference_type dist = 0;
+    const vertex_iterator end = vertex_iterator(head_, head_, sz_);
+
+    vertex_iterator tail = end;
+    for (vertex_iterator copy = *this; copy != end; ++copy, ++dist)
+    {
+      if (copy == o)
+        return dist;
+      tail = copy;
+    }
+
+    for (vertex_iterator copy = *this; copy != tail; --copy, --dist)
+      if (copy == o)
+        return dist;
+
+    return dist;
   }
 
 };
@@ -242,19 +277,26 @@ public:
     typedef ply_vertex<Pt_> vertex_type;
     typedef typename vertex_type::coordinate_type coordinate_type;
 
-    friend class vertex_iterator<Pt_>;
+    friend class vertex_iterator<Pt_, false>;
+    friend class vertex_iterator<Pt_, true>;
     friend class c_polygon<Pt_>;
     friend class PlyMat<Pt_>;
 
-    typedef vertex_iterator<point_type> const_iterator;
-    typedef const_iterator iterator;
+    typedef vertex_iterator<point_type, true> const_iterator;
+    typedef vertex_iterator<point_type, false> iterator;
 
     ///////
     // Iterate through points directly.
-    iterator begin(void) const { return iterator(*this); }
-    iterator end(void) const { return iterator(head, head); }
-    const_iterator cbegin(void) const { return iterator(*this); }
-    const_iterator cend(void) const { return iterator(head, head); }
+    iterator begin(void) { return iterator(*this); }
+    iterator end(void) { return iterator(head, head, getSize()); }
+
+    const_iterator begin(void) const { return const_iterator(*this); }
+    const_iterator cbegin(void) const { return const_iterator(*this); }
+
+    const_iterator end(void) const
+      { return const_iterator(head, head, getSize()); }
+    const_iterator cend(void) const
+      { return const_iterator(head, head, getSize()); }
 
     enum POLYTYPE { UNKNOWN, PIN, POUT };
 

@@ -92,34 +92,6 @@ public:
   typedef c_polygon<point_type> polygon_type;
   typedef typename polygon_type::coordinate_type coordinate_type;
 
-private:
-  /* Return the distance from one point to another.  */
-  static inline coordinate_type distance(point_type p1, point_type p2) {
-    return cv::norm(p2 - p1);
-  }
-
-  /* Return the distance from a center point to the line segment a-b.  */
-  static inline coordinate_type
-    distance(point_type p, point_type l1, point_type l2)
-  {
-    cv::Point3d aa(l1.x, l1.y, 1.0);
-    cv::Point3d bb(l2.x, l2.y, 1.0);
-    cv::Point3d l(aa.cross(bb));
-    return coordinate_type(
-        std::abs((p.x * l.x + p.y * l.y + l.z)) * 1.0
-        / std::sqrt(double(l.x * l.x + l.y * l.y)));
-  }
-
-  /* Return the distance from a point to the closest point on a ring.  */
-  static inline coordinate_type distance(point_type p, const ring_type &ring) {
-    return cv::pointPolygonTest(ring.mat(), p, true); // measureDistance=true
-  }
-
-  /* Commutative with above.  */
-  static inline coordinate_type distance(const ring_type &ring, point_type p) {
-    return distance(p, ring);
-  }
-
 public:
   /* Each c_polygon must contain only one ring for now.  */
   User(const point_type& pt, std::vector<polygon_type> plys)
