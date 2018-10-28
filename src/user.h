@@ -128,7 +128,10 @@ public:
     // Go ahead and triangulate now -- this will be needed for computing
     // travel time later.
     for (auto rit = isolines.begin(); rit != isolines.end(); ++rit)
+    {
       rit->triangulate();
+      rit->getSize(); // index
+    }
   }
 
   /* Interpolate the travel time to a point based on the nearest isoline(s)

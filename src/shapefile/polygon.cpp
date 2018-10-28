@@ -7,6 +7,8 @@
 #include "intersection.h"
 #include <vector>
 
+#include "adapt_boost_poly.h"
+
 using namespace cv;
 using namespace std;
 
@@ -327,7 +329,7 @@ typename c_ply<Pt_>::coordinate_type
 c_ply<Pt_>::getArea()
 {
     if (area == numeric_limits<coordinate_type>::lowest())
-      area = cv::contourArea(all);
+      area = bp::area(*this);
 
     return area;
 }
@@ -812,13 +814,11 @@ template<typename Pt_>
 typename c_polygon<Pt_>::coordinate_type
 c_polygon<Pt_>::getArea()
 {
-    if(area==0){
-        for(auto i=begin();i!=end();i++){
-            area+=i->getArea();
-        }//end for i
-    }
+  if (area == 0) {
+    area = bp::area(*this);
+  }
 
-    return area;
+  return area;
 }
 
 

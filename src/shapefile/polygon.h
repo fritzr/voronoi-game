@@ -13,6 +13,7 @@
 #include "opencv_compat.h"
 #include "boost_cv_compat.h"
 
+#include <functional> // reference_wrapper
 #include <iostream>
 #include <list>
 #include <vector>
@@ -53,6 +54,9 @@ struct triangle
 // Forward declarations
 template<typename Pt_>
 class ply_vertex;
+
+template<typename Pt_>
+class vertex_iterator;
 
 template<typename Pt_>
 class c_ply;
@@ -119,6 +123,8 @@ public:
     typedef typename bp::point_traits<point_type>::coordinate_type
       coordinate_type;
 
+    friend class vertex_iterator<Pt_>;
+
     ///////////////////////////////////////////////////////////////////////////
     ply_vertex(){ init(); }
     ply_vertex( const point_type& p ){ pos=p; init(); }
@@ -140,6 +146,8 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
     void setPos(const point_type& p) { pos=p; }
+    void setX(coordinate_type x) { pos.x=x; }
+    void setY(coordinate_type y) { pos.y=y; }
     virtual const point_type& getPos() const { return pos; }
 
     void translate(const point_type& v){ pos=pos+v; }
@@ -238,17 +246,24 @@ public:
     friend class c_polygon<Pt_>;
     friend class PlyMat<Pt_>;
 
-    typedef vertex_iterator<point_type> iterator;
+    typedef vertex_iterator<point_type> const_iterator;
+    typedef const_iterator iterator;
 
     ///////
     // Iterate through points directly.
-    iterator begin(void) { return iterator(*this); }
-    iterator end(void) { return iterator(head, head); }
+    iterator begin(void) const { return iterator(*this); }
+    iterator end(void) const { return iterator(head, head); }
+    const_iterator cbegin(void) const { return iterator(*this); }
+    const_iterator cend(void) const { return iterator(head, head); }
 
     enum POLYTYPE { UNKNOWN, PIN, POUT };
 
     ///////////////////////////////////////////////////////////////////////////
-    c_ply(POLYTYPE t){ head=tail=NULL; type=t; radius=-1; area=-FLT_MAX; }
+    c_ply(POLYTYPE t)
+      : head(NULL), tail(NULL), all(), center(), radius(-1),
+      area(std::numeric_limits<coordinate_type>::lowest()),
+      type(t), extra_info(), triangulation()
+    {}
 
     ///////////////////////////////////////////////////////////////////////////
     void copy(const c_ply<Pt_>& ply); //copy from the other ply
@@ -470,6 +485,12 @@ private:
     bool is_buildboxandcenter_called;
 };
 
+
+// Forward decl
+namespace boost { namespace polygon {
+  template<typename Pt> struct polygon_traits_general<c_polygon<Pt> >;
+} }
+
 //
 // a c_polygon is a restricted kind of c_plylist
 // this defines a simple polygon so that
@@ -480,6 +501,8 @@ template<typename Pt>
 class c_polygon : public c_plylist<Pt>
 {
 public:
+    friend struct boost::polygon::polygon_traits_general<c_polygon>;
+
     typedef c_plylist<Pt> super;
     typedef Pt point_type;
 
@@ -571,6 +594,12 @@ public:
     friend std::ostream &
       operator<< <Pt>(std::ostream &os, const std::vector<c_polygon<Pt> > &v);
 
+    /* XXX Copy and return a list of only our inner rings.  */
+    typedef std::list<std::reference_wrapper<const ring_type> > ring_view;
+    ring_view inner(void) const {
+      return ring_view(std::next(this->begin()), this->end());
+    }
+
 private:
 
     //indexing the vertices and store them in vector<ply_vertex*> all
@@ -583,6 +612,7 @@ private:
 
     coordinate_type area;
 };
+
 
 //
 // Given radius and resolution (# of vertices), create a circle in polygon format
