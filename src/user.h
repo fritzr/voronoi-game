@@ -91,10 +91,42 @@ public:
   typedef c_ply<point_type> ring_type;
   typedef c_polygon<point_type> polygon_type;
   typedef typename polygon_type::coordinate_type coordinate_type;
+  typedef typename bgm::segment<point_type> segment_type;
 
   typedef std::vector<polygon_type> isoline_container;
   typedef typename isoline_container::iterator iterator;
   typedef typename isoline_container::const_iterator const_iterator;
+
+  // One would think we can just use bg::distance, but the method considers
+  // rings to be solid, so inner points have a distance of zero. Therefore we
+  // must manually check the distance to each segment in the polygon.
+  static coordinate_type distance(point_type pt, const ring_type &ring)
+  {
+    auto distance = std::numeric_limits<coordinate_type>::max();
+    if (bg::within(pt, ring))
+    {
+      segment_type nearestSegment;
+      bg::for_each_segment(ring,
+        [&distance, &pt, &nearestSegment](
+          const /*auto*/ bgm::referring_segment<const point_type>& segment)
+        {
+          coordinate_type cmpDst = bg::comparable_distance(segment, pt);
+          if (cmpDst < distance)
+          {
+            distance = cmpDst;
+            nearestSegment = segment_type(segment.first, segment.second);
+          }
+        });
+      distance = bg::distance(nearestSegment, pt);
+    } else {
+      distance = bg::distance(pt, ring);
+    }
+    return distance;
+  }
+
+  inline static coordinate_type distance(const ring_type &ring, point_type pt) {
+    return distance(pt, ring);
+  }
 
 public:
   /* Each c_polygon must contain only one ring for now.  */
