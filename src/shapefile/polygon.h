@@ -216,10 +216,9 @@ private:
 public:
   vertex_iterator() : head_(nullptr), cur_(nullptr), sz_(0u) {}
   vertex_iterator(const ring_type &ply)
-    : head_(ply.head), cur_(ply.head ? ply.head->getNext() : NULL),
-      sz_(ply.getSize()) {}
+    : head_(ply.head), cur_(NULL), sz_(ply.getSize()) {}
   vertex_iterator(vertex_type *head, size_t size)
-    : head_(head), cur_(head ? head->getNext() : NULL), sz_(size) {}
+    : head_(head), cur_(NULL), sz_(size) {}
   vertex_iterator(vertex_type *head, vertex_type *next, size_t size)
     : head_(head), cur_(next), sz_(size) {}
 
@@ -233,13 +232,21 @@ private:
   friend class boost::iterator_core_access;
   friend class vertex_iterator<Pt, !is_const>;
 
-  inline reference dereference(void) const { return cur_->pos; }
+  inline reference dereference(void) const {
+    return cur_ ? cur_->pos : head_->pos;
+  }
   template <bool other_const>
   inline bool equal(vertex_iterator<Pt, other_const> const& o) const {
     return head_ == o.head_ && cur_ == o.cur_;
   }
-  inline vertex_iterator &increment() { cur_ = cur_->getNext(); return *this; }
-  inline vertex_iterator &decrement() { cur_ = cur_->getPre(); return *this; }
+  inline vertex_iterator &increment() {
+    cur_ = (cur_ ? cur_->getNext() : head_->getNext());
+    return *this;
+  }
+  inline vertex_iterator &decrement() {
+    cur_ = (cur_ ? cur_->getPre() : head_->getPre());
+    return *this;
+  }
   inline vertex_iterator &advance(difference_type n) {
     std::advance(*this, n); return *this;
   }
