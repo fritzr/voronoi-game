@@ -92,14 +92,18 @@ public:
   typedef c_polygon<point_type> polygon_type;
   typedef typename polygon_type::coordinate_type coordinate_type;
 
+  typedef std::vector<polygon_type> isoline_container;
+  typedef typename isoline_container::iterator iterator;
+  typedef typename isoline_container::const_iterator const_iterator;
+
 public:
   /* Each c_polygon must contain only one ring for now.  */
   User(const point_type& pt, std::vector<polygon_type> plys)
-    : center(pt), isolines(plys)
+    : center_(pt), isolines_(plys)
   {
     // Go ahead and triangulate now -- this will be needed for computing
     // travel time later.
-    for (auto rit = isolines.begin(); rit != isolines.end(); ++rit)
+    for (auto rit = isolines_.begin(); rit != isolines_.end(); ++rit)
     {
       rit->triangulate();
       rit->getSize(); // index
@@ -110,15 +114,24 @@ public:
    * with a known fixed travel time.  */
   coordinate_type travelTime(point_type pt) const;
 
+  iterator begin(void) { return isolines_.begin(); }
+  iterator end(void) { return isolines_.end(); }
+  const_iterator begin(void) const { return isolines_.cbegin(); }
+  const_iterator end(void) const { return isolines_.cend(); }
+  const_iterator cbegin(void) const { return isolines_.cbegin(); }
+  const_iterator cend(void) const { return isolines_.cend(); }
+
+  inline const point_type &center(void) const { return center_; }
+
 #ifdef DEBUG
   template<typename Pt__>
   friend inline std::ostream& operator<<(std::ostream& os, const User<Pt__> &u)
   {
-    os << u.center << " [ ftts: ";
-    auto cpi = u.isolines.cbegin();
-    while (cpi != u.isolines.cend())
+    os << u.center_ << " [ ftts: ";
+    auto cpi = u.isolines_.cbegin();
+    while (cpi != u.isolines_.cend())
     {
-      if (cpi != u.isolines.cbegin())
+      if (cpi != u.isolines_.cbegin())
         os << ", ";
       os << cpi->front().extra().ftt;
       ++cpi;
@@ -129,9 +142,9 @@ public:
 #endif // DEBUG
 
 private:
-  point_type center;
-  /* Fixed-travel-time (FTT) isolines.  */
-  std::vector<polygon_type> isolines;
+  point_type center_;
+  /* Fixed-travel-time (FTT) isolines_.  */
+  isoline_container isolines_;
 };
 
 template<typename Pt_>

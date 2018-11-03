@@ -11,22 +11,22 @@ template<typename Pt_>
 typename User<Pt_>::coordinate_type
 User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
 {
-  if (isolines.empty())
+  if (isolines_.empty())
     return std::numeric_limits<coordinate_type>::infinity();
 
   /* Find the upper/lower rings between which this point is contained.  */
-  auto lower_ring = isolines.end();
-  auto upper_ring = isolines.begin();
+  auto lower_ring = isolines_.end();
+  auto upper_ring = isolines_.begin();
 
   /* Keep going until we find the first ring that encloses the query point. */
-  while (upper_ring != isolines.end() && !upper_ring->enclosed(query))
+  while (upper_ring != isolines_.end() && !upper_ring->enclosed(query))
   {
     lower_ring = upper_ring;
     ++upper_ring;
   }
 
   /* This should already be captured by rings.empty() above. */
-  if (upper_ring == isolines.end() && lower_ring == isolines.end())
+  if (upper_ring == isolines_.end() && lower_ring == isolines_.end())
     return HUGE_VAL;
 
   /* Interpolate the travel time using the FTT endpoints and distance.
@@ -49,16 +49,16 @@ User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
    */
 
   /* Case 1. No lower ring -- lower distance is from center point (origin).  */
-  if (lower_ring == isolines.end() /* && upper_ring != rings.end() */)
+  if (lower_ring == isolines_.end() /* && upper_ring != rings.end() */)
   {
-    dl = bg::distance(center, query);
+    dl = bg::distance(center(), query);
     fttl = 0.0;
     du = bg::distance(query, upper_ring->front());
     fttu = upper_ring->front().extra().ftt;
   }
 
   /* Case 2. Interpolate between the bounding rings.  */
-  if (lower_ring != isolines.end() && upper_ring != isolines.end())
+  if (lower_ring != isolines_.end() && upper_ring != isolines_.end())
   {
     dl = bg::distance(lower_ring->front(), query);
     fttl = lower_ring->front().extra().ftt;
@@ -67,9 +67,9 @@ User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
   }
 
   /* Case 3. No upper bound -- extrapolate past lower bound.  */
-  if (lower_ring != isolines.end() && upper_ring == isolines.end())
+  if (lower_ring != isolines_.end() && upper_ring == isolines_.end())
   {
-    dl = bg::distance(center, query);
+    dl = bg::distance(center(), query);
     fttl = 0.0;
     du = bg::distance(query, lower_ring->front());
     fttu = lower_ring->front().extra().ftt;
