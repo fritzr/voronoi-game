@@ -69,9 +69,9 @@ User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
   /* Case 3. No upper bound -- extrapolate past lower bound.  */
   if (lower_ring != isolines_.end() && upper_ring == isolines_.end())
   {
-    dl = bg::distance(center(), query);
+    coordinate_type du = -bg::distance(lower_ring->front(), query);
+    dl = bg::distance(center(), lower_ring->front()) - du;
     fttl = 0.0;
-    du = bg::distance(query, lower_ring->front());
     fttu = lower_ring->front().extra().ftt;
   }
 
