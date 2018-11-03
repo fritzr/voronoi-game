@@ -49,3 +49,9 @@ build/
 *.dbf
 
 data/
+
+# GDB init files
+*.gdb
+
+# Octave workspace
+*workspace
