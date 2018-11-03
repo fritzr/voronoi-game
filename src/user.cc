@@ -76,7 +76,7 @@ User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
   }
 
   /* Time-to-travel.  */
-  return abs(dl / (du + dl)) * abs(fttu - fttl);
+  return fttl + (abs(dl / (du + dl)) * abs(fttu - fttl));
 }
 
 template class User<cv::Point2d>;
