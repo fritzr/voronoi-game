@@ -12,7 +12,7 @@ typename User<Pt_>::coordinate_type
 User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
 {
   if (isolines.empty())
-    return HUGE_VAL;
+    return std::numeric_limits<coordinate_type>::infinity();
 
   /* Find the upper/lower rings between which this point is contained.  */
   auto lower_ring = isolines.end();
@@ -39,8 +39,8 @@ User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
    *
    * Where ttt = | dl / (du + dl) | * | fttu - fttl | .
    */
-  double dl = 0.0, du = 0.0;
-  double fttu = HUGE_VAL, fttl = 0.0;
+  coordinate_type dl = 0.0, du = 0.0, fttl = 0.0,
+                  fttu = std::numeric_limits<coordinate_type>::infinity();
 
   /* 3 cases for the surrounding rings L, U:
    *    1. L=nul, F < U
