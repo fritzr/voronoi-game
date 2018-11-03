@@ -18,13 +18,13 @@
 #include "maxrect.h"
 #include "vgame.h"
 #include "shpReader.h"
+#include "adapt_boost_poly.h"
 
 #define i2f(...) static_cast<float>(__VA_ARGS__)
 #define i2u(...) static_cast<unsigned int>(__VA_ARGS__)
 
 using namespace std;
 using namespace cv;
-using namespace voronoi;
 using namespace shp;
 
 typedef double coordinate_type;
@@ -401,17 +401,29 @@ dumpDistances(ostream& os, const vector<User2d> &users,
 {
   os << "===== USERS =====" << endl;
   for (auto uit = users.begin(); uit != users.end(); ++uit)
+  {
     os << "    " << *uit << endl;
 
-  unsigned int idx = 0u;
+    // output shortest distance to each ring as a fuzzy metric
+    unsigned int nlayer = 0u;
+    os << "      ";
+    for (auto rit = uit->begin(); rit != uit->end(); ++rit)
+    {
+      if (nlayer != 0u)
+        os << ", ";
+      os << User2d::distance(uit->center(), rit->front());
+      ++nlayer;
+    }
+    os << endl;
+  }
 
   typedef vector<Point2d>::const_iterator piterator;
   typedef pair<const piterator, const piterator> iter_range;
-  typedef pair<const string, const iter_range> packed_value;
-  array<packed_value, 2> players = {
-      packed_value(string("===== PLAYER ONE ====="),
+  typedef pair<const string, const iter_range> zip;
+  array<zip, 2> players = {
+      zip(string("===== PLAYER ONE ====="),
           iter_range(p1sites.cbegin(), p1sites.cend())),
-      packed_value(string("===== PLAYER TWO ====="),
+      zip(string("===== PLAYER TWO ====="),
           iter_range(p2sites.cbegin(), p2sites.cend())),
   };
 
@@ -421,14 +433,17 @@ dumpDistances(ostream& os, const vector<User2d> &users,
     const string &title(pn->first);
     os << endl << title << endl;
 
+    unsigned int idx = 0u;
     const iter_range &range(pn->second);
     for (auto pp = range.first; pp != range.second; ++pp)
     {
       os << "[" << setw(2) << setfill(' ') << idx++ << "]    " << *pp << endl;
       unsigned int uidx = 0u;
       for (auto uit = users.begin(); uit != users.end(); ++uit)
+      {
         os << "    (" << setw(2) << uidx++ << ") "
-          << *uit << " range " << uit->travelTime(*pp) << endl;
+          << *uit << " | FTT " << uit->travelTime(*pp) << endl;
+      }
     }
   }
 
