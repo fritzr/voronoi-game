@@ -255,18 +255,19 @@ private:
   inline difference_type distance_to(vertex_iterator<Pt, other_const> const& o)
     const
   {
-    difference_type dist = 0;
-    const vertex_iterator end = vertex_iterator(head_, head_, sz_);
+    difference_type dist;
+    const vertex_iterator  end = vertex_iterator(head_, head_, sz_);
+    const vertex_iterator rend = vertex_iterator(head_, head_->getPre(), sz_);
 
-    vertex_iterator tail = end;
+    dist = 0;
     for (vertex_iterator copy = *this; copy != end; ++copy, ++dist)
     {
       if (copy == o)
         return dist;
-      tail = copy;
     }
 
-    for (vertex_iterator copy = *this; copy != tail; --copy, --dist)
+    dist = 0;
+    for (vertex_iterator copy = *this; copy != rend; --copy, --dist)
       if (copy == o)
         return dist;
 
