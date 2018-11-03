@@ -58,6 +58,24 @@ namespace boost { namespace geometry {
     template <typename Pt> struct interior_rings<c_polygon<Pt> > {
       static inline typename c_polygon<Pt>::ring_view
         get(const c_polygon<Pt> &poly) { return poly.inner(); }
+      //static inline typename c_polygon<Pt>::ring_view
+        //get(const c_polygon<Pt> &poly) { return poly.inner(); }
+    };
+
+    template <typename Pt> struct ring_const_type<c_polygon<Pt> > {
+      typedef c_ply<Pt> const& type;
+    };
+
+    template <typename Pt> struct ring_mutable_type<c_polygon<Pt> > {
+      typedef c_ply<Pt> & type;
+    };
+
+    template <typename Pt> struct interior_const_type<c_polygon<Pt> > {
+      typedef const typename c_polygon<Pt>::ring_view_type type;
+    };
+
+    template <typename Pt> struct interior_mutable_type<c_polygon<Pt> > {
+      typedef typename c_polygon<Pt>::ring_view_type type;
     };
 
   } // end namespace traits
@@ -67,7 +85,7 @@ namespace boost { namespace geometry {
   };
 
   template <typename Pt> struct interior_type<c_polygon<Pt> > {
-    typedef typename c_polygon<Pt>::ring_view type;
+    typedef typename c_polygon<Pt>::ring_view_type type;
   };
 
 } } // end namespace boost::geometry

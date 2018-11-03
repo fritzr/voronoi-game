@@ -13,6 +13,8 @@
 #include "opencv_compat.h"
 #include "boost_cv_compat.h"
 
+#include <boost/iterator/indirect_iterator.hpp>
+
 #include <functional> // reference_wrapper
 #include <iostream>
 #include <list>
@@ -533,6 +535,79 @@ namespace boost { namespace polygon {
   template<typename Pt> struct polygon_traits_general<c_polygon<Pt> >;
 } }
 
+template<typename RefIter>
+class ring_view_iterator;
+
+namespace std {
+  template<typename RefIter>
+  class iterator_traits<ring_view_iterator<RefIter> >
+  {
+    typedef ptrdiff_t difference_type;
+    typedef typename RefIter::value_type::type value_type;
+    typedef value_type& reference;
+    typedef value_type* pointer;
+  };
+}
+
+template<typename RefIter>
+class ring_view_iterator
+  : public boost::iterators::indirect_iterator<
+      ring_view_iterator<RefIter>
+    , typename RefIter::value_type::type
+    , std::bidirectional_iterator_tag
+    >
+{
+public:
+  typedef boost::iterators::indirect_iterator<
+      ring_view_iterator
+    , typename RefIter::value_type::type
+    , std::bidirectional_iterator_tag
+    > super;
+
+  typedef typename std::iterator_traits<ring_view_iterator> traits;
+  typedef typename traits::value_type value_type;
+  typedef typename traits::reference reference;
+  typedef typename traits::pointer pointer;
+
+  ring_view_iterator() : inner() {}
+  ring_view_iterator(RefIter i) : inner(i) {}
+
+  // override
+  reference operator*() { return inner->get(); }
+  pointer operator->() { return &inner->get(); }
+
+private:
+  RefIter inner;
+};
+
+/* XXX Copy and return a list of only our inner rings.  */
+template<typename Pt>
+class ring_view
+  : public std::list<
+      boost::reference_wrapper<const typename c_polygon<Pt>::ring_type>
+    >
+{
+public:
+  typedef c_polygon<Pt> polygon_type;
+  typedef typename polygon_type::ring_type ring_type;
+
+  typedef std::list<boost::reference_wrapper<const ring_type> > super;
+  typedef typename super::const_iterator list_iterator;
+
+  typedef typename super::value_type wrapper_type;
+  typedef typename super::value_type::type value_type;
+
+  typedef ring_view_iterator<typename super::const_iterator>
+    const_iterator;
+
+  template<typename Iter>
+  ring_view(Iter begin, Iter end)
+    : super(begin, end) {}
+
+  const_iterator begin(void) const { return const_iterator(super::begin()); }
+  const_iterator end(void) const { return const_iterator(); }
+};
+
 //
 // a c_polygon is a restricted kind of c_plylist
 // this defines a simple polygon so that
@@ -552,6 +627,9 @@ public:
     typedef c_plylist<point_type> list_type;
     typedef typename ring_type::vertex_type vertex_type;
     typedef typename vertex_type::coordinate_type coordinate_type;
+
+    // For viewing the inner rings as required by boost
+    typedef ring_view<Pt> ring_view_type;
 
     using super::iterator;
     using super::const_iterator;
@@ -636,10 +714,8 @@ public:
     friend std::ostream &
       operator<< <Pt>(std::ostream &os, const std::vector<c_polygon<Pt> > &v);
 
-    /* XXX Copy and return a list of only our inner rings.  */
-    typedef std::list<std::reference_wrapper<const ring_type> > ring_view;
-    ring_view inner(void) const {
-      return ring_view(std::next(this->begin()), this->end());
+    ring_view_type inner(void) const {
+      return ring_view_type(std::next(this->begin()), this->end());
     }
 
 private:
