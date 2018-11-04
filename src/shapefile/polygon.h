@@ -636,6 +636,9 @@ public:
     typedef typename ring_type::vertex_type vertex_type;
     typedef typename vertex_type::coordinate_type coordinate_type;
 
+    typedef std::vector<triangle> tri_container;
+    typedef tri_container::const_iterator tri_iterator;
+
     // For viewing the inner rings as required by boost
     typedef ring_view<Pt> ring_view_type;
 
@@ -666,6 +669,10 @@ public:
     void triangulate(void) {
       triangulate(triangulation);
     }
+
+    tri_iterator triangles_begin(void) const { return triangulation.begin(); }
+    tri_iterator triangles_end(void) const { return triangulation.begin(); }
+    size_t triangles_size(void) const { return triangulation.size(); }
 
     void reverse(); //reverse the vertex order (not the list order)
 
@@ -734,7 +741,7 @@ private:
     std::vector<vertex_type*> all; //all vertices
 
     //triangulation
-    std::vector<triangle> triangulation; //catched triangulation, calculated by triangulate
+    tri_container triangulation; //cached triangulation, calculated by triangulate
 
     coordinate_type area;
 };
