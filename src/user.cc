@@ -6,6 +6,14 @@
 using namespace cv;
 using namespace std;
 
+template<typename Pt_>
+typename User<Pt_>::polygon_type
+User<Pt_>::isochrome(coordinate_type time) const
+{
+  // TODO
+  return polygon_type();
+}
+
 /* Find the travel time given fixed-travel-time (FTT) rings.  */
 template<typename Pt_>
 typename User<Pt_>::coordinate_type

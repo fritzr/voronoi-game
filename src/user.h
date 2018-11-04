@@ -146,6 +146,16 @@ public:
    * with a known fixed travel time.  */
   coordinate_type travelTime(point_type pt) const;
 
+  /* Return an isochrome describing everywhere reachable in a given time
+   * from this user's center point.  */
+  polygon_type isochrome(coordinate_type time) const;
+
+  /* Return an isochrome given a point on its boundary by computing the travel
+   * time from the center to that point.  */
+  inline polygon_type isochrome(point_type boundary) const {
+    return isochrome(travelTime(facility));
+  }
+
   iterator begin(void) { return isolines_.begin(); }
   iterator end(void) { return isolines_.end(); }
   const_iterator begin(void) const { return isolines_.cbegin(); }
