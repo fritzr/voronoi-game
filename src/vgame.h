@@ -53,9 +53,10 @@ namespace cfla
 // `nn1_type` should also be a container-like type which has begin(), end(),
 // size(), and insert() methods that involve the facility points.
 
-template<class Point,
-  class MaxDepthSolver,
-  unsigned int NumPlayers=2u
+template<class Point
+  , class MaxDepthSolver
+  , class UserType=Point
+  , unsigned int NumPlayers=2u
 >
 struct cfla_traits
 {
@@ -66,6 +67,7 @@ struct cfla_traits
   typedef typename solver_type::nn1_type       nn1_type;
   typedef typename nn1_type::const_iterator    facility_iterator;
 
+  typedef UserType                             user_type;
   typedef Point                                point_type;
   typedef decltype(point_type::x)              coordinate_type;
   typedef size_t                               size_type;
@@ -85,6 +87,7 @@ public: \
   typedef typename traits::facility_iterator facility_iterator; \
   typedef typename traits::solver_type       solver_type; \
   typedef typename traits::nn1_type          nn1_type; \
+  typedef typename traits::user_type         user_type; \
   typedef typename traits::point_type        point_type; \
   typedef typename traits::coordinate_type   coordinate_type; \
   typedef typename traits::size_type         size_type; \
@@ -130,7 +133,7 @@ public:
 
   inline const nn1_type &nn1(void) const { return nn_; }
 
-  inline point_type const& nearest_facility(point_type const& user) const {
+  inline point_type const& nearest_facility(user_type const& user) const {
     return nn_(user);
   }
 
@@ -189,8 +192,8 @@ public:
   inline user_iterator users_begin(void) const { return solver_.begin(); }
   inline user_iterator users_end(void) const { return solver_.end(); }
   inline size_type users_size(void) const { return solver_.size(); }
-  inline point_type user(int user_idx) const {
-    return std::advance(users_begin(), user_idx);
+  inline user_type& user(int user_idx) const {
+    return *std::advance(users_begin(), user_idx);
   }
 
   // Initialize a player with his facilities.
@@ -214,17 +217,17 @@ public:
 
 public:
 
-  // To find who owns a point, get each player's closest facility and narrow
+  // To find who owns a point, get each point's closest facility and narrow
   // down to which one is really closer. This prevents us from having to
   // keep an extra range tree (since we already have one per player).
-  const player_type& owner(point_type const& user) const
+  const player_type& owner(user_type const& user) const
   {
     coordinate_type dist = std::numeric_limits<coordinate_type>::infinity();
     const player_type* min_player = &player(0);
     for (auto playerp = players_.begin(); playerp != players_.end(); ++playerp)
     {
       point_type facility = (*playerp)->nearest_facility(user);
-      coordinate_type d = solver_type::distance(facility, user);
+      coordinate_type d = solver_type::distance(user, facility);
       if (std::abs(d) < std::abs(dist)) {
         dist = d;
         min_player = *playerp;
@@ -234,7 +237,7 @@ public:
   }
 
   // Modifiable reference.
-  inline player_type& owner(point_type const& user) {
+  inline player_type& owner(user_type const& user) {
     return const_cast<player_type&>(const_cast<const VGame*>(this)->owner(user));
   }
 
@@ -316,7 +319,7 @@ public:
 
 private:
 
-  typedef std::unary_function<point_type, bool> point_filter;
+  typedef std::unary_function<user_type, bool> point_filter;
   struct filter_users : public point_filter
   {
     const VGame &game;
@@ -325,7 +328,7 @@ private:
       : game(g), player_id(id)
     {}
 
-    inline bool operator()(point_type p) const {
+    inline bool operator()(user_type const& p) const {
       return game.owner(p).id() == player_id;
     }
   };
@@ -338,5 +341,7 @@ private:
   }
 
 }; // end class VGame
+
+#undef inherit_traits
 
 } // end namespace cfla
