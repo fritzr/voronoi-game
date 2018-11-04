@@ -128,6 +128,11 @@ public:
     return distance(pt, ring);
   }
 
+private:
+  // Find the upper and lower isochrome bounds between which the point belongs.
+  bool isochrome_bounds(point_type const& p,
+      const_iterator& lb, const_iterator& ub) const;
+
 public:
   /* Each c_polygon must contain only one ring for now.  */
   User(const point_type& pt, std::vector<polygon_type> plys)
@@ -146,15 +151,9 @@ public:
    * with a known fixed travel time.  */
   coordinate_type travelTime(point_type pt) const;
 
-  /* Return an isochrome describing everywhere reachable in a given time
-   * from this user's center point.  */
-  polygon_type isochrome(coordinate_type time) const;
-
   /* Return an isochrome given a point on its boundary by computing the travel
    * time from the center to that point.  */
-  inline polygon_type isochrome(point_type boundary) const {
-    return isochrome(travelTime(facility));
-  }
+  inline polygon_type isochrome(point_type const& boundary) const;
 
   iterator begin(void) { return isolines_.begin(); }
   iterator end(void) { return isolines_.end(); }

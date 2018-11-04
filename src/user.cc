@@ -7,11 +7,45 @@ using namespace cv;
 using namespace std;
 
 template<typename Pt_>
-typename User<Pt_>::polygon_type
-User<Pt_>::isochrome(coordinate_type time) const
+bool
+User<Pt_>::isochrome_bounds(point_type const& query,
+    const_iterator &lb, const_iterator &ub) const
 {
-  // TODO
-  return polygon_type();
+  if (isolines_.empty())
+    return false;
+
+  /* Find the upper/lower rings between which this point is contained.  */
+  lb = isolines_.end();
+  ub = isolines_.begin();
+
+  /* Keep going until we find the first ring that encloses the query point. */
+  while (ub != isolines_.end() && !ub->enclosed(query))
+  {
+    lb = ub;
+    ++ub;
+  }
+
+  /* This should already be captured by rings.empty() above. */
+  if (ub == isolines_.end() && lb == isolines_.end())
+    return false;
+
+  return true;
+}
+
+template<typename Pt_>
+typename User<Pt_>::polygon_type
+User<Pt_>::isochrome(point_type const& query) const
+{
+  polygon_type result;
+
+  const_iterator lower_ring, upper_ring;
+  if (!isochrome_bounds(query, lower_ring, upper_ring))
+    return result;
+
+  // XXX for now we just copy one of the bounds.
+  result.copy(*((upper_ring != isolines_.end()) ? lower_ring : upper_ring));
+  result.triangulate(); // we will need this
+  return result;
 }
 
 /* Find the travel time given fixed-travel-time (FTT) rings.  */
@@ -19,23 +53,10 @@ template<typename Pt_>
 typename User<Pt_>::coordinate_type
 User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
 {
-  if (isolines_.empty())
-    return std::numeric_limits<coordinate_type>::infinity();
-
-  /* Find the upper/lower rings between which this point is contained.  */
-  auto lower_ring = isolines_.end();
-  auto upper_ring = isolines_.begin();
-
-  /* Keep going until we find the first ring that encloses the query point. */
-  while (upper_ring != isolines_.end() && !upper_ring->enclosed(query))
-  {
-    lower_ring = upper_ring;
-    ++upper_ring;
-  }
-
-  /* This should already be captured by rings.empty() above. */
-  if (upper_ring == isolines_.end() && lower_ring == isolines_.end())
-    return HUGE_VAL;
+  /* If the helper fails we have no way to know the answer.  */
+  const_iterator lower_ring, upper_ring;
+  if (!isochrome_bounds(query, lower_ring, upper_ring))
+    return std::numeric_limits<coordinate_type>::max();
 
   /* Interpolate the travel time using the FTT endpoints and distance.
    * We interpolate with:
