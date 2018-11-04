@@ -655,7 +655,8 @@ public:
     using super::clear;
     using super::push_back;
 
-    c_polygon() { area=0; }
+    c_polygon() : super() { area=0; }
+    c_polygon(const ring_type &ply) : super() { super::push_back(ply); }
 
     bool valid() const; //check if this is a valid polygon
 
