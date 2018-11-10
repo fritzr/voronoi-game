@@ -75,6 +75,8 @@ add_executable(${TEST_PROG}
   voronoi.cc
   maxrect.h
   maxrect.cc
+  maxtri.h
+  maxtri.cc
 
   vgame.h
   #vgame.cc
