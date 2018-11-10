@@ -1,5 +1,11 @@
 #pragma once
 
+#include <cmath>
+#include <set>
+#include <unordered_set>
+#include <vector>
+#include <list>
+
 #ifdef MSVC
 #define __attribute__()
 #endif
@@ -8,6 +14,7 @@ template<typename T>
 inline T deg2rad(T deg) {
   return (deg * static_cast<T>(M_PI)) / static_cast<T>(180.0);
 }
+
 template<typename T>
 inline T rad2deg(T rad) {
   return (rad * static_cast<T>(180.0)) / static_cast<T>(M_PI);
@@ -112,3 +119,5 @@ ostream& operator<<(ostream& os, list<T> const& l) {
 }
 
 } // end namespace std
+
+#endif // DEBUG

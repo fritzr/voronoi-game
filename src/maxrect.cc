@@ -7,6 +7,7 @@
 #include <iomanip>
 #endif
 
+#include "util.h"
 #include "maxrect.h"
 
 using namespace std;
