@@ -33,15 +33,15 @@ namespace bp = boost::polygon;
 typedef unsigned int uint;
 
 template<typename T>
-struct PI { };
+struct PI2 { };
 
 template<>
-struct PI<float> {
+struct PI2<float> {
   float value = 6.2831853071794f;
 };
 
 template<>
-struct PI<double> {
+struct PI2<double> {
   double value = 6.2831853071794;
 };
 
@@ -758,7 +758,7 @@ inline void create_circle(c_polygon<Pt_>& p,
     typedef typename c_polygon<Pt_>::coordinate_type T;
     typedef typename c_polygon<Pt_>::ring_type ring_type;
 
-    T delta = PI<T>::value / res;
+    T delta = PI2<T>::value / res;
     ring_type ply(ring_type::POUT);
     ply.beginPoly();
     for(uint i=0;i<res;i++){
