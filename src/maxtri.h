@@ -228,9 +228,32 @@ public:
     super::y(p.y());
   }
 
-  // Edge points are lex. sorted by x then y
-  inline bool operator<(EdgePoint const& o) {
-    return (this->x() < o.x()) || (this->x() == o.x() && this->y() < o.y());
+  // When comparing two edge points A and C in edges E1 = <A,B> and E2 = <C,D>
+  // the points are lexicographically sorted by following criteria:
+  //   1.  A.y < C.y
+  //   2.  A.x < C.x
+  //   3.  A is right edge < C is left edge
+  //   4.  B.y < D.y
+  //   5.  B.x < D.x
+  //   6.  B is right edge < D is left edge
+  static bool edge_compare(EdgePoint const& p1, EdgePoint const& p2,
+      bool recursing=false)
+  {
+    return (p1.y() < p2.y())
+      || (p1.y() == p2.y()
+          && (p1.x() < p2.x()
+            || ((p1.x() == p2.x()
+                && (p1.dir == bp::RIGHT && p2.dir == bp::LEFT))
+              || (p1.dir == p2.dir
+                && (!recursing && edge_compare(p1.other(), p2.other(), true))
+                )
+              )
+            )
+          );
+  }
+
+  inline bool operator<(EdgePoint const& o) const {
+    return edge_compare(*this, o);
   }
 
   // return the point at the other end of this edge
