@@ -12,7 +12,7 @@
 using namespace std;
 
 // competitive facility location algorithms
-namespace cfla
+namespace cfla { namespace tri
 {
 
 template<class Tp_>
@@ -51,7 +51,7 @@ handle_intersection(edge_type const& e1, edge_type const& e2)
 
 template<class Tp_>
 void MaxTri<Tp_>::
-handle_event(edge_type const& edge, edge_point_type const& edge)
+handle_event(edge_type const& edge, edge_point_type const& event)
 {
   // TODO
 }
@@ -73,4 +73,4 @@ finalize(void)
 template class MaxTri<double>;
 template class MaxTri<float>;
 
-} // end namespace cfla
+} } // end namespace cfla::tri

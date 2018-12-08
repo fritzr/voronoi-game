@@ -34,9 +34,9 @@ typedef typename cfla::L2NN1<coordinate_type, point_type> L2NN1;
 typedef typename cfla::L1NN1<coordinate_type, point_type> L1NN1;
 
 /* L1 max-depth solver. TODO implement others.  */
-typedef typename cfla::MaxRectSolver<coordinate_type, L1NN1> solver_type;
-typedef typename cfla::cfla_traits<point_type, solver_type> cfla_traits;
-typedef typename cfla::VGame<cfla_traits> VGame;
+typedef typename cfla::rect::MaxRectSolver<coordinate_type, L1NN1> solver_type;
+typedef typename cfla::rect::MaxDepthRectTraits<point_type> rect_traits;
+typedef typename cfla::VGame<rect_traits> VGame;
 
 typedef User<point_type> User2d;
 

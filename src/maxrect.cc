@@ -13,8 +13,7 @@
 using namespace std;
 
 // competitive facility location algorithms
-namespace cfla
-{
+namespace cfla { namespace rect {
 
 template<class Tp_>
 MaxRect<Tp_>::MaxRect(void)
@@ -252,4 +251,4 @@ finalize(void)
 template class MaxRect<double>;
 template class MaxRect<float>;
 
-} // end namespace cfla
+} } // end namespace cfla::rect

@@ -46,7 +46,7 @@ push_insert_iterator<Container> push_inserter(Container& container){
   return push_insert_iterator<Container>(container);
 }
 
-namespace cfla
+namespace cfla { namespace rect
 {
 
 namespace b  = boost;
@@ -112,16 +112,16 @@ struct RectWrapper : bp::rectangle_data<Tp_>
     }
 };
 
-} // we interrupt your regularly scheduled cfla namespace to bring you...
+} } // we interrupt your regularly scheduled cfla namespace to bring you...
 
 namespace boost { namespace polygon {
   template <typename Tp_>
-    struct geometry_concept<cfla::RectWrapper<Tp_> >
+    struct geometry_concept<cfla::rect::RectWrapper<Tp_> >
       { typedef rectangle_concept type; };
 }}
 
 
-namespace cfla
+namespace cfla { namespace rect
 {
 
 // Node to track 'cell depths'. These form the tree T(V_k) from the paper,
@@ -618,7 +618,7 @@ extern template class MaxRect<float>;
 
 #ifdef DEBUG
 template<typename U>
-std::ostream& operator<<(std::ostream& os, cfla::Edge<U> const& e) {
+std::ostream& operator<<(std::ostream& os, cfla::rect::Edge<U> const& e) {
   os << "<[" << std::setw(2) << std::setfill(' ') << e.rect_index
     << "] " << (e.dir == boost::polygon::LOW ? "LOW " : "HIGH")
     << " " << e.coord << " d=" << e.depth << ">";
@@ -626,7 +626,7 @@ std::ostream& operator<<(std::ostream& os, cfla::Edge<U> const& e) {
 }
 
 template<typename U>
-std::ostream& operator<<(std::ostream& os, cfla::SolutionEdge<U> const& e)
+std::ostream& operator<<(std::ostream& os, cfla::rect::SolutionEdge<U> const& e)
 {
   os << "[" << std::setw(2) << std::setfill(' ') << e.solution << "] from "
     << e.edge;
@@ -634,7 +634,7 @@ std::ostream& operator<<(std::ostream& os, cfla::SolutionEdge<U> const& e)
 }
 #endif
 
-} // end namespace cfla
+} } // end namespace cfla::rect
 
 template<typename Tp_>
 std::ostream& operator<<(std::ostream& os,
