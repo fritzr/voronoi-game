@@ -16,6 +16,7 @@
 #include "main.h"
 #include "voronoi.h"
 #include "maxrect.h"
+#include "maxtri.h"
 #include "vgame.h"
 #include "shpReader.h"
 #include "adapt_boost_poly.h"
@@ -34,11 +35,18 @@ typedef typename cfla::L2NN1<coordinate_type, point_type> L2NN1;
 typedef typename cfla::L1NN1<coordinate_type, point_type> L1NN1;
 
 /* L1 max-depth solver. TODO implement others.  */
-typedef typename cfla::rect::MaxRectSolver<coordinate_type, L1NN1> solver_type;
-typedef typename cfla::rect::MaxDepthRectTraits<point_type> rect_traits;
-typedef typename cfla::VGame<rect_traits> VGame;
+typedef typename cfla::rect::MaxRectSolver<coordinate_type, L1NN1>
+  rect_solver_type;
+typedef typename cfla::cfla_traits<point_type, rect_solver_type> rect_traits;
+typedef typename cfla::VGame<rect_traits> RectGame;
 
 typedef User<point_type> User2d;
+
+typedef typename cfla::tri::MaxTriSolver<coordinate_type> tri_solver_type;
+typedef typename cfla::cfla_traits<tri_solver_type::user_type, tri_solver_type>
+  tri_traits;
+typedef typename cfla::VGame<tri_traits> TriGame;
+
 
 enum DrawRects {
   RECTS_NONE = 0,
@@ -54,6 +62,12 @@ enum DrawCell {
   CELL_UPRIGHT = 2,
   CELL_BOTH = 3,
   CELL_BAD = 4,
+};
+
+enum SolverAlgorithm {
+  ALG_RECT = 0,
+  ALG_TRI = 1,
+  ALG_BAD = 2,
 };
 
 struct options_t
@@ -76,6 +90,7 @@ struct options_t
   bool interactive = false;
   string output_path;
   long unsigned int seed = 0u;
+  SolverAlgorithm algorithm = ALG_TRI;
 
   string user_points_path;
   string user_rings_path;
@@ -116,6 +131,8 @@ usage(const char *prog, const char *errmsg)
     << endl << endl
     << "OPTIONS are:" << endl
     << "  -F			Fill input polygons (default: trace)" << endl
+    << "  -d ALGORITHM		Use the given distance algorithm." << endl
+    << "    0:manhattan, [1:travel time]" << endl
     << "  -C COLORMAP		Give a colormap index" << endl
     << "    0:autumn, 1:bone, 2:jet, 3:winter, 4:rainbow, 5:ocean," << endl
     << "    6:summer, 7:spring, 8:cool, 9:hsv, 10:pink, [11:hot], 12:parula"
@@ -132,7 +149,7 @@ usage(const char *prog, const char *errmsg)
     << "  -G			Do not draw a grid (this is default)" << endl
     << "  -l			Label the grid lines (default: yes)" << endl
     << "  -L			Do not label grid lines" << endl
-    << "  -d			Debug mode (extra output)" << endl
+    << "  -D			Debug mode (extra output)" << endl
     << "  -u			Draw user labels (default: yes)" << endl
     << "  -U                    Do not draw user labels" << endl
     << "  -W SIZE		Max width of the display (default: 1920)"
@@ -201,7 +218,7 @@ getenum(T maxval, const char *instr, ostream &err, const char *errtype)
   return T(ival);
 }
 
-static const char *sopts = "FC:X:Y:T:eEgGlLdW:H:hs:u:q:p:iIo:s:";
+static const char *sopts = "FC:X:Y:T:eEgGlLDd:W:H:hs:u:q:p:iIo:s:";
 
 // Parses options and sets the global options structure.
 static void
@@ -212,8 +229,11 @@ get_options(int argc, char *argv[], options_t &o)
   ostringstream errstr;
   while ((opt = getopt(argc, argv, sopts)) >= 0 && !opterr) {
     switch (opt) {
-    case 'd':
+    case 'D':
       o.debug = true; break;
+    case 'd':
+      o.algorithm = getenum(ALG_BAD, optarg, errstr, "distance algorithm");
+      break;
     case 'F':
       o.fill_inputs = true; break;
     case 'C':
@@ -287,6 +307,10 @@ get_options(int argc, char *argv[], options_t &o)
     usage(argv[0], "-c is no longer implemented");
   if (o.drawRects)
     usage(argv[0], "-r is no longer implemented");
+
+  if (o.algorithm == ALG_RECT)
+    usage(argv[0], "-d: interface to the"
+        " manhattan distance algorithm is currently unimplemented");
 
   int nargs = 4;
   if (argc - optind < nargs) {

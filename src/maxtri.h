@@ -127,6 +127,7 @@ struct traits
   typedef typename traits::edge_type edge_type; \
   typedef typename traits::edge_point_type edge_point_type; \
   typedef typename traits::triangle_type triangle_type; \
+  typedef typename traits::poly_point_type poly_point_type; \
   typedef typename traits::polygon_type polygon_type; \
   typedef typename traits::solution_ref_type solution_ref_type; \
   typedef typename traits::solution_cell_type solution_cell_type; \
@@ -263,8 +264,8 @@ public:
   }
 
 #ifdef MAXTRI_DEBUG
-  static std::ostream& operator<<(std::ostream& os, EdgePoint const& p) {
-    os << "(" << e.x() << " , " << e.y() << ")";
+  inline friend std::ostream& operator<<(std::ostream& os, EdgePoint const& p) {
+    os << "(" << p.x() << " , " << p.y() << ")";
     return os;
   }
 #endif
@@ -323,7 +324,7 @@ struct Edge
   }
 
 #ifdef MAXTRI_DEBUG
-  static std::ostream& operator<<(std::ostream& os, Edge const& e) {
+  inline friend std::ostream& operator<<(std::ostream& os, Edge const& e) {
     os << "[ " << e.first << " => " << e.second << " ]";
     return os;
   }
@@ -617,12 +618,12 @@ class MaxTriSolver
 public:
   INHERIT_TRAITS(Tp_);
 
-  typedef User<Tp_> user_type;
+  typedef User<poly_point_type> user_type;
   typedef std::vector<user_type> user_list;
   typedef typename user_list::iterator       iterator;
   typedef typename user_list::const_iterator const_iterator;
 
-  typedef cfla::L1NN1<coordinate_type, point_type> nn1_type;
+  typedef TTNN1<user_type, MaxTriSolver> nn1_type;
   typedef typename nn1_type::size_type size_type;
 
 private:

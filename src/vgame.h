@@ -40,15 +40,9 @@ namespace cfla
 // `nn1_type` should have the following interface:
 //
 // `nn1_type` should be constructible from an iterator over facility Points,
-// and should define `Point operator()(Point)` to return the nearest facility
-// point to a given user point. The user point need not be, and indeed usually
-// is not, among the set of facility points.
-//
-// `nn1_type` should also offer a static method
-// `coordinate_type distance(Point, Point)` which returns a comparable distance
-// value (not necessarily the exact distance) representing the distance between
-// two points. This should be congruent to the metric used to return the
-// nearest point via `operator()`.
+// and should define `point_type operator()(user_type)` to return the nearest
+// facility point to a given user point. The user point need not be, and indeed
+// usually is not, among the set of facility points.
 //
 // `nn1_type` should also be a container-like type which has begin(), end(),
 // size(), and insert() methods that involve the facility points.

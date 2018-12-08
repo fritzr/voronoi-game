@@ -83,6 +83,62 @@ private:
 };
 #endif
 
+/* Travel-Time adapter for the VGame nn1_type concept. */
+template<class UserClass, class SolverClass>
+class TTNN1
+{
+public:
+  typedef SolverClass solver_type;
+
+  typedef UserClass user_type;
+  typedef typename user_type::coordinate_type coordinate_type;
+  typedef typename user_type::point_type point_type;
+
+  typedef std::vector<point_type> facility_container;
+  typedef typename facility_container::iterator iterator;
+  typedef typename facility_container::const_iterator const_iterator;
+  typedef typename facility_container::size_type size_type;
+  typedef typename facility_container::value_type value_type;
+
+private:
+  std::vector<point_type> facilities_;
+
+public:
+
+  template<class FacilityIter>
+  TTNN1(FacilityIter begin, FacilityIter end)
+    : facilities_(begin, end)
+  {}
+
+  /* Return the nearest facility to the given user point.  */
+  point_type operator()(user_type const& u)
+  {
+    /* Because travel time is essentially an arbitrary metric, we can do no
+     * better than a brute-force approach... As far as I know. Perhaps the
+     * range tree could be adapted somehow.  */
+    auto fit = facilities_.begin();
+    if (fit == facilities_.end())
+      return point_type();
+
+    const point_type *min_facility = &(*fit);
+    coordinate_type min_dist = solver_type::distance(u, *fit++);
+    while (fit != facilities_.end())
+    {
+      coordinate_type this_dist = solver_type::distance(u, *fit);
+      if (std::abs(this_dist) < std::abs(min_dist))
+        min_facility = &(*fit);
+      ++fit;
+    }
+
+    return *min_facility;
+  }
+
+  inline const_iterator begin(void) const { return facilities_.begin(); }
+  inline const_iterator end(void) const { return facilities_.end(); }
+  inline size_type size(void) const { return facilities_.size(); }
+
+};
+
 template<typename Pt_>
 class User
 {
