@@ -20,8 +20,6 @@
 #include <boost/geometry/geometries/segment.hpp>
 #include <boost/geometry/algorithms/is_convex.hpp>
 
-#include <boost/graph/adjacency_list.hpp>
-
 #include "user.h"
 #include "polygon.h"
 #include "sweep.h"
@@ -491,17 +489,6 @@ public:
   typedef std::vector<triangle_type> triangle_container;
   typedef std::set<edge_point_type, typename sla::event_compare> edge_point_set;
 
-  // Vertexes of the adjacency list are triangles.
-  typedef b::property<b::vertex_index_t, int> VertexProps;
-  typedef b::adjacency_list<
-      b::hash_setS, b::listS, b::undirectedS, VertexProps
-    > components_graph;
-  typedef b::graph_traits<components_graph>::vertex_descriptor
-    vertex_descriptor;
-  typedef b::property_map<components_graph, b::vertex_index_t>::type
-    id_map;
-  typedef std::vector<vertex_descriptor> descriptor_list;
-
   typedef typename edge_point_set::iterator edge_point_iterator;
 
   typedef typename super_type::solution_container solution_container;
@@ -512,14 +499,7 @@ private:
 
   // sweep line status: points of current edges, ordered by X coordinate
   edge_point_set edge_points;
-
-  // data needed for the adjacency list
-  components_graph graph;
-  id_map component_ids;
-  descriptor_list vertexes;
   int max_depth;
-
-  inline vertex_descriptor vd(int idx) const { return vertexes[idx]; }
 
   void insert_edge(edge_type const& e);
   void handle_intersection(edge_type const& e1, edge_type const& e2);
@@ -542,18 +522,10 @@ public:
   // Construct from a list of input polygons (may be in no particular order).
   template<class Iter>
     MaxTri(Iter begin, Iter end)
-    : tris(), edge_points(), graph(),
-      component_ids(b::get(b::vertex_index_t(), graph)),
-      vertexes(), max_depth(-1)
+    : tris(), edge_points(), max_depth(-1)
     {
       super_type::insert(begin, end);
     }
-
-  inline int index(vertex_descriptor v) const {
-    return b::get(component_ids, v);
-  }
-
-  components_graph const& adj_graph(void) const { return graph; }
 
   // Add triangles from polygon.
   // Same as the constructor form, if you're lazy and want to do it

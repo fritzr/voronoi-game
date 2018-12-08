@@ -22,9 +22,7 @@ MaxTri<Tp_>::~MaxTri(void)
 
 template<class Tp_>
 MaxTri<Tp_>::MaxTri(void)
-  : tris(), edge_points(), graph(),
-    component_ids(b::get(b::vertex_index_t(), graph)),
-    vertexes(), max_depth(-1)
+  : tris(), edge_points(), max_depth(-1)
 {
 }
 
