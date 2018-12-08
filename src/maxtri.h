@@ -1,6 +1,7 @@
 #pragma once
 
 #include <set>
+#include <queue>
 #include <vector>
 #include <unordered_set>
 #include <functional>
@@ -208,16 +209,16 @@ public:
   INHERIT_TRAITS(Tp_);
 
   // members
-  edge_type const& edge; // parent edge
-  const bp::direction_1d dir; // LOW or HIGH, meaning first or second
+  const edge_type* edge; // parent edge
+  bp::direction_1d dir; // LOW or HIGH, meaning first or second
 
   // constructors
-  EdgePoint(edge_type& parent, bp::direction_1d d, super pt)
-    : super(pt), edge(parent), dir(d)
+  EdgePoint(edge_type const& parent, bp::direction_1d d, super pt)
+    : super(pt), edge(&parent), dir(d)
   {}
 
   EdgePoint(EdgePoint const& o, edge_type const& new_parent, bp::direction_1d d)
-    : super(o), edge(new_parent), dir(d)
+    : super(o), edge(&new_parent), dir(d)
   {}
 
   // methods
@@ -257,8 +258,8 @@ public:
   }
 
   // return the point at the other end of this edge
-  inline point_type& other(void) const {
-    return (dir == bp::LOW) ? edge.second : edge.first;
+  inline edge_point_type const& other(void) const {
+    return (dir == bp::LOW) ? edge->second : edge->first;
   }
 
 #ifdef MAXTRI_DEBUG
@@ -451,7 +452,7 @@ struct Triangle
   // methods
   inline edge_type const& edge(int i) const { return edges[i % size()]; }
   inline point_type const& operator[](int i) const { return points[i]; }
-  inline size_t size(void) const { return edges.size(); }
+  inline size_t size(void) const { return 3u; }
 };
 
 
@@ -505,6 +506,7 @@ struct make_sla_traits
 
   typedef typename traits::edge_point_type    event_type;
   typedef typename std::less<edge_point_type> event_compare;
+  typedef typename std::vector<edge_point_type> event_container;
   typedef typename traits::edge_type          event_id_type;
   typedef make_sla_traits etraits;
 
@@ -580,6 +582,13 @@ public:
         traits::convert_point(ply[ptri->v[2]]->getPos()),
       };
       tris.emplace_back(ply, triangle);
+
+      queue().push(tris.back().edge(2).second);
+      queue().push(tris.back().edge(2).first);
+      queue().push(tris.back().edge(1).second);
+      queue().push(tris.back().edge(1).first);
+      queue().push(tris.back().edge(0).second);
+      queue().push(tris.back().edge(0).first);
     }
   }
 
