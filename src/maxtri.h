@@ -6,7 +6,7 @@
 #include <functional>
 #include <boost/array.hpp>
 
-#ifdef DEBUG
+#ifdef MAXTRI_DEBUG
 #include <iostream>
 #include <iomanip>
 #endif
@@ -260,6 +260,13 @@ public:
   inline point_type& other(void) const {
     return (dir == bp::LOW) ? edge.second : edge.first;
   }
+
+#ifdef MAXTRI_DEBUG
+  static std::ostream& operator<<(std::ostream& os, EdgePoint const& p) {
+    os << "(" << e.x() << " , " << e.y() << ")";
+    return os;
+  }
+#endif
 };
 
 } } // end namespace cfla::tri
@@ -313,6 +320,13 @@ struct Edge
   inline Edge const& prevEdge(void) const {
     return tri.edge(static_cast<int>(dir) - 1); // modulo 3
   }
+
+#ifdef MAXTRI_DEBUG
+  static std::ostream& operator<<(std::ostream& os, Edge const& e) {
+    os << "[ " << e.first << " => " << e.second << " ]";
+    return os;
+  }
+#endif
 };
 
 } } // end namespace cfla::tri
@@ -678,7 +692,7 @@ public:
 extern template class MaxTri<double>;
 extern template class MaxTri<float>;
 
-#ifdef DEBUG
+#ifdef MAXTRI_DEBUG
 template<typename U>
 std::ostream& operator<<(std::ostream& os, Edge<U> const& e) {
   os << "<[" << std::setw(2) << std::setfill(' ') << e.rect_index

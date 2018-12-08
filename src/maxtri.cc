@@ -51,7 +51,9 @@ template<class Tp_>
 void MaxTri<Tp_>::
 handle_event(edge_type const& edge, edge_point_type const& event)
 {
-  // TODO
+#ifdef MAXTRI_DEBUG
+  cout << "handling edge: " << edge << endl;
+#endif
 }
 
 template<class Tp_>
