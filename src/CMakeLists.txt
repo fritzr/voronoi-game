@@ -43,6 +43,10 @@ if (${CMAKE_DEBUG})
   endforeach()
 endif()
 
+if (${DEBUG})
+  add_definitions(-DMAXRECT_DEBUG -DMAXTRI_DEBUG)
+endif()
+
 set(LIB_INCLUDE "${CMAKE_SOURCE_DIR}/lib")
 
 link_directories(
