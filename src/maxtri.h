@@ -20,6 +20,8 @@
 #include <boost/geometry/geometries/ring.hpp>
 #include <boost/geometry/geometries/segment.hpp>
 #include <boost/geometry/algorithms/is_convex.hpp>
+#include <boost/geometry/geometries/register/point.hpp>
+#include <boost/geometry/geometries/register/ring.hpp>
 
 #include "user.h"
 #include "polygon.h"
@@ -157,9 +159,9 @@ namespace boost { namespace geometry {
 } } // end namespace boost::geometry
 
 /* Intersect many geometries into out.  */
-template<typename Iter, typename Box, typename Polygon>
+template<typename Iter, typename Polygon>
 bool
-intersection(Iter begin, Iter end, Box const& bbox, Polygon& out)
+intersection(Iter begin, Iter end, Polygon& out)
 {
   if (begin == end)
     return false;
@@ -168,19 +170,19 @@ intersection(Iter begin, Iter end, Box const& bbox, Polygon& out)
   auto const& first = *begin++;
   if (begin == end)
   {
-    bg::assign(out, first);
+    bg::assign(out, *first);
     return true;
   }
 
   // Case B. two geometries, return their intersection
   auto const& second = *begin++;
-  if (!bg::intersection(first, second, out))
+  if (!bg::intersection(*first, *second, out))
     return false;
 
   // Case C. many geometries, return the cumulative intersection with A&B
   while (begin != end)
     // XXX is providing out twice okay??
-    if (!bg::intersection(*begin++, out, out))
+    if (!bg::intersection(*(*begin++), out, out))
       return false;
 
   return true;
@@ -391,7 +393,13 @@ struct Triangle
   INHERIT_TRAITS(Tp_);
 
   typedef edge_type edge_array[3];
-  typedef point_type point_array[3];
+  typedef std::array<point_type, 3> point_array;
+
+  typedef typename point_array::iterator iterator;
+  typedef typename point_array::const_iterator const_iterator;
+  typedef typename point_array::size_type size_type;
+  typedef typename point_array::difference_type difference_type;
+  typedef typename point_array::value_type value_type;
 
   // members
   polygon_type const& poly; // parent polygon
@@ -454,8 +462,18 @@ struct Triangle
   inline edge_type const& edge(int i) const { return edges[i % size()]; }
   inline point_type const& operator[](int i) const { return points[i]; }
   inline size_t size(void) const { return 3u; }
+
+  inline iterator begin() { return points.begin(); }
+  inline iterator end() { return points.end(); }
+  inline const_iterator begin() const { return points.cbegin(); }
+  inline const_iterator end() const { return points.cend(); }
 };
 
+} } // end namespace cfla::tri
+
+BOOST_GEOMETRY_REGISTER_RING_TEMPLATED(cfla::tri::Triangle);
+
+namespace cfla { namespace tri {
 
 template<class Tp_>
 struct SolutionCell
@@ -513,7 +531,9 @@ struct make_sla_traits
 
   typedef sla_traits<value_type, event_type, solution_type, etraits> type;
 
-  inline static event_id_type get_type(event_type const& p) { return p.edge; }
+  inline static event_id_type const& get_type(event_type const& p) {
+    return *p.edge;
+  }
 };
 
 template<class Tp_>
@@ -531,6 +551,7 @@ public:
 
   typedef typename edge_point_set::iterator edge_point_iterator;
 
+  typedef typename super_type::solution_type solution_type;
   typedef typename super_type::solution_container solution_container;
   typedef typename solution_container::const_iterator solution_iterator;
 
@@ -606,6 +627,8 @@ public:
   inline size_t size(void) const { return solutions().size(); }
   inline solution_iterator begin(void) const { return solutions().cbegin(); }
   inline solution_iterator end(void) const { return solutions().cend(); }
+
+  inline solution_type const& solution(int idx) const { return *(begin()+idx); }
 };
 
 /* Adapter for MaxTri which conforms to the cfla_traits::solver_type
@@ -634,7 +657,7 @@ private:
 
   // Return the ideal location for player 2 among some player 1 facilities.
   template<typename point_filter>
-  point_type compute(const nn1_type &nn1, point_filter filter)
+  poly_point_type compute(const nn1_type &nn1, point_filter filter)
   {
     // To solve for player 2, build isochromes from the opposing player's
     // facilities to each user point, then triangulate the polygons (for
@@ -646,7 +669,7 @@ private:
         continue;
 
       // Compute an iso representing the travel time
-      point_type nearest_facility(nn1(userp->center()));
+      poly_point_type nearest_facility(nn1(*userp));
       solver_.add_event(userp->isochrome(nearest_facility));
     }
     solver_.compute();
@@ -655,20 +678,24 @@ private:
     if (solver_.size() == 0)
     {
       std::cerr << "warning: empty solution" << std::endl;
-      return point_type(0, 0);
+      return poly_point_type();
     }
 
     // Choose a random point in a random solution cell.
     size_type chosen_one = randrange(size_type(0), solver_.size()-1);
-    auto solution = solver_.cell(chosen_one);
+    auto solution = solver_.solution(chosen_one).cell();
 
-    coordinate_type randx = randrange(
-        bp::get(solution, bp::HORIZONTAL, bp::LOW),
-        bp::get(solution, bp::HORIZONTAL, bp::HIGH));
-    coordinate_type randy = randrange(
-        bp::get(solution, bp::VERTICAL, bp::LOW),
-        bp::get(solution, bp::VERTICAL, bp::HIGH));
-    point_type out(randx, randy);
+    bgm::box<point_type> bbox;
+    bg::envelope(solution, bbox);
+    poly_point_type out;
+    coordinate_type randx, randy;
+    do {
+      randx = randrange(bg::get<bg::min_corner, 0>(bbox),
+                        bg::get<bg::max_corner, 0>(bbox));
+      randy = randrange(bg::get<bg::min_corner, 1>(bbox),
+                        bg::get<bg::max_corner, 1>(bbox));
+      out = poly_point_type(randx, randy);
+    } while (!bg::within(out, solution));
 
     return out;
   }
@@ -681,19 +708,23 @@ public:
       : solver_(), users_(begin, end)
     {}
 
-  iterator begin(void) const { return users_.begin(); }
-  iterator end(void) const { return users_.end(); }
+  const_iterator begin(void) const { return users_.begin(); }
+  const_iterator end(void) const { return users_.end(); }
   //const_iterator cbegin(void) const { return users_.cbegin(); }
   //const_iterator cend(void) const { return users_.cend(); }
 
   // Return the "optimal solution" for the CFL game.
   template<typename point_filter>
-  point_type operator()(const nn1_type &facilities, point_filter filter) {
+  poly_point_type operator()(const nn1_type &facilities, point_filter filter) {
     return compute(facilities, filter);
   }
 
+  static poly_point_type user_point(user_type const& u) {
+    return u.center();
+  }
+
   inline static coordinate_type
-    distance(user_type const& user, point_type const& p) {
+    distance(user_type const& user, poly_point_type const& p) {
       return user.travelTime(p);
     }
 

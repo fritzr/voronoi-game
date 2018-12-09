@@ -32,6 +32,9 @@ namespace cfla
 // That is to say the point, when placed among the facilities, has a maximal
 // number of users closer to it than any other facility.
 //
+// The solver type must provide a user_point() method to return the
+// location of a user_type object, unless user_type and point_type are
+// equivalent.
 //
 // Additionally, MaxDepthSolver must expose a typedef `nn1_type` used for
 // finding the nearest point to a set of points. Some common acceptable types
@@ -119,7 +122,7 @@ public:
   inline facility_iterator begin(void) const { return nn_.begin(); }
   inline facility_iterator end(void) const { return nn_.end(); }
   inline size_type size(void) const { return nn_.size(); }
-  inline void insert(const point_type &facility) { return nn_.insert(facility); }
+  inline void insert(const point_type &facility) { nn_.insert(facility); }
 
   inline void set_score(int new_score) { score_ = new_score; }
   inline int score(void) const { return score_; }
@@ -127,7 +130,7 @@ public:
 
   inline const nn1_type &nn1(void) const { return nn_; }
 
-  inline point_type const& nearest_facility(user_type const& user) const {
+  inline point_type nearest_facility(user_type const& user) const {
     return nn_(user);
   }
 
@@ -188,6 +191,13 @@ public:
   inline size_type users_size(void) const { return solver_.size(); }
   inline user_type& user(int user_idx) const {
     return *std::advance(users_begin(), user_idx);
+  }
+
+  inline typename std::enable_if<
+      !std::is_same<point_type, user_type>::value
+    , point_type>::type
+  user_point(user_type const&u) const {
+    return solver_.user_point(u);
   }
 
   // Initialize a player with his facilities.

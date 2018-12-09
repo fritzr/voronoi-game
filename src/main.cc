@@ -43,7 +43,7 @@ typedef typename cfla::VGame<rect_traits> RectGame;
 typedef User<point_type> User2d;
 
 typedef typename cfla::tri::MaxTriSolver<coordinate_type> tri_solver_type;
-typedef typename cfla::cfla_traits<tri_solver_type::user_type, tri_solver_type>
+typedef typename cfla::cfla_traits<point_type, tri_solver_type, User2d>
   tri_traits;
 typedef typename cfla::VGame<tri_traits> TriGame;
 
@@ -365,22 +365,23 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
 static Point2f pbias, nbias;
 
 template<class pt>
-static inline pt rotp(pt p)
+static inline pt rotp(pt const& p)
 {
   return rotateZ2f_pos(p) - pbias;
 }
 
 template<class pt>
-static inline pt rotn(pt p)
+static inline pt rotn(pt const& p)
 {
   return rotateZ2f_neg(p) - nbias;
 }
 
-#if 0
 template<class pt>
-static inline pt check_rot(pt p)
+static inline pt check_rot(pt const& p)
 {
-  return (opts.drawRects == RECTS_UPRIGHT) ? rotp(p) : p;
+  return (opts.algorithm == ALG_RECT && opts.drawRects == RECTS_UPRIGHT)
+    ? rotp(p)
+    : p;
 }
 
 template<class InputIter>
@@ -391,32 +392,33 @@ draw_facilities(Mat& img, InputIter begin, InputIter end, Scalar const& color)
     cv::circle(img, *begin++, 10, color, -1);
 }
 
+template<class Game>
 static void
-draw_users(Mat& img, VGame const& vd)
+draw_users(Mat& img, Game const& vd)
 {
   // Don't fill users
   for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp) {
-    typename VGame::player_type const& p = vd.owner(*userp);
+    typename Game::player_type const& p = vd.owner(*userp);
     Scalar color = p.id() == 0 ? P1COLOR : P2COLOR;
-    cv::circle(img, check_rot(*userp), 5, color);
+    cv::circle(img, check_rot(vd.user_point(*userp)), 5, color);
   }
 }
 
+template<class Game>
 static void
-show_score(Mat& img, VGame& vg)
+show_score(Mat& img, Game& vg)
 {
   // Draw updated users and scores based on new owners.
   vg.score();
   draw_users(img, vg);
   cout << "scores:" << endl;
-  for (unsigned int pid = 0u; pid < VGame::nplayers; ++pid)
+  for (unsigned int pid = 0u; pid < Game::nplayers; ++pid)
   {
-    const typename VGame::player_type& player = vg.player(pid);
+    const typename Game::player_type& player = vg.player(pid);
     cout << "  player " << player.id() << " = "
       << setw(2) << setfill(' ') << player.score() << endl;
   }
 }
-#endif
 
 #ifdef DEBUG
 static ostream&
@@ -477,47 +479,24 @@ dumpDistances(ostream& os, const vector<User2d> &users,
 
 std::default_random_engine* rng = nullptr;
 
-int main(int argc, char *argv[])
+template<class Game> /* VGame */
+static void
+play_game(Mat img, vector<User2d> users,
+    vector<Point2d> p1sites, vector<Point2d> p2sites)
 {
-  get_options(argc, argv, opts);
-
-  vector<User2d> users(readUsers<Point2d>(
-        opts.user_points_path, opts.user_rings_path));
-  vector<Point2d> p1sites(readPoints<Point2d>(opts.p1sites_path));
-  vector<Point2d> p2sites(readPoints<Point2d>(opts.p2sites_path));
-
-#ifdef DEBUG
-  dumpDistances(cout, users, p1sites, p2sites);
-#endif
-
-  // We got resolution (x, y) as (width, height); flip to (rows, cols)
-  Size resolution(opts.screenWidth, opts.screenHeight);
-  Mat img(resolution.height, resolution.width, CV_8UC3);
-  // White background
-  img.setTo(Scalar::all(0xff));
-
-  if (opts.debug)
-    cout << "canvas size " << img.cols << " x " << img.rows << endl;
-
-  // Draw a grid first if we want.
-  if (opts.dogrid)
-    drawGrid(img, opts.ngridx, opts.ngridy, gridColor, opts.gridThickness,
-        opts.gridLabels);
-
-#if 0
-  /*** Disable test code for now while I'm doing maintenance on stuff. ***/
-
-  // Play the game one round at a time.
-  VGame vg(users.begin(), users.end());
+  Game vg(users.begin(), users.end());
 #ifdef DEBUG
   vg.set_img(img);
 #endif
+
   vg.init_player(0, p1sites.begin(), p1sites.end());
   vg.init_player(1, p2sites.begin(), p2sites.end());
-  const typename VGame::player_type& p1 = vg.player(0);
-  const typename VGame::player_type& p2 = vg.player(1);
+  const typename TriGame::player_type& p1 = vg.player(0);
+  const typename TriGame::player_type& p2 = vg.player(1);
+
   draw_facilities(img, p1.begin(), p1.end(), P1COLOR);
   draw_facilities(img, p2.begin(), p2.end(), P2COLOR);
+
   putText(img, "P1", Point(FONT_XSPACE, 2*FONT_YSPACE),
       FONT, FONT_SCALE, P1COLOR, FONT_THICKNESS);
   putText(img, "P2", Point(FONT_XSPACE+40, 2*FONT_YSPACE),
@@ -549,12 +528,48 @@ int main(int argc, char *argv[])
     unsigned int user_idx = 0u;
     for (auto uit = users.begin(); uit != users.end(); ++uit)
     {
-      Point up = check_rot(*uit);
+      auto up = vg.user_point(*uit);
+      up = check_rot(up);
       putText(img, to_string(user_idx++),
           Point(up.x + FONT_XSPACE, up.y - FONT_YSPACE),
           FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
     }
   }
+}
+
+int main(int argc, char *argv[])
+{
+  get_options(argc, argv, opts);
+
+  vector<User2d> users(readUsers<Point2d>(
+        opts.user_points_path, opts.user_rings_path));
+  vector<Point2d> p1sites(readPoints<Point2d>(opts.p1sites_path));
+  vector<Point2d> p2sites(readPoints<Point2d>(opts.p2sites_path));
+
+#ifdef DEBUG
+  dumpDistances(cout, users, p1sites, p2sites);
+#endif
+
+  // We got resolution (x, y) as (width, height); flip to (rows, cols)
+  Size resolution(opts.screenWidth, opts.screenHeight);
+  Mat img(resolution.height, resolution.width, CV_8UC3);
+  // White background
+  img.setTo(Scalar::all(0xff));
+
+  if (opts.debug)
+    cout << "canvas size " << img.cols << " x " << img.rows << endl;
+
+  // Draw a grid first if we want.
+  if (opts.dogrid)
+    drawGrid(img, opts.ngridx, opts.ngridy, gridColor, opts.gridThickness,
+        opts.gridLabels);
+
+  // Play the game one round at a time.
+  if (opts.algorithm == ALG_TRI)
+    play_game<TriGame>(img, users, p1sites, p2sites);
+  else
+    /*play_game<RectGame>(img, users, p1sites, p2sites)*/
+    ;
 
   if (opts.output_path.empty())
   {
@@ -563,7 +578,6 @@ int main(int argc, char *argv[])
   }
   else
     imwrite(opts.output_path, img);
-#endif // 0
 
   if (rng != nullptr)
     delete rng;

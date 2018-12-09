@@ -111,7 +111,7 @@ public:
   {}
 
   /* Return the nearest facility to the given user point.  */
-  point_type operator()(user_type const& u)
+  point_type operator()(user_type const& u) const
   {
     /* Because travel time is essentially an arbitrary metric, we can do no
      * better than a brute-force approach... As far as I know. Perhaps the
@@ -132,6 +132,8 @@ public:
 
     return *min_facility;
   }
+
+  inline void insert(point_type const& p) { return facilities_.push_back(p); }
 
   inline const_iterator begin(void) const { return facilities_.begin(); }
   inline const_iterator end(void) const { return facilities_.end(); }
@@ -209,7 +211,7 @@ public:
 
   /* Return an isochrome given a point on its boundary by computing the travel
    * time from the center to that point.  */
-  inline polygon_type isochrome(point_type const& boundary) const;
+  polygon_type isochrome(point_type const& boundary) const;
 
   iterator begin(void) { return isolines_.begin(); }
   iterator end(void) { return isolines_.end(); }
