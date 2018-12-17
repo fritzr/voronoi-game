@@ -43,7 +43,7 @@ User<Pt_>::isochrome(point_type const& query) const
     return result;
 
   // XXX for now we just copy one of the bounds.
-  result.copy(*((upper_ring != isolines_.end()) ? lower_ring : upper_ring));
+  result.copy(*((upper_ring != isolines_.end()) ? upper_ring : lower_ring));
   result.triangulate(); // we will need this
   return result;
 }
