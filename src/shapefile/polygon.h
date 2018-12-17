@@ -672,7 +672,7 @@ public:
     }
 
     tri_iterator triangles_begin(void) const { return triangulation.begin(); }
-    tri_iterator triangles_end(void) const { return triangulation.begin(); }
+    tri_iterator triangles_end(void) const { return triangulation.end(); }
     size_t triangles_size(void) const { return triangulation.size(); }
 
     void reverse(); //reverse the vertex order (not the list order)
