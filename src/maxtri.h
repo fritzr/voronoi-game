@@ -92,16 +92,16 @@ namespace cfla { namespace tri
 // forward declarations
 
 template<typename Tp_>
-struct Triangle;
+class Triangle;
 
 template<typename Tp_>
-struct Edge;
+class Edge;
 
 template<typename Tp_>
-struct EdgePoint;
+class EdgePoint;
 
 template<typename Tp_>
-struct SolutionCell;
+class SolutionCell;
 
 template<typename Tp_>
 struct traits
@@ -204,7 +204,51 @@ leftTurn(Pt_ const& p1, Pt_ const& p2, Pt_ const& p3)
 // classes
 
 template<class Tp_>
-  struct EdgePoint : public point_xy<Tp_>
+struct triangle_data
+{
+  INHERIT_TRAITS(Tp_);
+
+  typedef edge_type edge_array[3];
+  typedef std::array<point_type, 3> point_array;
+
+  // members
+  polygon_type const& poly; // parent polygon
+  point_array points;
+  edge_array edges;
+
+  template <class Tri>
+  triangle_data(polygon_type const& parent, Tri const& input_tri)
+    : poly(parent), points()
+      , edges({ // to be filled in by Triangle constructor
+          { this, 0, input_tri[0], input_tri[0], bp::HIGH },
+          { this, 1, input_tri[0], input_tri[0], bp::LOW },
+          { this, 2, input_tri[0], input_tri[0], bp::LOW },
+        })
+  {
+  }
+};
+
+template<class Tp_>
+struct edge_data
+{
+  INHERIT_TRAITS(Tp_);
+
+  // members
+  edge_point_type first, second;
+  triangle_data<Tp_> *tri; // parent triangle -- weak reference
+  int index; // index of edge in parent triangle (0, 1, or 2)
+  bp::direction_1d dir; // LOW (left) or HIGH (right)
+  int depth; // intersection depth
+
+  edge_data(triangle_data<Tp_> *tridata, int edge_index,
+      point_type start, point_type end, bp::direction_1d d)
+    : first(this, bp::LOW, start), second(this, bp::HIGH, end), tri(tridata)
+      , index(edge_index), dir(d), depth(-1)
+  {}
+};
+
+template<class Tp_>
+  class EdgePoint : public point_xy<Tp_>
 {
 public:
   // typedefs
@@ -212,17 +256,15 @@ public:
   INHERIT_TRAITS(Tp_);
 
   // members
-  const edge_type* edge; // parent edge
+  edge_data<Tp_> *edge; // parent edge data -- weak reference
   bp::direction_1d dir; // LOW or HIGH, meaning first or second
 
   // constructors
-  EdgePoint(edge_type const& parent, bp::direction_1d d, super pt)
-    : super(pt), edge(&parent), dir(d)
+  EdgePoint(edge_data<Tp_> *parent, bp::direction_1d d, super pt)
+    : super(pt), edge(parent), dir(d)
   {}
 
-  EdgePoint(EdgePoint const& o, edge_type const& new_parent, bp::direction_1d d)
-    : super(o), edge(&new_parent), dir(d)
-  {}
+  EdgePoint(EdgePoint const& o) : super(o), edge(o.edge), dir(o.dir) {}
 
   // methods
 
@@ -283,51 +325,57 @@ BOOST_GEOMETRY_REGISTER_POINT_2D_GET_SET(
 namespace cfla { namespace tri {
 
 template<class Tp_>
-struct Edge
+class Edge
 {
+private:
+  typedef edge_data<Tp_> m_type;
+  std::shared_ptr<m_type> m_data;
+
+public:
   // typedefs
-  typedef bgm::segment<EdgePoint<Tp_> > super;
   INHERIT_TRAITS(Tp_);
 
-  // members
-  edge_point_type first, second;
-  triangle_type const& tri; // parent triangle
-  int index; // index of edge in parent triangle (0, 1, or 2)
-  bp::direction_1d dir; // LOW (left) or HIGH (right)
-  int depth; // intersection depth
-
   // constructors
-  Edge(triangle_type& parent, int edge_index,
+  Edge(triangle_data<Tp_> * parent, int edge_index,
       point_type p1, point_type p2, bp::direction_1d d)
-    : first({*this, bp::LOW, p1}), second({*this, bp::HIGH, p2})
-    , tri(parent), index(edge_index), dir(d), depth(-1)
-  {}
-
-  Edge(triangle_type& parent, int edge_index, Edge const& other)
-    : super(other), tri(parent), index(edge_index), dir(other.dir)
-    , depth(other.depth)
+    : m_data(new m_type(parent, edge_index, p1, p2, d))
   {}
 
   // methods
 
   inline bool operator==(Edge const& e) const {
-    return (&tri == &e.tri) && (dir == e.dir)
+    return (&tri() == &tri()) && (dir() == e.dir())
       //&& almost_equal(this->first, e.first)
       //&& almost_equal(this->second, e.second)
       ;
   }
 
+  inline edge_point_type& first(void) { return m_data->first; }
+  inline edge_point_type const& first(void) const { return m_data->first; }
+
+  inline edge_point_type& second(void) { return m_data->second; }
+  inline edge_point_type const& second(void) const { return m_data->second; }
+
+  inline triangle_type const& tri(void) const { return m_data->tri; }
+  inline int index(void) const { return m_data->index; }
+
+  inline bp::direction_1d dir(void) const { return m_data->dir; }
+  inline void dir(bp::direction_1d d) { m_data->dir = d; }
+
+  inline int depth(void) const { return m_data->depth; }
+  inline void depth(int d) { m_data->depth = d; }
+
   // return the next/previous linked edge
   inline Edge const& nextEdge(void) const {
-    return tri.edge(static_cast<int>(dir) + 1); // modulo 3
+    return tri().edge(index() + 1); // +1 mod 3
   }
   inline Edge const& prevEdge(void) const {
-    return tri.edge(static_cast<int>(dir) - 1); // modulo 3
+    return tri().edge(index() + 2); // -1 mod 3
   }
 
 #ifdef MAXTRI_DEBUG
   inline friend std::ostream& operator<<(std::ostream& os, Edge const& e) {
-    os << "[ " << e.first << " => " << e.second << " ]";
+    os << "[ " << e.first() << " => " << e.second() << " ]";
     return os;
   }
 #endif
@@ -386,14 +434,20 @@ namespace cfla { namespace tri {
  *
  */
 
+
 template<class Tp_>
-struct Triangle
+class Triangle
 {
+private:
+  typedef triangle_data<Tp_> m_type;
+  std::shared_ptr<m_type> m_data;
+
+public:
   // typedefs
   INHERIT_TRAITS(Tp_);
 
-  typedef edge_type edge_array[3];
-  typedef std::array<point_type, 3> point_array;
+  typedef typename m_type::edge_array edge_array;
+  typedef typename m_type::point_array point_array;
 
   typedef typename point_array::iterator iterator;
   typedef typename point_array::const_iterator const_iterator;
@@ -401,20 +455,10 @@ struct Triangle
   typedef typename point_array::difference_type difference_type;
   typedef typename point_array::value_type value_type;
 
-  // members
-  polygon_type const& poly; // parent polygon
-  point_array points;
-  edge_array edges;
-
   // constructors
   template <class Tri>
   Triangle(polygon_type const& parent, Tri const& input_tri)
-    : poly(parent), points()
-      , edges({ // to be filled in below
-          { *this, 0, input_tri[0], input_tri[0], bp::HIGH },
-          { *this, 1, input_tri[0], input_tri[0], bp::LOW },
-          { *this, 2, input_tri[0], input_tri[0], bp::LOW },
-        })
+    : m_data(new m_type(parent, input_tri))
   {
     int maxy_index = 0;
     point_type maxy_point = input_tri[0];
@@ -435,14 +479,14 @@ struct Triangle
     }
 
     // Now we have the point order.
-    points[0] = input_tri[maxy_index];
-    points[1] = input_tri[left_index];
-    points[2] = input_tri[right_index];
+    points()[0] = input_tri[maxy_index];
+    points()[1] = input_tri[left_index];
+    points()[2] = input_tri[right_index];
 
     // Find the lowest of (left, right): this is the second index of E2.
     int e2_first = 1, e2_second = 2;
     bp::direction_1d e2_dir = bp::LOW;
-    if (points[1].y() < points[2].y())
+    if (points()[1].y() < points()[2].y())
     {
       e2_first = 2;
       e2_second = 1;
@@ -450,24 +494,33 @@ struct Triangle
     }
 
     // Finally we can finish the edges.
-    edges[0].first.set(points[0]);
-    edges[0].second.set(points[1]);
-    edges[1].first.set(points[0]);
-    edges[1].second.set(points[2]);
-    edges[2].first.set(points[e2_first]);
-    edges[2].second.set(points[e2_second]);
-    edges[2].dir = e2_dir;
+    edges()[0].first().set(points()[0]);
+    edges()[0].second().set(points()[1]);
+    edges()[1].first().set(points()[0]);
+    edges()[1].second().set(points()[2]);
+    edges()[2].first().set(points()[e2_first]);
+    edges()[2].second().set(points()[e2_second]);
+    edges()[2].dir(e2_dir);
   }
 
+private:
+  inline point_array& points(void) { return m_data->points; }
+  inline edge_array& edges(void) { return m_data->edges; }
+
+public:
+  inline point_array const& points(void) const { return m_data->points; }
+  inline edge_array const& edges(void) const { return m_data->edges; }
+  inline polygon_type const& poly(void) const { return m_data->poly; }
+
   // methods
-  inline edge_type const& edge(int i) const { return edges[i % size()]; }
-  inline point_type const& operator[](int i) const { return points[i]; }
+  inline edge_type const& edge(int i) const { return edges()[i % size()]; }
+  inline point_type const& operator[](int i) const { return points()[i]; }
   inline size_t size(void) const { return 3u; }
 
-  inline iterator begin() { return points.begin(); }
-  inline iterator end() { return points.end(); }
-  inline const_iterator begin() const { return points.cbegin(); }
-  inline const_iterator end() const { return points.cend(); }
+  inline iterator begin() { return points().begin(); }
+  inline iterator end() { return points().end(); }
+  inline const_iterator begin() const { return points().cbegin(); }
+  inline const_iterator end() const { return points().cend(); }
 };
 
 } } // end namespace cfla::tri
@@ -477,7 +530,7 @@ BOOST_GEOMETRY_REGISTER_RING_TEMPLATED(cfla::tri::Triangle);
 namespace cfla { namespace tri {
 
 template<class Tp_>
-struct SolutionCell
+class SolutionCell
 {
 public:
   INHERIT_TRAITS(Tp_);
@@ -524,16 +577,16 @@ struct make_sla_traits
   typedef typename traits::polygon_type value_type; // polygons are the input
   typedef typename traits::solution_ref_type solution_type;
 
-  typedef typename traits::edge_point_type    event_type;
+  typedef typename traits::edge_point_type event_type;
   typedef typename std::less<edge_point_type> event_compare;
-  typedef typename std::vector<edge_point_type> event_container;
+  typedef typename std::vector<event_type> event_container;
   typedef typename traits::edge_type          event_id_type;
   typedef make_sla_traits etraits;
 
   typedef sla_traits<value_type, event_type, solution_type, etraits> type;
 
   inline static event_id_type const& get_type(event_type const& p) {
-    return *p.edge;
+    return p.edge->tri->edges[p.edge->index % 3];
   }
 };
 
@@ -604,8 +657,7 @@ public:
         traits::convert_point(ply[ptri->v[1]]->getPos()),
         traits::convert_point(ply[ptri->v[2]]->getPos()),
       };
-      triangle_type tri(ply, triangle);
-      tris.push_back(tri);
+      tris.emplace_back(ply, triangle);
 
 #ifdef MAXTRI_DEBUG
       std::cout << "QUEUE edges" << std::endl
@@ -614,12 +666,12 @@ public:
         << "    [2] " << tris.back().edge(2) << std::endl;
 #endif
 
-      queue().push(tris.back().edge(2).second);
-      queue().push(tris.back().edge(2).first);
-      queue().push(tris.back().edge(1).second);
-      queue().push(tris.back().edge(1).first);
-      queue().push(tris.back().edge(0).second);
-      queue().push(tris.back().edge(0).first);
+      queue().emplace(tris.back().edge(2).second());
+      queue().emplace(tris.back().edge(2).first());
+      queue().emplace(tris.back().edge(1).second());
+      queue().emplace(tris.back().edge(1).first());
+      queue().emplace(tris.back().edge(0).second());
+      queue().emplace(tris.back().edge(0).first());
     }
   }
 

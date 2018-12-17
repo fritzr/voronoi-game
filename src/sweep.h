@@ -8,7 +8,8 @@ struct event_traits
   typedef Event   event_type;
   typedef EventId event_id_type;
 
-  inline static event_id_type get_type(event_type const& e) { return e.type; }
+  inline static event_id_type const& get_type(event_type const& e)
+  { return e.type; }
 };
 
 template<
@@ -48,7 +49,7 @@ public:
   typedef typename traits::solution_type      solution_type;
   typedef typename traits::solution_container solution_container;
 
-  inline static event_id_type get_type(event_type const& e) {
+  inline static event_id_type const& get_type(event_type const& e) {
     return traits::event_traits::get_type(e);
   }
 
