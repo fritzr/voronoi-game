@@ -8,6 +8,7 @@
 #endif
 
 #include "maxtri.h"
+#include "intersection.h"
 
 using namespace std;
 
@@ -32,8 +33,53 @@ insert_edge(edge_type const& e)
 {
   // Insert the edge by its top point.
   edge_point_iterator elb = edge_points.insert(e.first()).first;
+  edge_point_iterator eit = elb;
 
-  // Then we need to queue an intersection point.
+  // See if we overlap the left/right edges.
+  --eit;
+  bool intersects = true;
+  int incr = -1;
+  while (intersects && eit != edge_points.end())
+  {
+    // Check for intersection, but only if the edges are from different
+    // polygon triangulations.
+    if (&e.tridata()->poly != &eit->tridata()->poly)
+    {
+      coordinate_type
+        a[2] = { e.first().x(), e.first().y() },
+        b[2] = { e.second().x(), e.second().y() },
+        c[2] = { eit->x(), eit->y() },
+        d[2] = { eit->other().x(), eit->other().y() },
+        p[2] = {};
+      char isect_code = SegSegInt(a, b, c, d, p);
+      if (isect_code == '0')
+        intersects = false;
+
+      // Queue the intersection point.
+      else
+      {
+#ifdef MAXTRI_DEBUG
+        cerr << "    found intersection (" << p[0] << "," << p[1] << ") with "
+          << *eit << endl;
+#endif
+        queue().push(
+            isect_point_type(point_type(p[0], p[1]), e.data(), eit->edata));
+      }
+    }
+    if (incr < 0)
+      --eit;
+    else
+      ++eit;
+
+    // Start over increasing from insertion point.
+    if ((!intersects || eit == edge_points.end()) && incr < 0)
+    {
+      eit = elb;
+      ++eit;
+      incr = 1;
+    }
+  }
+
 }
 
 template<class Tp_>

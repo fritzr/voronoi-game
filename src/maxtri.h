@@ -246,6 +246,11 @@ struct triangle_data
         })
   {
   }
+
+  // parent edge
+  inline edge_type const& edge(int index) const {
+    return edges[index % 3];
+  }
 };
 
 template<class Tp_>
@@ -309,6 +314,10 @@ public:
     return (dir == bp::LOW) ? edata->second : edata->first;
   }
 
+  inline const triangle_data<Tp_> *tridata(void) const {
+    return edata->tri;
+  }
+
 #ifdef MAXTRI_DEBUG
   inline friend std::ostream& operator<<(std::ostream& os, EdgePoint const& p) {
     os << "(" << p.x() << " , " << p.y() << ")";
@@ -326,13 +335,15 @@ public:
 
   typedef point_xy<Tp_> super;
 
-  edge_data<Tp_> *e1, *e2;
+  const edge_data<Tp_> *e1, *e2;
 
   using super::x;
   using super::y;
 
   template<typename Pt_>
-  IXPoint(Pt_ const& point, edge_data<Tp_> *edge1, edge_data<Tp_> *edge2)
+  IXPoint(Pt_ const& point,
+      const edge_data<Tp_> *edge1,
+      const edge_data<Tp_> *edge2)
     : super(point), e1(edge1), e2(edge2)
   {}
 };
@@ -487,6 +498,7 @@ private:
   std::shared_ptr<m_type> m_data;
 
 public:
+
   // typedefs
   INHERIT_TRAITS(Tp_);
 
@@ -499,11 +511,14 @@ public:
   // methods
 
   inline bool operator==(Edge const& e) const {
-    return (&tri() == &tri()) && (dir() == e.dir())
+    return (&tridata() == &tridata()) && (dir() == e.dir())
       //&& almost_equal(this->first, e.first)
       //&& almost_equal(this->second, e.second)
       ;
   }
+
+  inline const edge_data<Tp_> *data(void) const { return m_data.get(); }
+  inline const triangle_data<Tp_> *tridata(void) const { return m_data->tri; }
 
   inline edge_point_type& first(void) { return m_data->first; }
   inline edge_point_type const& first(void) const { return m_data->first; }
@@ -511,7 +526,6 @@ public:
   inline edge_point_type& second(void) { return m_data->second; }
   inline edge_point_type const& second(void) const { return m_data->second; }
 
-  inline triangle_type const& tri(void) const { return m_data->tri; }
   inline int index(void) const { return m_data->index; }
 
   inline bp::direction_1d dir(void) const { return m_data->dir; }
@@ -522,10 +536,10 @@ public:
 
   // return the next/previous linked edge
   inline Edge const& nextEdge(void) const {
-    return tri().edge((index() + 1) % 3); // +1 mod 3
+    return tridata()->edge((index() + 1) % 3); // +1 mod 3
   }
   inline Edge const& prevEdge(void) const {
-    return tri().edge((index() + 2) % 3); // -1 mod 3
+    return tridata()->edge((index() + 2) % 3); // -1 mod 3
   }
 
 #ifdef MAXTRI_DEBUG
