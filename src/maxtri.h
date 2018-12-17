@@ -104,12 +104,20 @@ template<typename Tp_>
 class SolutionCell;
 
 template<typename Tp_>
+struct edge_point_compare_x;
+
+template<typename Tp_>
+struct edge_point_compare_y;
+
+template<typename Tp_>
 struct traits
 {
   typedef Tp_                            coordinate_type;
   typedef point_xy<Tp_>                  point_type;
   typedef Edge<Tp_>                      edge_type;
   typedef EdgePoint<Tp_>                 edge_point_type;
+  typedef edge_point_compare_x<Tp_>      edge_point_xcompare;
+  typedef edge_point_compare_y<Tp_>      edge_point_ycompare;
   typedef Triangle<Tp_>                  triangle_type;
   // XXX could be point_type
   typedef cv::Point_<Tp_>                poly_point_type;
@@ -128,6 +136,8 @@ struct traits
   typedef typename traits::point_type point_type; \
   typedef typename traits::edge_type edge_type; \
   typedef typename traits::edge_point_type edge_point_type; \
+  typedef typename traits::edge_point_xcompare edge_point_xcompare; \
+  typedef typename traits::edge_point_ycompare edge_point_ycompare; \
   typedef typename traits::triangle_type triangle_type; \
   typedef typename traits::poly_point_type poly_point_type; \
   typedef typename traits::polygon_type polygon_type; \
@@ -282,7 +292,7 @@ public:
   //   4.  B.y < D.y
   //   5.  B.x < D.x
   //   6.  B is right edge < D is left edge
-  static bool edge_compare(EdgePoint const& p1, EdgePoint const& p2,
+  static bool compare_y(EdgePoint const& p1, EdgePoint const& p2,
       bool recursing=false)
   {
     return (p1.y() < p2.y())
@@ -291,11 +301,19 @@ public:
             || ((p1.x() == p2.x()
                 && (p1.dir == bp::RIGHT && p2.dir == bp::LEFT))
               || (p1.dir == p2.dir
-                && (!recursing && edge_compare(p1.other(), p2.other(), true))
+                  && (!recursing && compare_y(p1.other(), p2.other(), true))
+                  )
                 )
               )
             )
           );
+  }
+
+  static bool compare_x(EdgePoint const& p1, EdgePoint const& p2)
+  {
+    return (p1.x() < p2.x() || (p1.x() == p2.x()
+          && ((p1.dir == bp::RIGHT && p2.dir == bp::LEFT)
+            || (p1.y() < p2.y()))));
   }
 
   inline bool operator<(EdgePoint const& o) const {
@@ -313,6 +331,22 @@ public:
     return os;
   }
 #endif
+};
+
+template<typename Tp_>
+struct edge_point_compare_y
+{
+  typedef EdgePoint<Tp_> value_type;
+  inline bool operator()(value_type const& p1, value_type const& p2) const
+    { return value_type::compare_y(p1, p2); }
+};
+
+template<typename Tp_>
+struct edge_point_compare_x
+{
+  typedef EdgePoint<Tp_> value_type;
+  inline bool operator()(value_type const& p1, value_type const& p2) const
+    { return value_type::compare_x(p1, p2); }
 };
 
 } } // end namespace cfla::tri
@@ -578,9 +612,9 @@ struct make_sla_traits
   typedef typename traits::solution_ref_type solution_type;
 
   typedef typename traits::edge_point_type event_type;
-  typedef typename std::less<edge_point_type> event_compare;
+  typedef typename traits::edge_point_ycompare event_compare;
   typedef typename std::vector<event_type> event_container;
-  typedef typename traits::edge_type          event_id_type;
+  typedef typename traits::edge_type       event_id_type;
   typedef make_sla_traits etraits;
 
   typedef sla_traits<value_type, event_type, solution_type, etraits> type;
@@ -601,9 +635,9 @@ public:
   INHERIT_TRAITS(Tp_);
 
   typedef std::vector<triangle_type> triangle_container;
-  typedef std::set<edge_point_type, typename sla::event_compare> edge_point_set;
+  typedef std::set<edge_point_type, edge_point_xcompare> edge_point_status;
 
-  typedef typename edge_point_set::iterator edge_point_iterator;
+  typedef typename edge_point_status::iterator edge_point_iterator;
 
   typedef typename super_type::solution_type solution_type;
   typedef typename super_type::solution_container solution_container;
@@ -613,7 +647,7 @@ private:
   triangle_container tris;
 
   // sweep line status: points of current edges, ordered by X coordinate
-  edge_point_set edge_points;
+  edge_point_status edge_points;
   int max_depth;
 
   void insert_edge(edge_type const& e);
