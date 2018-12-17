@@ -53,7 +53,7 @@ handle_event(edge_type const& edge, edge_point_type const& event)
 {
 #ifdef MAXTRI_DEBUG
   cout << "handling "
-    << setw(6) << setfill(' ') << (event.dir == bp::LOW ? "FIRST" : "SECOND")
+    << setw(6) << setfill(' ') << (event.dir == bp::LOW ? "LEFT" : "RIGHT")
     << " point from " << edge << endl;
 #endif
 }

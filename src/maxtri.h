@@ -604,7 +604,15 @@ public:
         traits::convert_point(ply[ptri->v[1]]->getPos()),
         traits::convert_point(ply[ptri->v[2]]->getPos()),
       };
-      tris.emplace_back(ply, triangle);
+      triangle_type tri(ply, triangle);
+      tris.push_back(tri);
+
+#ifdef MAXTRI_DEBUG
+      std::cout << "QUEUE edges" << std::endl
+        << "    [0] " << tris.back().edge(0) << std::endl
+        << "    [1] " << tris.back().edge(1) << std::endl
+        << "    [2] " << tris.back().edge(2) << std::endl;
+#endif
 
       queue().push(tris.back().edge(2).second);
       queue().push(tris.back().edge(2).first);
