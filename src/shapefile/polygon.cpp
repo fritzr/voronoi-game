@@ -406,6 +406,7 @@ template<typename Pt_>
 void
 c_ply<Pt_>::triangulate(vector<triangle>& tris)
 {
+     indexing();
      if(triangulation.empty()){
 
          const point_type& O=getHead()->getPos();
@@ -639,6 +640,7 @@ c_polygon<Pt_>::copy(const c_polygon& other)
         p.copy(*i);
         push_back(p);
     }
+    indexing();
 }
 
 //check if a point is enclosed
