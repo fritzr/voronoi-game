@@ -49,7 +49,7 @@ public:
   typedef typename traits::solution_type      solution_type;
   typedef typename traits::solution_container solution_container;
 
-  inline static event_id_type const& get_type(event_type const& e) {
+  inline static event_id_type get_type(event_type const& e) {
     return traits::event_traits::get_type(e);
   }
 
@@ -63,7 +63,7 @@ protected:
   inline solution_container& solutions(void) { return solutions_; }
   inline solution_container const& solutions(void) const { return solutions_; }
 
-  virtual void handle_event(event_id_type const& ty, event_type const& event)=0;
+  virtual void handle_event(event_id_type ty, event_type const& event)=0;
   virtual void initialize(void) {}
   virtual void finalize(void) {}
 

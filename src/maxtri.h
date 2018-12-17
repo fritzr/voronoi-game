@@ -104,10 +104,16 @@ template<typename Tp_>
 class SolutionCell;
 
 template<typename Tp_>
-struct edge_point_compare_x;
+struct event_point_compare_x;
 
 template<typename Tp_>
-struct edge_point_compare_y;
+struct event_point_compare_y;
+
+template<typename Tp_>
+class IXPoint;
+
+template<typename Tp_>
+class EventPoint;
 
 template<typename Tp_>
 struct traits
@@ -116,8 +122,10 @@ struct traits
   typedef point_xy<Tp_>                  point_type;
   typedef Edge<Tp_>                      edge_type;
   typedef EdgePoint<Tp_>                 edge_point_type;
-  typedef edge_point_compare_x<Tp_>      edge_point_xcompare;
-  typedef edge_point_compare_y<Tp_>      edge_point_ycompare;
+  typedef event_point_compare_x<Tp_>     event_point_xcompare;
+  typedef event_point_compare_y<Tp_>     event_point_ycompare;
+  typedef IXPoint<Tp_>                   isect_point_type;
+  typedef EventPoint<Tp_>                event_point_type;
   typedef Triangle<Tp_>                  triangle_type;
   // XXX could be point_type
   typedef cv::Point_<Tp_>                poly_point_type;
@@ -136,8 +144,10 @@ struct traits
   typedef typename traits::point_type point_type; \
   typedef typename traits::edge_type edge_type; \
   typedef typename traits::edge_point_type edge_point_type; \
-  typedef typename traits::edge_point_xcompare edge_point_xcompare; \
-  typedef typename traits::edge_point_ycompare edge_point_ycompare; \
+  typedef typename traits::event_point_xcompare event_point_xcompare; \
+  typedef typename traits::event_point_ycompare event_point_ycompare; \
+  typedef typename traits::isect_point_type isect_point_type; \
+  typedef typename traits::event_point_type event_point_type; \
   typedef typename traits::triangle_type triangle_type; \
   typedef typename traits::poly_point_type poly_point_type; \
   typedef typename traits::polygon_type polygon_type; \
@@ -255,6 +265,11 @@ struct edge_data
     : first(this, bp::LOW, start), second(this, bp::HIGH, end), tri(tridata)
       , index(edge_index), dir(d), depth(-1)
   {}
+
+  // parent edge
+  inline edge_type const& edge(void) const {
+    return tri->edges[index];
+  }
 };
 
 template<class Tp_>
@@ -266,15 +281,15 @@ public:
   INHERIT_TRAITS(Tp_);
 
   // members
-  edge_data<Tp_> *edge; // parent edge data -- weak reference
+  edge_data<Tp_> *edata; // parent edge data -- weak reference
   bp::direction_1d dir; // LOW or HIGH, meaning first or second
 
   // constructors
   EdgePoint(edge_data<Tp_> *parent, bp::direction_1d d, super pt)
-    : super(pt), edge(parent), dir(d)
+    : super(pt), edata(parent), dir(d)
   {}
 
-  EdgePoint(EdgePoint const& o) : super(o), edge(o.edge), dir(o.dir) {}
+  EdgePoint(EdgePoint const& o) : super(o), edata(o.edata), dir(o.dir) {}
 
   // methods
 
@@ -284,45 +299,14 @@ public:
     super::y(p.y());
   }
 
-  // When comparing two edge points A and C in edges E1 = <A,B> and E2 = <C,D>
-  // the points are lexicographically sorted by following criteria:
-  //   1.  A.y < C.y
-  //   2.  A.x < C.x
-  //   3.  A is right edge < C is left edge
-  //   4.  B.y < D.y
-  //   5.  B.x < D.x
-  //   6.  B is right edge < D is left edge
-  static bool compare_y(EdgePoint const& p1, EdgePoint const& p2,
-      bool recursing=false)
-  {
-    return (p1.y() < p2.y())
-      || (p1.y() == p2.y()
-          && (p1.x() < p2.x()
-            || ((p1.x() == p2.x()
-                && (p1.dir == bp::RIGHT && p2.dir == bp::LEFT))
-              || (p1.dir == p2.dir
-                  && (!recursing && compare_y(p1.other(), p2.other(), true))
-                  )
-                )
-              )
-            )
-          );
-  }
-
-  static bool compare_x(EdgePoint const& p1, EdgePoint const& p2)
-  {
-    return (p1.x() < p2.x() || (p1.x() == p2.x()
-          && ((p1.dir == bp::RIGHT && p2.dir == bp::LEFT)
-            || (p1.y() < p2.y()))));
-  }
-
-  inline bool operator<(EdgePoint const& o) const {
-    return edge_compare(*this, o);
+  // parent edge
+  inline edge_type const& edge(void) const {
+    return edata->tri->edges[edata->index];
   }
 
   // return the point at the other end of this edge
   inline edge_point_type const& other(void) const {
-    return (dir == bp::LOW) ? edge->second : edge->first;
+    return (dir == bp::LOW) ? edata->second : edata->first;
   }
 
 #ifdef MAXTRI_DEBUG
@@ -333,20 +317,147 @@ public:
 #endif
 };
 
+// Intersection point
 template<typename Tp_>
-struct edge_point_compare_y
+class IXPoint : public point_xy<Tp_>
 {
-  typedef EdgePoint<Tp_> value_type;
-  inline bool operator()(value_type const& p1, value_type const& p2) const
-    { return value_type::compare_y(p1, p2); }
+public:
+  INHERIT_TRAITS(Tp_);
+
+  typedef point_xy<Tp_> super;
+
+  edge_data<Tp_> *e1, *e2;
+
+  using super::x;
+  using super::y;
+
+  template<typename Pt_>
+  IXPoint(Pt_ const& point, edge_data<Tp_> *edge1, edge_data<Tp_> *edge2)
+    : super(point), e1(edge1), e2(edge2)
+  {}
 };
 
 template<typename Tp_>
-struct edge_point_compare_x
+struct event_data
 {
-  typedef EdgePoint<Tp_> value_type;
-  inline bool operator()(value_type const& p1, value_type const& p2) const
-    { return value_type::compare_x(p1, p2); }
+  INHERIT_TRAITS(Tp_);
+
+  union {
+    edge_point_type edge;
+    isect_point_type isect;
+  } u;
+
+  bool intersection;
+
+  event_data(edge_point_type const& e)
+    : u{.edge=e}, intersection(false) {}
+  //{ new (&u.edge) edge_point_type(e); }
+
+  event_data(isect_point_type const& i)
+    : u{.isect=i}, intersection(true) {}
+  // { new (&u.isect) isect_point_type(i); }
+
+  ~event_data()
+  {
+    if (intersection)
+      (u.edge).~EdgePoint();
+    else
+      (u.isect).~IXPoint();
+  }
+
+};
+
+template<typename Tp_>
+class EventPoint
+{
+private:
+  typedef event_data<Tp_> m_type;
+  std::unique_ptr<m_type> m_union;
+
+public:
+  INHERIT_TRAITS(Tp_);
+
+  EventPoint(edge_point_type const& point)
+    : m_union(new m_type(point)) {}
+
+  EventPoint(IXPoint<Tp_> const& ipoint)
+    : m_union(new m_type(ipoint)) {}
+
+  inline bool intersection(void) const {
+    return m_union->intersection;
+  }
+
+  inline edge_point_type const& edge(void) const {
+    if (intersection())
+      throw std::runtime_error("EventPoint: requested intersection; is edge");
+    return m_union->u.edge;
+  }
+
+  inline isect_point_type const& isect(void) const {
+    if (!intersection())
+      throw std::runtime_error("EventPoint: requested edge; is intersection");
+    return m_union->u.isect;
+  }
+
+  inline coordinate_type x(void) const {
+    return intersection() ? isect().x() : edge().x();
+  }
+
+  inline coordinate_type y(void) const {
+    return intersection() ? isect().y() : edge().y();
+  }
+
+};
+
+template<typename Tp_>
+struct event_point_compare_y
+{
+  INHERIT_TRAITS(Tp_);
+
+  // When comparing two edge points A and C in edges E1 = <A,B> and E2 = <C,D>
+  // the points are lexicographically sorted by following criteria:
+  //   #.  A.y < C.y
+  //   #.  A is right edge < C is left edge
+  //   #.  A.x < C.x
+  //   #.  B.y < D.y
+  //   #.  B is right edge < D is left edge
+  //   #.  B.x < D.x
+  inline bool operator()(event_point_type const& p1, event_point_type const& p2,
+      bool recursing=false) const
+  {
+    bool y1 = p1.y() < p2.y();
+    bool y2 = p1.y() == p2.y();
+    bool d1 = !p1.intersection() && !p2.intersection()
+      && p1.edge().dir == bp::HIGH && p2.edge().dir == bp::LOW;
+    bool d2 = (p1.intersection() || p2.intersection())
+      || (!p1.intersection() && !p2.intersection()
+          && (p1.edge().dir == p2.edge().dir || p1.edge().dir == bp::LOW));
+    bool x = p1.x() < p2.x();
+
+    return y1 || (y2 && (d1 || (d2 && x)));
+      // || (!recursing && (*this)(p1.edge().other(), p2.edge().other(), true))
+  }
+
+};
+
+template<typename Tp_>
+struct event_point_compare_x
+{
+  INHERIT_TRAITS(Tp_);
+
+  inline bool operator()(event_point_type const& p1, event_point_type const& p2)
+    const
+  {
+    bool x1 = p1.x() < p2.x();
+    bool x2 = p1.x() == p2.x();
+    bool d1 = !p1.intersection() && !p2.intersection()
+      && p1.edge().dir == bp::HIGH && p2.edge().dir == bp::LOW;
+    bool d2 = (p1.intersection() || p2.intersection())
+      || (!p1.intersection() && !p2.intersection()
+          && (p1.edge().dir == p2.edge().dir || p1.edge().dir == bp::LOW));
+    bool y = p1.y() < p2.y();
+    return x1 || (x2 && (d1 || (d2 && y)));
+  }
 };
 
 } } // end namespace cfla::tri
@@ -355,6 +466,16 @@ BOOST_GEOMETRY_REGISTER_POINT_2D_GET_SET(
     cfla::tri::EdgePoint<float>, float, cs::cartesian, x, y, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D_GET_SET(
     cfla::tri::EdgePoint<double>, double, cs::cartesian, x, y, x, y);
+
+BOOST_GEOMETRY_REGISTER_POINT_2D_GET_SET(
+    cfla::tri::IXPoint<float>, float, cs::cartesian, x, y, x, y);
+BOOST_GEOMETRY_REGISTER_POINT_2D_GET_SET(
+    cfla::tri::IXPoint<double>, double, cs::cartesian, x, y, x, y);
+
+BOOST_GEOMETRY_REGISTER_POINT_2D_CONST(
+    cfla::tri::EventPoint<float>, float, cs::cartesian, x(), y());
+BOOST_GEOMETRY_REGISTER_POINT_2D_CONST(
+    cfla::tri::EventPoint<double>, double, cs::cartesian, x(), y());
 
 namespace cfla { namespace tri {
 
@@ -401,10 +522,10 @@ public:
 
   // return the next/previous linked edge
   inline Edge const& nextEdge(void) const {
-    return tri().edge(index() + 1); // +1 mod 3
+    return tri().edge((index() + 1) % 3); // +1 mod 3
   }
   inline Edge const& prevEdge(void) const {
-    return tri().edge(index() + 2); // -1 mod 3
+    return tri().edge((index() + 2) % 3); // -1 mod 3
   }
 
 #ifdef MAXTRI_DEBUG
@@ -611,16 +732,16 @@ struct make_sla_traits
   typedef typename traits::polygon_type value_type; // polygons are the input
   typedef typename traits::solution_ref_type solution_type;
 
-  typedef typename traits::edge_point_type event_type;
-  typedef typename traits::edge_point_ycompare event_compare;
+  typedef typename traits::event_point_type event_type;
+  typedef typename traits::event_point_ycompare event_compare;
   typedef typename std::vector<event_type> event_container;
-  typedef typename traits::edge_type       event_id_type;
+  typedef bool       event_id_type;
   typedef make_sla_traits etraits;
 
   typedef sla_traits<value_type, event_type, solution_type, etraits> type;
 
-  inline static event_id_type const& get_type(event_type const& p) {
-    return p.edge->tri->edges[p.edge->index % 3];
+  inline static bool get_type(event_type const& e) {
+    return e.intersection();
   }
 };
 
@@ -635,7 +756,7 @@ public:
   INHERIT_TRAITS(Tp_);
 
   typedef std::vector<triangle_type> triangle_container;
-  typedef std::set<edge_point_type, edge_point_xcompare> edge_point_status;
+  typedef std::set<edge_point_type, event_point_xcompare> edge_point_status;
 
   typedef typename edge_point_status::iterator edge_point_iterator;
 
@@ -651,14 +772,14 @@ private:
   int max_depth;
 
   void insert_edge(edge_type const& e);
-  void handle_intersection(edge_type const& e1, edge_type const& e2);
+  void handle_intersection(isect_point_type const& i);
   void remove_edge(edge_type const& e);
   using super_type::solutions;
   using super_type::queue;
 
 protected:
   // override
-  void handle_event(edge_type const& edge, edge_point_type const& event);
+  void handle_event(bool intersection_event, event_point_type const& event);
   void initialize(void);
   void finalize(void);
 

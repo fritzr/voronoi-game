@@ -388,7 +388,7 @@ private:
   using super_type::queue;
 
 protected:
-  void handle_event(bp::direction_1d const& dir, edge_type const& event);
+  void handle_event(bp::direction_1d dir, edge_type const& event);
   void initialize(void);
   void finalize(void);
 

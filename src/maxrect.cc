@@ -193,7 +193,7 @@ remove_rect(rect_type const& r)
 
 template<class Tp_>
 void MaxRect<Tp_>::
-handle_event(bp::direction_1d const& dir, edge_type const& edge)
+handle_event(bp::direction_1d dir, edge_type const& edge)
 {
   switch (dir.to_int())
   {

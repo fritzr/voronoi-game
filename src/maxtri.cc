@@ -30,7 +30,10 @@ template<class Tp_>
 void MaxTri<Tp_>::
 insert_edge(edge_type const& e)
 {
-  // TODO
+  // Insert the edge by its top point.
+  edge_point_iterator elb = edge_points.insert(e.first()).first;
+
+  // Then we need to queue an intersection point.
 }
 
 template<class Tp_>
@@ -42,22 +45,54 @@ remove_edge(edge_type const& e)
 
 template<class Tp_>
 void MaxTri<Tp_>::
-handle_intersection(edge_type const& e1, edge_type const& e2)
+handle_intersection(isect_point_type const& ix)
 {
   // TODO
 }
 
 template<class Tp_>
 void MaxTri<Tp_>::
-handle_event(edge_type const& edge, edge_point_type const& event)
+handle_event(bool intersection_event, event_point_type const& event)
 {
+
+  if (intersection_event)
+  {
+    isect_point_type const& isect(event.isect());
+
 #ifdef MAXTRI_DEBUG
-  cout << "handling "
-    << setw(6) << setfill(' ') << (event.dir == bp::LOW ? "FIRST" : "SECOND")
+    cerr << "handling intersection of " << isect.e1->edge()
+      << " and " << isect.e2->edge() << endl;
+#endif
+
+    handle_intersection(isect);
+  }
+
+  else
+  {
+    edge_point_type const& edge_point(event.edge());
+    edge_type const& edge(edge_point.edge());
+
+#ifdef MAXTRI_DEBUG
+  cerr << "handling "
+    << setw(6) << setfill(' ') << (edge_point.dir == bp::LOW ? "FIRST":"SECOND")
     << " point from "
-    << setw(6) << setfill(' ') << (edge.dir() == bp::LOW ? "LEFT" : "RIGHT" )
+    << setw(6) << setfill(' ') << (edge.dir() == bp::LOW ? "LEFT":"RIGHT" )
     << " edge" << edge << endl;
 #endif
+
+    switch (edge_point.dir.to_int())
+    {
+      case bp::LOW: // first (top) point of edge
+        insert_edge(edge); break;
+
+      case bp::HIGH: // second (bottom) point of edge
+        remove_edge(edge); break;
+
+      default:
+        // unreachable
+        throw std::runtime_error("bad int value for EdgePoint::dir!");
+    }
+  }
 }
 
 template<class Tp_>
