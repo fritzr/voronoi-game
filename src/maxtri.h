@@ -425,7 +425,8 @@ struct Triangle
     maxy_point = input_tri[maxy_index];
 
     // Find the order of points that form a left turn.
-    int left_index = (maxy_index-1) % 3, right_index = (maxy_index+1) % 3;
+    int left_index = (maxy_index+2) % 3; // equivalent to -1, but not negative
+    int right_index = (maxy_index+1) % 3;
     if (leftTurn(input_tri[left_index], maxy_point, input_tri[right_index]))
     {
       int swp = left_index;
