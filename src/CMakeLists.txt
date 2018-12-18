@@ -69,8 +69,7 @@ add_subdirectory(shapelib)
 set(TEST_PROG vgtest)
 
 add_executable(${TEST_PROG}
-  opencv_compat.h
-  boost_cv_compat.h
+  boost_geo_poly.h
   util.h
 
   sweep.h
@@ -88,6 +87,7 @@ add_executable(${TEST_PROG}
   user.h
   user.cc
 
+  opencv_compat.h
   main.h
   main.cc
 )

@@ -16,6 +16,8 @@ using namespace std;
 namespace cfla { namespace tri
 {
 
+  using ::operator<<;
+
 template<class Tp_>
 MaxTri<Tp_>::~MaxTri(void)
 {
@@ -45,13 +47,13 @@ insert_edge(edge_type const& e)
     // polygon triangulations.
     if (&e.tridata()->poly != &eit->tridata()->poly)
     {
-      coordinate_type
-        a[2] = { e.first().x(), e.first().y() },
-        b[2] = { e.second().x(), e.second().y() },
-        c[2] = { eit->x(), eit->y() },
-        d[2] = { eit->other().x(), eit->other().y() },
-        p[2] = {};
-      char isect_code = SegSegInt(a, b, c, d, p);
+      point_type p;
+      char isect_code = SegSegInt(
+          static_cast<point_type const&>(e.first()),
+          static_cast<point_type const&>(e.second()),
+          static_cast<point_type const&>(*eit),
+          static_cast<point_type const&>(eit->other()),
+          p);
       if (isect_code == '0')
         intersects = false;
 
@@ -59,11 +61,10 @@ insert_edge(edge_type const& e)
       else
       {
 #ifdef MAXTRI_DEBUG
-        cerr << "    found intersection (" << p[0] << "," << p[1] << ") with "
+        cerr << "    found intersection " << p << " with "
           << *eit << endl;
 #endif
-        queue().push(
-            isect_point_type(point_type(p[0], p[1]), e.data(), eit->edata));
+        queue().push(isect_point_type(p, e.data(), eit->edata));
       }
     }
     if (incr < 0)

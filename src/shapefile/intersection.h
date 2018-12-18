@@ -4,42 +4,47 @@
 #include <iostream>
 #include <cassert>
 
-#include "opencv_compat.h"
-using namespace cv;
+#include "boost_geo_poly.h"
 
 /* range of real numbers */
 #define SMALLNUMBER 1.0e-10
 #define HUGENUMBER  1.0e10
 
+/* Whether p1 -> p2 -> p3 forms a left turn.  */
+template<class Pt_>
+bool
+leftTurn(Pt_ const& p1, Pt_ const& p2, Pt_ const& p3)
+{
+  auto v = p3;
+  bg::subtract_point(v, p2); // normal direction
+  auto u = p2;
+  bg::subtract_point(u, p1);
+  auto z = u.x() * v.y() - u.y() * v.x();
+  return z > 0;
+}
+
 // This is copied from CG in C
 
-/*
-template <typename T, typename Pt>
-inline T Area(Pt a, Pt b, Pt c)
+template <typename Pt>
+inline typename bg::coordinate_type<Pt>::type
+Area(Pt a, Pt b, Pt c)
 {
-    return ( b[0] - a[0] ) * ( c[1] - a[1] ) -
-           ( c[0] - a[0] ) * ( b[1] - a[1] );
-}
-*/
-
-template <typename T>
-inline T Area(Point_<T> a, Point_<T> b, Point_<T> c)
-{
-    return ( b.x - a.x ) * ( c.y - a.y ) -
-           ( c.x - a.x ) * ( b.y - a.y );
+  // (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)
+  return ( bg::get<0>(b) - bg::get<0>(a) ) * ( bg::get<1>(c) - bg::get<1>(a) ) -
+         ( bg::get<0>(c) - bg::get<0>(a) ) * ( bg::get<1>(b) - bg::get<1>(a) );
 }
 
-template <typename T>
-inline int AreaSign(Point_<T> a, Point_<T> b, Point_<T> c)
+template <typename Pt>
+inline int AreaSign(Pt a, Pt b, Pt c)
 {
-    T area=Area(a,b,c);
+    auto area=Area(a,b,c);
     if      ( area >  SMALLNUMBER ) return  1;
     else if ( area < -SMALLNUMBER ) return -1;
     else     return  0;
 }
 
-template <typename C>
-inline int Collinear(const C a, const C b, const C c)
+template <typename Pt>
+inline int Collinear(const Pt a, const Pt b, const Pt c)
 {
    return AreaSign( a, b, c ) == 0;
 }
@@ -48,95 +53,96 @@ inline int Collinear(const C a, const C b, const C c)
 Returns TRUE iff point c lies on the closed segement ab.
 Assumes it is already known that abc are collinear.
 ---------------------------------------------------------------------*/
-template <typename C>
-inline bool Between(const C a, const C b, const C c)
+template <typename Pt>
+inline bool Between(const Pt a, const Pt b, const Pt c)
 {
-   // If ab not vertical, check betweenness on x; else on y.
-   if ( fabs(a[0]-b[0])>fabs(a[1]-b[1]) )
-      return ((a[0] <= c[0]) && (c[0] <= b[0])) ||
-             ((a[0] >= c[0]) && (c[0] >= b[0]));
-   else
-      return ((a[1] <= c[1]) && (c[1] <= b[1])) ||
-             ((a[1] >= c[1]) && (c[1] >= b[1]));
+  // If ab not vertical, check betweenness on x; else on y.
+  if ( fabs(bg::get<0>(a)-bg::get<0>(b))>fabs(bg::get<1>(a)-bg::get<1>(b)) )
+    return
+      ((bg::get<0>(a) <= bg::get<0>(c)) && (bg::get<0>(c) <= bg::get<0>(b)))
+   || ((bg::get<0>(a) >= bg::get<0>(c)) && (bg::get<0>(c) >= bg::get<0>(b)));
+  else
+    return
+      ((bg::get<1>(a) <= bg::get<1>(c)) && (bg::get<1>(c) <= bg::get<1>(b)))
+   || ((bg::get<1>(a) >= bg::get<1>(c)) && (bg::get<1>(c) >= bg::get<1>(b)));
 }
 
-template <typename C, typename T>
-inline bool Between_strict(const C a, const C b, const C c)
+template <typename Pt>
+inline bool Between_strict(const Pt a, const Pt b, const Pt c)
 {
    // If ab not vertical, check betweenness on x; else on y.
-    if ( fabs(a[0]-b[0])>SMALLNUMBER ){
-      T c01=c[0]-SMALLNUMBER;
-      T c02=c[0]+SMALLNUMBER;
+    if ( fabs(bg::get<0>(a)-bg::get<0>(b))>SMALLNUMBER ){
+      auto c01=bg::get<0>(c)-SMALLNUMBER;
+      auto c02=bg::get<0>(c)+SMALLNUMBER;
 
-      return ((a[0] < c01) && (c02 < b[0])) ||
-             ((a[0] > c02) && (c01 > b[0]));
+      return ((bg::get<0>(a) < c01) && (c02 < bg::get<0>(b))) ||
+             ((bg::get<0>(a) > c02) && (c01 > bg::get<0>(b)));
     }
     else{
-        T c11=c[1]-SMALLNUMBER;
-        T c10=c[1]+SMALLNUMBER;
-        return ((a[1] < c11) && (c10 < b[1])) ||
-               ((a[1] > c10) && (c11 > b[1]));
+        auto c11=bg::get<1>(c)-SMALLNUMBER;
+        auto c10=bg::get<1>(c)+SMALLNUMBER;
+        return ((bg::get<1>(a) < c11) && (c10 < bg::get<1>(b))) ||
+               ((bg::get<1>(a) > c10) && (c11 > bg::get<1>(b)));
     }
 }
 
 
-template <typename C, typename T>
+template <typename C>
 inline bool AlmostEqual3(const C a, const C b)
 {
     return (fabs(a[0]-b[0])<SMALLNUMBER &&fabs(a[1]-b[1])<SMALLNUMBER && fabs(a[2]-b[2])<SMALLNUMBER);
 }
 
-template <typename C, typename T>
-inline bool AlmostEqual(const C a, const C b)
+template <typename Pt, typename T>
+inline bool AlmostEqual(const Pt a, const Pt b, T tau)
 {
-    return (fabs(a[0]-b[0])<SMALLNUMBER &&fabs(a[1]-b[1])<SMALLNUMBER);
+    return (fabs(bg::get<0>(a)-bg::get<0>(b))<tau &&fabs(bg::get<1>(a)-bg::get<1>(b))<tau);
 }
 
-template <typename C, typename T>
-inline bool AlmostEqual(const C a, const C b, T tau)
+template <typename Pt>
+inline bool AlmostEqual(const Pt a, const Pt b)
 {
-    return (fabs(a[0]-b[0])<tau &&fabs(a[1]-b[1])<tau);
+    return AlmostEqual(a, b, SMALLNUMBER);
 }
 
 
 // compute union of two colinear  segments ab and cd
 // place the union in p
 // return false if the union is degenerated
-template <typename T>
-inline bool Union(
-    const T a, const T b, const T c, const T d, const T * p)
+template <typename Pt>
+inline bool Union(Pt const& a, Pt const& b, Pt const& c, Pt const& d, Pt *p)
 {
     int id=0;
     if(AlmostEqual(a,c)){ p[id]=a; id++; }
-    
+
     if(AlmostEqual(a,d)){ p[id]=a; id++; }
-    if(id==2) return p[0]!=p[1];
-    
+    if(id==2) return bg::get<0>(p)!=bg::get<1>(p);
+
     if(AlmostEqual(b,c)){ p[id]=b; id++; }
-    if(id==2) return p[0]!=p[1];
+    if(id==2) return bg::get<0>(p)!=bg::get<1>(p);
 
     if(AlmostEqual(b,d)){ p[id]=b; id++; }
-    if(id==2) return p[0]!=p[1];
+    if(id==2) return bg::get<0>(p)!=bg::get<1>(p);
 
-    if( Between_strict(a,b,c) ){ p[id]=c; id++; } 
-    if(id==2) return p[0]!=p[1];
-    
-    if( Between_strict(a,b,d) ){ p[id]=d; id++; } 
-    if(id==2) return p[0]!=p[1];
+    if( Between_strict(a,b,c) ){ p[id]=c; id++; }
+    if(id==2) return bg::get<0>(p)!=bg::get<1>(p);
+
+    if( Between_strict(a,b,d) ){ p[id]=d; id++; }
+    if(id==2) return bg::get<0>(p)!=bg::get<1>(p);
 
     if( Between_strict(c,d,a) ){ p[id]=a; id++; }
-    if(id==2) return p[0]!=p[1];
+    if(id==2) return bg::get<0>(p)!=bg::get<1>(p);
 
     if( Between_strict(c,d,b) ){ p[id]=b; id++; }
-    if(id==2) return p[0]!=p[1];
+    if(id==2) return bg::get<0>(p)!=bg::get<1>(p);
 
     return false;
 }
 
 
-template <typename T>
+template <typename Pt>
 inline char ParallelInt(
-    const T a, const T b, const T c, const T d, T p)
+    Pt const& a, Pt const& b, Pt const& c, Pt const& d, Pt &p)
 {
    if(!Collinear(a, b, c)) return '0';
 
@@ -148,10 +154,10 @@ inline char ParallelInt(
 
    //they don't overlap but the end points may..
    //check if the end points overlap
-   if(AlmostEqual(a,c)){ p[0]=a[0]; p[1]=a[1]; return 'v';}
-   if(AlmostEqual(b,c)){ p[0]=b[0]; p[1]=b[1]; return 'v';}
-   if(AlmostEqual(a,d)){ p[0]=a[0]; p[1]=a[1]; return 'v';}
-   if(AlmostEqual(b,d)){ p[0]=b[0]; p[1]=b[1]; return 'v';}
+   if(AlmostEqual(a,c)){ bg::assign_point(p, a); return 'v'; }
+   if(AlmostEqual(b,c)){ bg::assign_point(p, b); return 'v'; }
+   if(AlmostEqual(a,d)){ bg::assign_point(p, a); return 'v'; }
+   if(AlmostEqual(b,d)){ bg::assign_point(p, b); return 'v'; }
 
    return '0';
 }
@@ -168,34 +174,35 @@ segments ab and cd.  Returns p and a char with the following meaning:
 Note that two collinear segments that share just one point, an endpoint
 of each, returns 'e' rather than 'v' as one might expect.
 ---------------------------------------------------------------------*/
-template <typename T>
+template <typename Pt>
 inline char SegSegInt(
-    const T a, const T b, const T c, const T d, T& p )
+    const Pt a, const Pt b, const Pt c, const Pt d, Pt p )
 {
-   T  s, t;        // The two parameters of the parametric eqns.
-   T  num_s, num_t, denom;   // Numerator and denoninator of equations.
+  typedef typename bg::coordinate_type<Pt>::type coord_t;
+   coord_t  s, t;        // The two parameters of the parametric eqns.
+   coord_t  num_s, num_t, denom;   // Numerator and denoninator of equations.
    char    code = '?';    // Return char characterizing intersection.
-   const T TINYNUMBER=SMALLNUMBER;
+   const coord_t TINYNUMBER=SMALLNUMBER;
 
-   denom = a[0] * ( d[1] - c[1] ) +
-           b[0] * ( c[1] - d[1] ) +
-           d[0] * ( b[1] - a[1] ) +
-           c[0] * ( a[1] - b[1] );
+   denom = bg::get<0>(a) * ( bg::get<1>(d) - bg::get<1>(c) ) +
+           bg::get<0>(b) * ( bg::get<1>(c) - bg::get<1>(d) ) +
+           bg::get<0>(d) * ( bg::get<1>(b) - bg::get<1>(a) ) +
+           bg::get<0>(c) * ( bg::get<1>(a) - bg::get<1>(b) );
 
    // If denom is zero, then segments are parallel: handle separately.
    //if (fabs(denom)<SMALLNUMBER) denom=0;
    if (fabs(denom)<TINYNUMBER) return  ParallelInt(a, b, c, d, p);
 
 
-   if(AlmostEqual(a,c)){ p[0]=a[0]; p[1]=a[1]; return 'v';}
-   if(AlmostEqual(b,c)){ p[0]=b[0]; p[1]=b[1]; return 'v';}
-   if(AlmostEqual(a,d)){ p[0]=a[0]; p[1]=a[1]; return 'v';}
-   if(AlmostEqual(b,d)){ p[0]=b[0]; p[1]=b[1]; return 'v';}
+   if(AlmostEqual(a,c)){ bg::assign_point(p, a); return 'v'; }
+   if(AlmostEqual(b,c)){ bg::assign_point(p, b); return 'v';}
+   if(AlmostEqual(a,d)){ bg::assign_point(p, a); return 'v';}
+   if(AlmostEqual(b,d)){ bg::assign_point(p, b); return 'v';}
 
    //compute s
-   num_s =    a[0] * ( d[1] - c[1] ) +
-              c[0] * ( a[1] - d[1] ) +
-              d[0] * ( c[1] - a[1] );
+   num_s =    bg::get<0>(a) * ( bg::get<1>(d) - bg::get<1>(c) ) +
+              bg::get<0>(c) * ( bg::get<1>(a) - bg::get<1>(d) ) +
+              bg::get<0>(d) * ( bg::get<1>(c) - bg::get<1>(a) );
 
 
    s = num_s / denom;
@@ -205,9 +212,9 @@ inline char SegSegInt(
 
 
    //compute t
-   num_t = -( a[0] * ( c[1] - b[1] ) +
-              b[0] * ( a[1] - c[1] ) +
-              c[0] * ( b[1] - a[1] ) );
+   num_t = -( bg::get<0>(a) * ( bg::get<1>(c) - bg::get<1>(b) ) +
+              bg::get<0>(b) * ( bg::get<1>(a) - bg::get<1>(c) ) +
+              bg::get<0>(c) * ( bg::get<1>(b) - bg::get<1>(a) ) );
 
 
 
@@ -227,20 +234,20 @@ inline char SegSegInt(
        code= 'v';
 
    if(code!='v'){
-       p[0] = (a[0] + s*(b[0]-a[0]));
-       p[1] = (a[1] + s*(b[1]-a[1]));
+     bg::set<0>(p, (bg::get<0>(a) + s*(bg::get<0>(b)-bg::get<0>(a))));
+     bg::set<1>(p, (bg::get<1>(a) + s*(bg::get<1>(b)-bg::get<1>(a))));
    }
    else{
-      if(s==0){ p[0]=a[0]; p[1]=a[1]; }
-      else if(s==1){p[0]=b[0]; p[1]=b[1]; }
-      else if(t==0){p[0]=c[0]; p[1]=c[1]; }
-      else if(t==1){p[0]=d[0]; p[1]=d[1]; }
+      if(s==0){ bg::assign_point(p, a); }
+      else if(s==1){ bg::assign_point(p, b); }
+      else if(t==0){ bg::assign_point(p, c); }
+      else if(t==1){ bg::assign_point(p, d); }
       else{
         std::cerr<<"s="<<s<<" t="<<t<<std::endl;
-        std::cerr<<"a="<<a[0]<<","<<a[1]<<std::endl;
-        std::cerr<<"b="<<b[0]<<","<<b[1]<<std::endl;
-        std::cerr<<"c="<<c[0]<<","<<c[1]<<std::endl;
-        std::cerr<<"d="<<d[0]<<","<<d[1]<<std::endl;
+        std::cerr<<"a="<<bg::get<0>(a)<<","<<bg::get<1>(a)<<std::endl;
+        std::cerr<<"b="<<bg::get<0>(b)<<","<<bg::get<1>(b)<<std::endl;
+        std::cerr<<"c="<<bg::get<0>(c)<<","<<bg::get<1>(c)<<std::endl;
+        std::cerr<<"d="<<bg::get<0>(d)<<","<<bg::get<1>(d)<<std::endl;
         assert(false);
       }
    }
@@ -313,7 +320,7 @@ my_project6_2(T *ax, T *p1, T *p2, T *p3, T *q1, T *q2, T *q3) {
   T Q1 = VdotV(ax, q1);
   T Q2 = VdotV(ax, q2);
   T Q3 = VdotV(ax, q3);
-  
+
   T mx1 = max(P1, P2, P3);
   T mn1 = min(P1, P2, P3);
   T mx2 = max(Q1, Q2, Q3);
@@ -358,17 +365,17 @@ my_tri_contact (const T *P1, const T *P2, const T *P3,
   T ef11[3], ef12[3], ef13[3];
   T ef21[3], ef22[3], ef23[3];
   T ef31[3], ef32[3], ef33[3];
-  
+
   z[0] = 0.0;  z[1] = 0.0;  z[2] = 0.0;
-  
+
   p1[0] = P1[0] - P1[0];  p1[1] = P1[1] - P1[1];  p1[2] = P1[2] - P1[2];
   p2[0] = P2[0] - P1[0];  p2[1] = P2[1] - P1[1];  p2[2] = P2[2] - P1[2];
   p3[0] = P3[0] - P1[0];  p3[1] = P3[1] - P1[1];  p3[2] = P3[2] - P1[2];
-  
+
   q1[0] = Q1[0] - P1[0];  q1[1] = Q1[1] - P1[1];  q1[2] = Q1[2] - P1[2];
   q2[0] = Q2[0] - P1[0];  q2[1] = Q2[1] - P1[1];  q2[2] = Q2[2] - P1[2];
   q3[0] = Q3[0] - P1[0];  q3[1] = Q3[1] - P1[1];  q3[2] = Q3[2] - P1[2];
-  
+
   e1[0] = p2[0] - p1[0];  e1[1] = p2[1] - p1[1];  e1[2] = p2[2] - p1[2];
   e2[0] = p3[0] - p2[0];  e2[1] = p3[1] - p2[1];  e2[2] = p3[2] - p2[2];
   e3[0] = p1[0] - p3[0];  e3[1] = p1[1] - p3[1];  e3[2] = p1[2] - p3[2];
@@ -376,7 +383,7 @@ my_tri_contact (const T *P1, const T *P2, const T *P3,
   f1[0] = q2[0] - q1[0];  f1[1] = q2[1] - q1[1];  f1[2] = q2[2] - q1[2];
   f2[0] = q3[0] - q2[0];  f2[1] = q3[1] - q2[1];  f2[2] = q3[2] - q2[2];
   f3[0] = q1[0] - q3[0];  f3[1] = q1[1] - q3[1];  f3[2] = q1[2] - q3[2];
-  
+
   VcrossV(n1, e1, e2);
   VcrossV(m1, f1, f2);
 
@@ -396,12 +403,12 @@ my_tri_contact (const T *P1, const T *P2, const T *P3,
   VcrossV(ef31, e3, f1);
   VcrossV(ef32, e3, f2);
   VcrossV(ef33, e3, f3);
-  
+
   // now begin the series of tests
 
   if (!my_project6_2(n1, p1, p2, p3, q1, q2, q3)) return 0;
   if (!my_project6_2(m1, p1, p2, p3, q1, q2, q3)) return 0;
-  
+
   if (!my_project6_2(ef11, p1, p2, p3, q1, q2, q3)) return 0;
   if (!my_project6_2(ef12, p1, p2, p3, q1, q2, q3)) return 0;
   if (!my_project6_2(ef13, p1, p2, p3, q1, q2, q3)) return 0;
@@ -425,20 +432,17 @@ my_tri_contact (const T *P1, const T *P2, const T *P3,
 //
 //check if two segments ab and cd overlap
 //
-template <typename T>
+template <typename Pt>
 inline bool is_overlapping(
-    const Point2d& a,const Point2d& b,const Point2d& c,const Point2d& d)
+    const Pt& a,const Pt& b,const Pt& c,const Pt& d)
 {
-    T area=Area(a,b,c);
+    auto area = Area(a,b,c);
     if(fabs(area)>SMALLNUMBER) return false;
     area=Area(a,b,d);
     if(fabs(area)>SMALLNUMBER) return false;
 
-    const T * u[2]={NULL,NULL};
-    const T * s=a; const T * t=b;
-    const T * m=c; const T * n=d;
-
-    return Union(s,t,m,n,u);
+    const Pt u[2];
+    return Union(a,b,c,d,u);
 }
 
 #endif//_MKSUM_INTERSECTION_H_

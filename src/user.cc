@@ -1,9 +1,7 @@
 #include "user.h"
 
-#include "opencv_compat.h"
 #include "adapt_boost_poly.h"
 
-using namespace cv;
 using namespace std;
 
 template<typename Pt_>
@@ -108,4 +106,4 @@ User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
   return fttl + (abs(dl / (du + dl)) * abs(fttu - fttl));
 }
 
-template class User<cv::Point2d>;
+template class User<boost::geometry::model::d2::point_xy<double> >;

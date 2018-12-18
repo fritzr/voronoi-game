@@ -8,8 +8,7 @@
 #include <iostream>
 #endif
 
-#include "opencv_compat.h"
-
+#include "adapt_boost_poly.h"
 #include "polygon.h"
 #include "shpReader.h"
 
@@ -271,4 +270,4 @@ readUsers(const std::string &points_path, const std::string &rings_path)
   return users;
 }
 
-extern template class User<cv::Point2d>;
+extern template class User<boost::geometry::model::d2::point_xy<double> >;

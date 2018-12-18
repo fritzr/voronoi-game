@@ -21,6 +21,8 @@ static const char POINT_INDEX_FIELD_NAME[] = "pointIndex";
 namespace shp
 {
 
+  using ::operator<<;
+
 template <typename Val>
 ShapeReader<Val>::ShapeReader()
   : nShapeType(SHPT_NULL), nShapeFilter(SHPT_NULL), nEntities(-1),
@@ -448,4 +450,4 @@ readShapefile(const string& path, Reader& r)
 
 } // end namespace shp
 
-SHP_INSTANTIATE(cv::Point2d, );
+SHP_INSTANTIATE(boost::geometry::model::d2::point_xy<double>, );

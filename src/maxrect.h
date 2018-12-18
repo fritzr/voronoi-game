@@ -19,7 +19,7 @@
 
 #include <boost/graph/adjacency_list.hpp>
 
-#include "boost_cv_compat.h"
+#include "boost_geo_poly.h"
 #include "sweep.h"
 #include "nn1.h"
 

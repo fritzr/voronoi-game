@@ -24,6 +24,7 @@ namespace cv {
 
 #endif // end < 3.0
 
+namespace cv {
 #if CV_MAJOR_VERSION >= 3
 const cv::ColormapTypes COLORMAP_BAD
   = cv::ColormapTypes(static_cast<int>(cv::COLORMAP_PARULA) + 1);
@@ -31,6 +32,7 @@ const cv::ColormapTypes COLORMAP_BAD
 const int COLORMAP_BAD
   = cv::ColormapTypes(static_cast<int>(cv::COLORMAP_HOT) + 1);
 #endif
+} // end namespace cv
 
 // version < 2.4.13
 #if CV_MAJOR_VERSION < 3 && !defined(OPENCV2_4_13)

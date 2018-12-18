@@ -10,9 +10,14 @@
 #pragma warning(disable : 4786)
 #endif
 
-#include "opencv_compat.h"
-#include "boost_cv_compat.h"
+#include <boost/core/ref.hpp>
+#include <boost/polygon/polygon.hpp>
+#include <boost/polygon/point_concept.hpp>
+#include <boost/polygon/point_traits.hpp>
+#include <boost/polygon/polygon_traits.hpp>
 
+#include <boost/geometry/geometries/geometries.hpp>
+#include <boost/geometry/geometries/point_xy.hpp>
 #include <boost/iterator/indirect_iterator.hpp>
 
 #include <functional> // reference_wrapper
@@ -22,13 +27,8 @@
 #include <cassert>
 #include <float.h>
 #include <iterator>
-using namespace cv;
 
-#if CV_MAJOR_VERSION < 3
-using namespace cv::traits;
-#endif
-
-namespace bp = boost::polygon;
+namespace bg = boost::geometry;
 
 typedef unsigned int uint;
 
@@ -68,9 +68,6 @@ class c_plylist;
 
 template<typename Pt_>
 class c_polygon;
-
-template<typename Pt_>
-class PlyMat;
 
 template <typename Pt_> std::istream &
   operator>>(std::istream&, c_ply<Pt_>&);
@@ -122,7 +119,7 @@ class ply_vertex
 {
 public:
     typedef Pt_ point_type;
-    typedef typename bp::point_traits<point_type>::coordinate_type
+    typedef typename bg::coordinate_type<point_type>::type
       coordinate_type;
 
     friend class vertex_iterator<Pt_, false>;
@@ -148,17 +145,17 @@ public:
     operator point_type(void) const { return getPos(); }
 
     ///////////////////////////////////////////////////////////////////////////
-    void setPos(const point_type& p) { pos=p; }
-    void setX(coordinate_type x) { pos.x=x; }
-    void setY(coordinate_type y) { pos.y=y; }
+    void setPos(const point_type& p) { bg::assign_point(pos, p); }
+    void setX(coordinate_type x) { bg::set<0>(pos, x); }
+    void setY(coordinate_type y) { bg::set<1>(pos, y); }
     virtual const point_type& getPos() const { return pos; }
 
-    void translate(const point_type& v){ pos=pos+v; }
+    void translate(const point_type& v){ bg::add_point(pos, v); }
 
     virtual ply_vertex * getNext() const { return next; }
     virtual ply_vertex * getPre() const { return pre; }
 
-    const Vec<coordinate_type, 2>& getNormal() const { return normal; }
+    const point_type& getNormal() const { return normal; }
     bool isReflex() const { return reflex; }
 
     //get extra information
@@ -178,7 +175,7 @@ private:
     ply_vertex * next; //next vertex in the polygon
     ply_vertex * pre;  //previous vertex in the polygon
     //normal, the segment normal from this v to the next.
-    Vec<coordinate_type, 2> normal;
+    point_type normal;
     bool reflex;
     uint vid;
 };
@@ -290,7 +287,6 @@ public:
     friend class vertex_iterator<Pt_, false>;
     friend class vertex_iterator<Pt_, true>;
     friend class c_polygon<Pt_>;
-    friend class PlyMat<Pt_>;
 
     typedef vertex_iterator<point_type, true> const_iterator;
     typedef vertex_iterator<point_type, false> iterator;
@@ -384,10 +380,6 @@ public:
         coordinate_type getArea();
         inline coordinate_type getArea() const { return area; }
 
-    // Convert to a cv::Matrix
-    operator PlyMat<Pt_>() { return mat(); }
-    inline PlyMat<Pt_> mat(void) const { return PlyMat<Pt_>(*this); }
-
     //
 	// additional functions
 	//
@@ -452,34 +444,6 @@ private:
     std::vector<triangle> triangulation; //catched triangulation, calculated by triangulate
 };
 
-
-/* This is just a viewport into a c_ply to provide a CV adapter.  */
-template<typename Pt_>
-class PlyMat : public cv::Mat_<typename c_ply<Pt_>::point_type >
-{
-private:
-  typedef cv::Mat_<typename c_ply<Pt_>::point_type > super;
-
-public:
-  typedef c_ply<Pt_> ring_type;
-  typedef typename ring_type::vertex_type vertex_type;
-  typedef typename vertex_type::point_type point_type;
-  typedef typename vertex_type::coordinate_type coordinate_type;
-
-private:
-  const ring_type &ply_;
-
-public:
-  PlyMat(const ring_type &ply)
-    : ply_(ply) {}
-
-  // Copy assignment
-  PlyMat &operator=(const PlyMat &m);
-
-  const point_type &at(int pos) {
-    return ply_.all[pos]->getPos();
-  }
-};
 
 //a c_plylist is a list of c_ply
 template <typename Pt_>
@@ -794,7 +758,16 @@ inline void create_circle(c_polygon<Pt_>& p,
   E template class c_plylist<Pt>; \
   E template class c_polygon<Pt>; \
 
-PLY_INSTANTIATE(cv::Point2d, extern);
-PLY_INSTANTIATE(cv::Point2f, extern);
+template <typename Tp_>
+std::ostream &operator<< (std::ostream &,
+    boost::geometry::model::d2::point_xy<Tp_> const&);
+
+PLY_INSTANTIATE(boost::geometry::model::d2::point_xy<float>, extern);
+extern template std::ostream & operator<< <float>(std::ostream &,
+    boost::geometry::model::d2::point_xy<float> const&);
+
+PLY_INSTANTIATE(boost::geometry::model::d2::point_xy<double>, extern);
+extern template std::ostream & operator<< <double>(std::ostream &,
+    boost::geometry::model::d2::point_xy<double> const&);
 
 #endif //_POLYGON_H_

@@ -132,6 +132,7 @@ template<typename Pt_>
 class VecPointReader : public PointReader<typename PolyData<Pt_>::point_vector>
 {
 public:
+  typedef Pt_ point_type;
   typedef typename PolyData<Pt_>::point_vector point_vector;
   typedef PointReader<point_vector> super;
   typedef typename super::value_type value_type;
@@ -153,7 +154,7 @@ protected:
 
   bool onPoint(unsigned int ptidx, double x, double y)
   {
-    m_points.emplace(m_points.begin() + ptidx, Point2d(x, y));
+    m_points.emplace(m_points.begin() + ptidx, point_type(x, y));
     return true;
   }
 
@@ -295,12 +296,12 @@ readPolygons(const std::string& path)
   E template class shp::IndexedPointReader<point_type>; \
   \
   E template shp::VecPointReader<point_type>::value_type \
-    shp::readShapefile(const std::string& path, VecPointReader<cv::Point2d>& r); \
+    shp::readShapefile(const std::string& path, VecPointReader<point_type>& r); \
   E template shp::IndexedPointReader<point_type>::value_type \
     shp::readShapefile(const std::string& path, IndexedPointReader<point_type>& r);\
   E template shp::PolyReader<point_type>::value_type \
     shp::readShapefile(const std::string& path, PolyReader<point_type>& r); \
 
-SHP_INSTANTIATE(cv::Point2d, extern);
+SHP_INSTANTIATE(boost::geometry::model::d2::point_xy<double>, extern);
 
 #endif //_SHPREADER_H_

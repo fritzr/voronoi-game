@@ -19,4 +19,5 @@ extern "C" {
 #include "util.h"
 #include "user.h"
 
+#include "boost_geo_poly.h"
 #include "opencv_compat.h"

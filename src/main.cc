@@ -25,11 +25,11 @@
 #define i2u(...) static_cast<unsigned int>(__VA_ARGS__)
 
 using namespace std;
-using namespace cv;
 using namespace shp;
 
 typedef double coordinate_type;
-typedef typename cv::Point_<coordinate_type> point_type;
+typedef typename boost::geometry::model::d2::point_xy<coordinate_type>
+  point_type;
 
 typedef typename cfla::L2NN1<coordinate_type, point_type> L2NN1;
 typedef typename cfla::L1NN1<coordinate_type, point_type> L1NN1;
@@ -47,6 +47,22 @@ typedef typename cfla::cfla_traits<point_type, tri_solver_type, User2d>
   tri_traits;
 typedef typename cfla::VGame<tri_traits> TriGame;
 
+
+using namespace cv;
+
+// Convert boost point_type to cv::Point
+inline cv::Point2f
+b2cv(point_type const& pt)
+{
+  return cv::Point2f(bg::get<0>(pt), bg::get<1>(pt));
+}
+
+template<typename Tp_>
+inline point_type
+cv2b(cv::Point_<Tp_> const& pt)
+{
+  return point_type(pt.x, pt.y);
+}
 
 enum DrawRects {
   RECTS_NONE = 0,
@@ -78,7 +94,7 @@ struct options_t
   unsigned int ngridx=10u, ngridy=10u; // number of grid lines (if any)
   int gridThickness=1; // thickness of grid lines
   bool debug = false;
-  ColormapTypes colormap = COLORMAP_HOT;
+  cv::ColormapTypes colormap = cv::COLORMAP_HOT;
   bool fill_inputs = false;
   unsigned int screenWidth = 1920;
   unsigned int screenHeight = 1080;
@@ -237,7 +253,7 @@ get_options(int argc, char *argv[], options_t &o)
     case 'F':
       o.fill_inputs = true; break;
     case 'C':
-      o.colormap = getenum(COLORMAP_BAD, optarg, errstr, "colormap");
+      o.colormap = getenum(cv::COLORMAP_BAD, optarg, errstr, "colormap");
       break;
     case 'X':
       o.ngridx = getenum(UINT_MAX, optarg, errstr, "X grid lines"); break;
@@ -364,16 +380,16 @@ drawGrid(Mat img, int nx, int ny, const Scalar &color, int thicc, bool labels)
 
 static Point2f pbias, nbias;
 
-template<class pt>
-static inline pt rotp(pt const& p)
+static inline point_type
+rotp(point_type const& p)
 {
-  return rotateZ2f_pos(p) - pbias;
+  return cv2b(rotateZ2f_pos(b2cv(p)) - pbias);
 }
 
-template<class pt>
-static inline pt rotn(pt const& p)
+static inline point_type
+rotn(point_type const& p)
 {
-  return rotateZ2f_neg(p) - nbias;
+  return cv2b(rotateZ2f_neg(b2cv(p)) - nbias);
 }
 
 template<class pt>
@@ -389,7 +405,7 @@ static void
 draw_facilities(Mat& img, InputIter begin, InputIter end, Scalar const& color)
 {
   while (begin != end)
-    cv::circle(img, *begin++, 10, color, -1);
+    cv::circle(img, b2cv(*begin++), 10, color, -1);
 }
 
 template<class Game>
@@ -400,7 +416,7 @@ draw_users(Mat& img, Game const& vd)
   for (auto userp = vd.users_begin(); userp != vd.users_end(); ++userp) {
     typename Game::player_type const& p = vd.owner(*userp);
     Scalar color = p.id() == 0 ? P1COLOR : P2COLOR;
-    cv::circle(img, check_rot(vd.user_point(*userp)), 5, color);
+    cv::circle(img, b2cv(check_rot(vd.user_point(*userp))), 5, color);
   }
 }
 
@@ -423,7 +439,7 @@ show_score(Mat& img, Game& vg)
 #ifdef DEBUG
 static ostream&
 dumpDistances(ostream& os, const vector<User2d> &users,
-    const vector<Point2d> &p1sites, const vector<Point2d> &p2sites)
+    const vector<point_type> &p1sites, const vector<point_type> &p2sites)
 {
   os << "===== USERS =====" << endl;
   for (auto uit = users.begin(); uit != users.end(); ++uit)
@@ -443,7 +459,7 @@ dumpDistances(ostream& os, const vector<User2d> &users,
     os << endl;
   }
 
-  typedef vector<Point2d>::const_iterator piterator;
+  typedef vector<point_type>::const_iterator piterator;
   typedef pair<const piterator, const piterator> iter_range;
   typedef pair<const string, const iter_range> zip;
   array<zip, 2> players = {
@@ -482,7 +498,7 @@ std::default_random_engine* rng = nullptr;
 template<class Game> /* VGame */
 static void
 play_game(Mat img, vector<User2d> users,
-    vector<Point2d> p1sites, vector<Point2d> p2sites)
+    vector<point_type> p1sites, vector<point_type> p2sites)
 {
   Game vg(users.begin(), users.end());
 #ifdef DEBUG
@@ -509,17 +525,17 @@ play_game(Mat img, vector<User2d> users,
     show_score(img, vg);
     Scalar pcolor = (vg.next_round() % 2 == 0) ? P2COLOR : P1COLOR;
     unsigned int nextp = vg.next_player().id();
-    Point2f next_facility = vg.play_round(rounds_per_turn);
+    point_type next_facility = vg.play_round(rounds_per_turn);
     cout << "player " << nextp << " solution at " << next_facility << endl;
     if (opts.interactive)
     {
       // First show the next solution circle.
-      circle(img, next_facility, 10, FONT_COLOR, -1);
+      circle(img, b2cv(next_facility), 10, FONT_COLOR, -1);
       imshow("output", img);
       waitKey(0);
     }
     // Show the solution as the right player's color.
-    circle(img, next_facility, 10, pcolor, -1);
+    circle(img, b2cv(next_facility), 10, pcolor, -1);
   }
   show_score(img, vg);
 
@@ -531,7 +547,7 @@ play_game(Mat img, vector<User2d> users,
       auto up = vg.user_point(*uit);
       up = check_rot(up);
       putText(img, to_string(user_idx++),
-          Point(up.x + FONT_XSPACE, up.y - FONT_YSPACE),
+          Point(bg::get<0>(up) + FONT_XSPACE, bg::get<1>(up) - FONT_YSPACE),
           FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS);
     }
   }
@@ -541,10 +557,10 @@ int main(int argc, char *argv[])
 {
   get_options(argc, argv, opts);
 
-  vector<User2d> users(readUsers<Point2d>(
+  vector<User2d> users(readUsers<point_type>(
         opts.user_points_path, opts.user_rings_path));
-  vector<Point2d> p1sites(readPoints<Point2d>(opts.p1sites_path));
-  vector<Point2d> p2sites(readPoints<Point2d>(opts.p2sites_path));
+  vector<point_type> p1sites(readPoints<point_type>(opts.p1sites_path));
+  vector<point_type> p2sites(readPoints<point_type>(opts.p2sites_path));
 
 #ifdef DEBUG
   dumpDistances(cout, users, p1sites, p2sites);

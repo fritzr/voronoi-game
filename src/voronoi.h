@@ -5,7 +5,8 @@
 #include <algorithm>
 #include <cmath>
 
-#include "boost_cv_compat.h"
+#include "intersection.h" // leftTurn
+#include "boost_geo_poly.h"
 
 namespace voronoi
 {
@@ -20,7 +21,7 @@ template<class Tp_> class edge_iterator;
 // This simplifies edge_t, because
 template <class Tp_>
 struct Edge {
-  typedef cv::Point_<Tp_> point_type;
+  typedef boost::geometry::model::d2::point_xy<Tp_> point_type;
   point_type p0, p1;
 };
 
@@ -30,7 +31,7 @@ class VoronoiDiagram
 {
   friend class edge_iterator<Tp_>;
 public:
-  typedef cv::Point_<Tp_> point_type;
+  typedef typename Edge<Tp_>::point_type point_type;
 
   typedef typename bp::voronoi_diagram<Tp_> voronoi_diagram;
   typedef typename voronoi_diagram::edge_type edge_type;
@@ -67,17 +68,6 @@ private:
 
   void clip_infinite_edge(const edge_type& edge, point_type& p0, point_type& p1)
     const;
-
-  // Whether pq -> qr makes a left turn at q towards r.
-  static inline bool leftTurn(point_type p, point_type q, point_type r)
-  {
-    point_type pq = q - p;
-    point_type w = r - p;
-    return cv::determinant(cv::Mat(cv::Matx<coordinate_type, 2, 2>({
-        pq.x, w.x,
-        pq.y, w.y
-      }))) > 0;
-  }
 
   // Bounding rectangle for a cell.
   rect_type boundingRect(const cell_type &cell) const {
@@ -183,24 +173,6 @@ public:
   inline point_type nearest_site(point_iterator user_pt) const {
     return sites.at(site_index(user_pt));
   }
-
-  // Build L1-distance rectangles for each user.
-  // Note that the boost::rectangle concept requires these to be axis-up, but
-  // to be correct they should be rotated 45 degrees.
-  // Just remember that when you use them... ;)
-  template<class OutputIter>
-    void build_rects(OutputIter out) {
-      point_iterator uit = users_begin();
-      while (uit != users_end())
-      {
-        point_type site = nearest_site(uit);
-        point_type user = *uit;
-        coordinate_type l1d = sqrt(2)
-          * (std::abs(site.x - user.x) + std::abs(site.y - user.y));
-        *out++ = cv::RotatedRect(user, cv::Size(l1d, l1d), 45.0f);
-        ++uit;
-      }
-    }
 
   // Iterate through finite points of the edges of a cell.
   inline finite_edge_iterator cell_begin(const cell_type &cell) const {

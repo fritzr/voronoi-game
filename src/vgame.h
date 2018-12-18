@@ -66,7 +66,7 @@ struct cfla_traits
 
   typedef UserType                             user_type;
   typedef Point                                point_type;
-  typedef decltype(point_type::x)              coordinate_type;
+  typedef typename bg::coordinate_type<point_type>::type coordinate_type;
   typedef size_t                               size_type;
   /*
   static const unsigned int norm     = DistanceNorm;

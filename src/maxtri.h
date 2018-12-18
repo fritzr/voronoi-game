@@ -12,8 +12,6 @@
 #include <iomanip>
 #endif
 
-#include <opencv2/core/core.hpp>
-
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/geometries.hpp> // point_xy, ring
 #include <boost/geometry/geometries/point_xy.hpp>
@@ -25,6 +23,7 @@
 
 #include "user.h"
 #include "polygon.h"
+#include "intersection.h"
 #include "sweep.h"
 #include "nn1.h"
 
@@ -128,14 +127,10 @@ struct traits
   typedef EventPoint<Tp_>                event_point_type;
   typedef Triangle<Tp_>                  triangle_type;
   // XXX could be point_type
-  typedef cv::Point_<Tp_>                poly_point_type;
-  typedef c_polygon<poly_point_type>     polygon_type;
+  typedef c_polygon<point_type>          polygon_type;
   typedef SolutionCell<Tp_>              solution_ref_type;
   typedef bgm::ring<point_type>          solution_cell_type;
 
-  inline static point_type convert_point(poly_point_type const& pt) {
-    return point_type(pt.x, pt.y);
-  }
 };
 
 #define INHERIT_TRAITS(Targ) \
@@ -149,7 +144,6 @@ struct traits
   typedef typename traits::isect_point_type isect_point_type; \
   typedef typename traits::event_point_type event_point_type; \
   typedef typename traits::triangle_type triangle_type; \
-  typedef typename traits::poly_point_type poly_point_type; \
   typedef typename traits::polygon_type polygon_type; \
   typedef typename traits::solution_ref_type solution_ref_type; \
   typedef typename traits::solution_cell_type solution_cell_type; \
@@ -206,19 +200,6 @@ intersection(Iter begin, Iter end, Polygon& out)
       return false;
 
   return true;
-}
-
-/* Whether p1 -> p2 -> p3 forms a left turn.  */
-template<class Pt_>
-bool
-leftTurn(Pt_ const& p1, Pt_ const& p2, Pt_ const& p3)
-{
-  auto v = p3;
-  bg::subtract_point(v, p2); // normal direction
-  auto u = p2;
-  bg::subtract_point(u, p1);
-  auto z = u.x() * v.y() - u.y() * v.x();
-  return z > 0;
 }
 
 // classes
@@ -822,9 +803,9 @@ public:
     for (auto ptri = ply.triangles_begin(); ptri != ply.triangles_end(); ++ptri)
     {
       point_type triangle[3] = {
-        traits::convert_point(ply[ptri->v[0]]->getPos()),
-        traits::convert_point(ply[ptri->v[1]]->getPos()),
-        traits::convert_point(ply[ptri->v[2]]->getPos()),
+        ply[ptri->v[0]]->getPos(),
+        ply[ptri->v[1]]->getPos(),
+        ply[ptri->v[2]]->getPos(),
       };
       tris.emplace_back(ply, triangle);
 
@@ -871,7 +852,7 @@ class MaxTriSolver
 public:
   INHERIT_TRAITS(Tp_);
 
-  typedef User<poly_point_type> user_type;
+  typedef User<point_type> user_type;
   typedef std::vector<user_type> user_list;
   typedef typename user_list::iterator       iterator;
   typedef typename user_list::const_iterator const_iterator;
@@ -887,7 +868,7 @@ private:
 
   // Return the ideal location for player 2 among some player 1 facilities.
   template<typename point_filter>
-  poly_point_type compute(const nn1_type &nn1, point_filter filter)
+  point_type compute(const nn1_type &nn1, point_filter filter)
   {
     // To solve for player 2, build isochromes from the opposing player's
     // facilities to each user point, then triangulate the polygons (for
@@ -899,7 +880,7 @@ private:
         continue;
 
       // Compute an iso representing the travel time
-      poly_point_type nearest_facility(nn1(*userp));
+      point_type nearest_facility(nn1(*userp));
       solver_.add_event(userp->isochrome(nearest_facility));
     }
     solver_.compute();
@@ -908,7 +889,7 @@ private:
     if (solver_.size() == 0)
     {
       std::cerr << "warning: empty solution" << std::endl;
-      return poly_point_type();
+      return point_type();
     }
 
     // Choose a random point in a random solution cell.
@@ -917,14 +898,14 @@ private:
 
     bgm::box<point_type> bbox;
     bg::envelope(solution, bbox);
-    poly_point_type out;
+    point_type out;
     coordinate_type randx, randy;
     do {
       randx = randrange(bg::get<bg::min_corner, 0>(bbox),
                         bg::get<bg::max_corner, 0>(bbox));
       randy = randrange(bg::get<bg::min_corner, 1>(bbox),
                         bg::get<bg::max_corner, 1>(bbox));
-      out = poly_point_type(randx, randy);
+      out = point_type(randx, randy);
     } while (!bg::within(out, solution));
 
     return out;
@@ -945,16 +926,16 @@ public:
 
   // Return the "optimal solution" for the CFL game.
   template<typename point_filter>
-  poly_point_type operator()(const nn1_type &facilities, point_filter filter) {
+  point_type operator()(const nn1_type &facilities, point_filter filter) {
     return compute(facilities, filter);
   }
 
-  static poly_point_type user_point(user_type const& u) {
+  static point_type user_point(user_type const& u) {
     return u.center();
   }
 
   inline static coordinate_type
-    distance(user_type const& user, poly_point_type const& p) {
+    distance(user_type const& user, point_type const& p) {
       return user.travelTime(p);
     }
 

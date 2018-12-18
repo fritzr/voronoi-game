@@ -3,7 +3,6 @@
 #include <boost/foreach.hpp>
 
 using namespace std;
-using namespace cv;
 
 namespace voronoi
 {
@@ -20,24 +19,25 @@ VoronoiDiagram<Tp_>::clip_infinite_edge(const edge_type& edge,
 
   point_type s1 = sites[cell1.source_index()];
   point_type s2 = sites[cell2.source_index()];
-  origin.x = (s1.x + s2.x) * 0.5;
-  origin.y = (s1.y + s2.y) * 0.5;
-  direction.x = (s1.y - s2.y);
-  direction.y = (s2.x - s1.x);
+  bg::assign_point(origin, s1);
+  bg::add_point(origin, s2);
+  bg::divide_value(origin, 2);
+  bg::set<0>(direction, bg::get<1>(s1) - bg::get<1>(s2));
+  bg::set<1>(direction, bg::get<0>(s2) - bg::get<0>(s1));
 
   coordinate_type koef = boundsx
-    / (std::max)(fabs(direction.x), fabs(direction.y));
+    / (std::max)(fabs(bg::get<0>(direction)), fabs(bg::get<1>(direction)));
   if (edge.vertex0() == NULL) {
     p0 = point_type(
-        origin.x - direction.x * koef,
-        origin.y - direction.y * koef);
+        bg::get<0>(origin) - bg::get<0>(direction) * koef,
+        bg::get<1>(origin) - bg::get<1>(direction) * koef);
   } else {
     p0 = point_type(edge.vertex0()->x(), edge.vertex0()->y());
   }
   if (edge.vertex1() == NULL) {
     p1 = point_type(
-        origin.x + direction.x * koef,
-        origin.y + direction.y * koef);
+        bg::get<0>(origin) + bg::get<0>(direction) * koef,
+        bg::get<1>(origin) + bg::get<1>(direction) * koef);
   } else {
     p1 = point_type(edge.vertex1()->x(), edge.vertex1()->y());
   }
@@ -75,7 +75,9 @@ VoronoiDiagram<Tp_>::map_knn(void)
   vector<rvalue_t> svals;
   int site_idx = 0;
   for (auto site = sites.begin(); site != sites.end(); ++site, ++site_idx)
-    svals.push_back(make_pair(point_type(site->x, site->y), site_idx));
+    svals.push_back(make_pair(
+          point_type(bg::get<0>(*site), bg::get<1>(*site)),
+          site_idx));
   typedef typename bgi::rtree<rvalue_t, bgi::quadratic<16> > voronoi_tree;
   voronoi_tree vtree(svals.begin(), svals.end());
 
@@ -115,7 +117,9 @@ VoronoiDiagram<Tp_>::map_quick(void)
   vector<rvalue_t> uvals;
   int user_idx = 0;
   for (auto user = users.begin(); user != users.end(); ++user, ++user_idx)
-    uvals.push_back(make_pair(point_type(user->x, user->y), user_idx));
+    uvals.push_back(make_pair(
+          point_type(bg::get<0>(*user), bg::get<1>(*user)),
+          user_idx));
   bgi::rtree<rvalue_t, bgi::quadratic<16> > utree(uvals.begin(), uvals.end());
 
   for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
@@ -137,6 +141,7 @@ VoronoiDiagram<Tp_>::map_quick(void)
   }
 }
 
+/*
 // This is a brute-force (slow) method for mapping user points to their cells
 // simply by associating each user to the site to which it is nearest.
 // This runs in O(m*n) for m sites and n users.
@@ -153,7 +158,7 @@ VoronoiDiagram<Tp_>::map_slow(void)
     for (size_t site_idx = 0u; site_idx < sites.size(); ++site_idx)
     {
       const Point &site = sites[site_idx];
-      double distance = cv::norm(site - user);
+      double distance = normalize(site - user);
       if (distance < mindist) {
         mindist = distance;
         closest_site_idx = static_cast<int>(site_idx);
@@ -162,6 +167,7 @@ VoronoiDiagram<Tp_>::map_slow(void)
     u2s[user_idx] = closest_site_idx;
   }
 }
+*/
 
 template<class Tp_>
 void
@@ -177,8 +183,10 @@ VoronoiDiagram<Tp_>::build(SearchMethod sm)
 
   // Now map users to their cells through whichever method we want.
   switch (sm) {
+    /*
     case SearchMethod::Slow:
       this->map_slow(); break;
+      */
     case SearchMethod::Quick:
       this->map_quick(); break;
     case SearchMethod::KNN:

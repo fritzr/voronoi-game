@@ -6,14 +6,12 @@
 
 #include <cmath> // std::abs
 
-#include <opencv2/core/core.hpp> // cv::norm
-
 #include <boost/geometry/geometry.hpp>
 #include <boost/geometry/algorithms/distance.hpp>
 #include <boost/geometry/algorithms/comparable_distance.hpp>
 #include <boost/geometry/index/rtree.hpp>
 
-#include "boost_cv_compat.h"
+#include "boost_geo_poly.h"
 
 namespace cfla
 {
@@ -24,14 +22,15 @@ template<class coordinate_type, class point_type>
 inline coordinate_type
 l1dist(const point_type &p1, const point_type &p2)
 {
-  return std::abs(p1.x - p2.x) + std::abs(p1.y - p2.y);
+  return std::abs(bg::get<0>(p1) - bg::get<0>(p2))
+       + std::abs(bg::get<1>(p1) - bg::get<1>(p2));
 }
 
 template<class coordinate_type, class point_type>
 inline coordinate_type
 l2dist(const point_type &p1, const point_type &p2)
 {
-  return cv::norm(p2 - p1);
+  return bg::distance(p1, p2);
 }
 
 /* L2 (Euclidean) nearest-neighbor 1 adapter.  */

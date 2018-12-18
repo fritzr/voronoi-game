@@ -6,11 +6,23 @@
 #include "polygon.h"
 #include "intersection.h"
 #include <vector>
+#include <cmath>
+
+#include <boost/polygon/polygon.hpp>
+
+#include <boost/geometry/geometries/geometries.hpp>
+#include <boost/geometry/geometries/point_xy.hpp>
+#include <boost/geometry/arithmetic/arithmetic.hpp>
+#include <boost/geometry/arithmetic/dot_product.hpp>
+#include <boost/geometry/algorithms/equals.hpp>
+#include <boost/geometry/util/math.hpp>
 
 #include "adapt_boost_poly.h"
 
-using namespace cv;
 using namespace std;
+namespace bp = boost::polygon;
+namespace bg = boost::geometry;
+namespace bgmth = boost::geometry::math;
 
 #ifdef WIN32
 extern "C"{
@@ -26,6 +38,27 @@ ply_vertex<Pt_>::~ply_vertex()
     //doing nothing for now
 }
 
+template<typename Pt_, typename T>
+void
+normalize(Pt_ &p, T &magnitude)
+{
+  typedef typename bg::coordinate_type<Pt_>::type coord_t;
+
+  // normalize
+  magnitude = bgmth::sqrt(bg::dot_product(p, p));
+  if (!bgmth::equals(magnitude, coord_t(0)))
+    bg::divide_value(p, magnitude);
+}
+
+template<typename Pt_>
+void normalize(Pt_ &p)
+{
+  typedef typename bg::coordinate_type<Pt_>::type coord_t;
+
+  coord_t magnitude_unused;
+  normalize(p, magnitude_unused);
+}
+
 // - compute normal
 // - check if the vertex is reflex or not
 template<typename Pt_>
@@ -33,36 +66,34 @@ void
 ply_vertex<Pt_>::computeExtraInfo()
 {
     //compute normal direction
-	Vec<coordinate_type, 2> v=next->pos-pos;
-    if( v[0]==0 ){
-        if(v[1]>0){ normal[0]=1; normal[1]=0; }
-        else{ normal[0]=-1; normal[1]=0; }
+    point_type v= next->pos;
+    bg::subtract_point(v, pos);
+    if( bg::get<0>(v) == 0 ){
+        if (bg::get<1>(v)>0) { bg::set<0>(normal,1); bg::set<1>(normal,0); }
+        else { bg::set<0>(normal,-1); bg::set<1>(normal,0); }
     }
-    else if( v[0]>0 ){
-        normal[1]=-1;
-        normal[0]=(v[1]/v[0]);
+    else if( bg::get<0>(v)>0 ){
+      bg::set<1>(normal, -1);
+      bg::set<0>(normal, bg::get<1>(v) / bg::get<0>(v));
     }
-    else{//v[0]<0
-        normal[1]=1;
-        normal[0]=-(v[1]/v[0]);
+    else{//get<0>(v)<0
+      bg::set<1>(normal, 1);
+      bg::set<0>(normal, -(bg::get<1>(v) / bg::get<0>(v)));
     }
-    normal=normalize(normal);
 
-    //compute if left or right turn
-    Vec<coordinate_type, 2> u=pos-pre->pos;
-    coordinate_type z=u[0]*v[1]-u[1]*v[0];
+    // normalize
+    normalize(normal);
 
-    if(z<=0) reflex=true;
-    else reflex=false;
+    // compute left or right turn
+    reflex = !leftTurn(pre->pos, pos, next->pos);
 }
 
 template<typename Pt_>
 void
 ply_vertex<Pt_>::negate()
 {
-    normal=-normal;
-    pos.x=-pos.x;
-    pos.y=-pos.y;
+    bg::multiply_value(normal, -1);
+    bg::multiply_value(pos, -1);
 }
 
 template<typename Pt_>
@@ -109,7 +140,7 @@ c_ply<Pt_>::copy(const c_ply<Pt_>& other)
 
     //copy extra info
     area=other.area;
-    center=other.center;
+    bg::assign_point(center, other.center);
     radius=other.radius;
     type=other.type;
     triangulation=other.triangulation;
@@ -155,7 +186,7 @@ c_ply<Pt_>::addVertex(
     point_type pt(x,y);
 
     if(tail!=NULL){
-        if(tail->getPos()==pt && remove_duplicate) return; //don't add
+        if(bg::equals(tail->getPos(), pt) && remove_duplicate) return; //don't add
     }
 
     vertex_type * v=new vertex_type(pt);
@@ -190,7 +221,7 @@ c_ply<Pt_>::endPoly(bool remove_duplicate)
 {
     if(head!=NULL && tail!=NULL){
         if(remove_duplicate){
-            if(head->getPos()==tail->getPos()){ //remove tail..
+            if(bg::equals(head->getPos(), tail->getPos())){ //remove tail..
                 delete tail;
                 all.pop_back();
                 tail=all.back();
@@ -238,13 +269,13 @@ c_ply<Pt_>::getCenter()
         uint size=0;
         do{
             size++;
-            Vec<coordinate_type, 2> v=ptr->getPos()-first;
-            center.x+=v[0];
-            center.y+=v[1];
+            point_type v = ptr->getPos();
+            bg::subtract_point(v, first);
+            bg::add_point(center, v);
             ptr=ptr->getNext();
         }while(ptr!=head); //end while
-        center.x=(center.x/size)+first.x;
-        center.y=(center.y/size)+first.y;
+        bg::divide_value(center, size);
+        bg::add_point(center, first);
 
         radius=0;
     }
@@ -294,10 +325,10 @@ c_ply<Pt_>::translate(const point_type& p)
     }while(ptr!=head); //end while
 
     //translate box
-    extra_info.box[0]+=p.x;
-    extra_info.box[1]+=p.x;
-    extra_info.box[2]+=p.y;
-    extra_info.box[3]+=p.y;
+    extra_info.box[0] += bg::get<0>(p);
+    extra_info.box[1] += bg::get<0>(p);
+    extra_info.box[2] += bg::get<1>(p);
+    extra_info.box[3] += bg::get<1>(p);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -311,9 +342,10 @@ c_ply<Pt_>::getRadius()
     if(radius==0){
         vertex_type * ptr=head;
         do{
-            coordinate_type d = cv::norm(
-                Vec<coordinate_type, 2>(center-ptr->getPos()),
-                cv::NORM_L2SQR);
+            point_type v = center;
+            bg::subtract_point(v, ptr->getPos());
+            coordinate_type d;
+            normalize(v, d);
             if(d>radius) radius=d;
             ptr=ptr->getNext();
         }while(ptr!=head); //end while
@@ -369,8 +401,9 @@ c_ply<Pt_>::findEnclosedPt()
         const point_type& p1=head->getPos();
         const point_type& p2=head->getNext()->getPos();
         point_type pt;
-        pt.x=(p1.x+p2.x)/2;
-        pt.y=(p1.y+p2.y)/2;
+        bg::assign_point(pt, p1);
+        bg::add_point(pt, p2);
+        bg::divide_value(pt, 2);
         return pt;
     }
 
@@ -396,8 +429,10 @@ c_ply<Pt_>::findEnclosedPt()
     const point_type& p3=(*this)[tri.v[2]]->getPos();
 
     point_type pt;
-    pt.x=(p1.x+p2.x+p3.x)/3;
-    pt.y=(p1.y+p2.y+p3.y)/3;
+    bg::assign_point(pt, p1);
+    bg::add_point(pt, p2);
+    bg::add_point(pt, p3);
+    bg::divide_value(pt, 3);
 
     return pt;
 }
@@ -435,8 +470,8 @@ c_ply<Pt_>::triangulate(vector<triangle>& tris)
              vertex_type * ptr=getHead();
              do{
                  point_type pt=ptr->getPos();
-                 V[i*2]=pt.x-O.x;    // potential implicit conversion
-                 V[i*2+1]=pt.y-O.y;
+                 V[i*2]=bg::get<0>(pt)-bg::get<0>(O);    // potential implicit conversion
+                 V[i*2+1]=bg::get<1>(pt)-bg::get<1>(O);
                  ptr=ptr->getNext();
                  i++;
              }while( ptr!=getHead() );
@@ -526,8 +561,8 @@ c_ply<Pt_>::identical(const c_ply<Pt_>& other)
     bool found_first_match=false;
     do{
         const point_type& pos=o_ptr->getPos();
-        coordinate_type dx=fabs(pos.x-head->getPos().x);
-        coordinate_type dy=fabs(pos.y-head->getPos().y);
+        coordinate_type dx=fabs(bg::get<0>(pos)-bg::get<0>(head->getPos()));
+        coordinate_type dy=fabs(bg::get<1>(pos)-bg::get<0>(head->getPos()));
 
         if( dx<SMALLNUMBER && dy<SMALLNUMBER){
             found_first_match=true;
@@ -551,8 +586,8 @@ c_ply<Pt_>::identical(const c_ply<Pt_>& other)
         const point_type& o_pos=o_ptr->getPos();
         const point_type& pos=ptr->getPos();
 
-        coordinate_type dx=fabs(pos.x-o_pos.x);
-        coordinate_type dy=fabs(pos.y-o_pos.y);
+        coordinate_type dx=fabs(bg::get<0>(pos)-bg::get<0>(o_pos));
+        coordinate_type dy=fabs(bg::get<1>(pos)-bg::get<1>(o_pos));
 
         if( dx>SMALLNUMBER || dy>SMALLNUMBER){
             return false; //don't match
@@ -584,17 +619,17 @@ c_plylist<Pt_>::buildBoxAndCenter()
         const vertex_type * ptr=i->getHead();
         do{
             const point_type& p=ptr->getPos();
-            if(p.x<box[0]) box[0]=p.x;
-            if(p.x>box[1]) box[1]=p.x;
-            if(p.y<box[2]) box[2]=p.y;
-            if(p.y>box[3]) box[3]=p.y;
+            if(bg::get<0>(p)<box[0]) box[0]= bg::get<0>(p);
+            if(bg::get<0>(p)>box[1]) box[1]= bg::get<0>(p);
+            if(bg::get<1>(p)<box[2]) box[2]= bg::get<1>(p);
+            if(bg::get<1>(p)>box[3]) box[3]= bg::get<1>(p);
             ptr=ptr->getNext();
         }
         while(ptr!=i->getHead()); //end while
     }
 
-    center.x=(box[0]+box[1])/2;
-    center.y=(box[2]+box[3])/2;
+    bg::set<0>(center, (box[0]+box[1])/2);
+    bg::set<1>(center, (box[2]+box[3])/2);
 
     is_buildboxandcenter_called=true;
 }
@@ -697,8 +732,10 @@ c_polygon<Pt_>::findEnclosedPt()
     const point_type& p3=(*this)[tri.v[2]]->getPos();
 
     point_type pt;
-    pt.x=(p1.x+p2.x+p3.x)/3;
-    pt.y=(p1.y+p2.y+p3.y)/3;
+    bg::assign_point(pt, p1);
+    bg::add_point(pt, p2);
+    bg::add_point(pt, p3);
+    bg::divide_value(pt, 3);
 
     return pt;
 }
@@ -742,8 +779,8 @@ c_polygon<Pt_>::triangulate(vector<triangle>& tris)
              vertex_type * ptr=ip->getHead();
              do{
                  point_type pt=ptr->getPos();
-                 V[i*2]=pt.x-O.x;    // potential implicit conversion to double
-                 V[i*2+1]=pt.y-O.y;
+                 V[i*2]=bg::get<0>(pt)-bg::get<0>(O);    // potential implicit conversion to double
+                 V[i*2+1]=bg::get<1>(pt)-bg::get<1>(O);
                  ptr=ptr->getNext();
                  i++;
              }while( ptr!=ip->getHead() );
@@ -877,7 +914,7 @@ istream& operator>>( istream& is, c_ply<Pt_>& poly)
     int id;
     for( iv=0;iv<vsize;iv++ ){
         is>>id; id=id-1;
-        poly.addVertex(pts[id].x, pts[id].y);
+        poly.addVertex(bg::get<0>(pts[id]), bg::get<1>(pts[id]));
     }
 
     poly.endPoly();
@@ -965,5 +1002,18 @@ operator<<(ostream &os, const vector<c_polygon<Pt_> > &v)
   return os;
 }
 
-PLY_INSTANTIATE(cv::Point2d, );
-PLY_INSTANTIATE(cv::Point2f, );
+template<typename Tp_>
+ostream & operator<<(ostream &os,
+    boost::geometry::model::d2::point_xy<Tp_> const&p)
+{
+  os << "(" << bg::get<0>(p) << "," << bg::get<1>(p) << ")";
+  return os;
+}
+
+PLY_INSTANTIATE(boost::geometry::model::d2::point_xy<float>, );
+PLY_INSTANTIATE(boost::geometry::model::d2::point_xy<double>, );
+
+template std::ostream &operator<< <float>(std::ostream&,
+    boost::geometry::model::d2::point_xy<float> const&);
+template std::ostream &operator<< <double>(std::ostream&,
+    boost::geometry::model::d2::point_xy<double> const&);

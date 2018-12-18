@@ -1,8 +1,7 @@
 #pragma once
 
-#include "opencv_compat.h"
-#include "boost_cv_compat.h"
 #include "polygon.h"
+#include "boost_geo_poly.h"
 
 /* Boost polygon traits for c_ply */
 /* namespace boost {
@@ -26,11 +25,11 @@ namespace boost { namespace geometry {
 
     template <typename Pt> struct access<ply_vertex<Pt> *, 0> {
       static inline typename ply_vertex<Pt>::coordinate_type
-        get(ply_vertex<Pt>*p) { return p->getPos().x; }
+        get(ply_vertex<Pt>*p) { return bg::get<0>(p->getPos()); }
     };
     template <typename Pt> struct access<ply_vertex<Pt> *, 1> {
       static inline typename ply_vertex<Pt>::coordinate_type
-        get(ply_vertex<Pt>*p) { return p->getPos().y; }
+        get(ply_vertex<Pt>*p) { return bg::get<1>(p->getPos()); }
     };
 
     /*** c_ply as ring_concept ***/
@@ -105,7 +104,9 @@ namespace boost { namespace polygon {
     typedef typename ply_vertex<Pt>::coordinate_type coordinate_type;
     static inline coordinate_type get(const ply_vertex<Pt>* pt,
         orientation_2d orient) {
-      return (orient == HORIZONTAL) ? pt->getPos().x : pt->getPos().y;
+      return (orient == HORIZONTAL)
+        ? bg::get<0>(pt->getPos())
+        : bg::get<1>(pt->getPos());
     }
   };
 
