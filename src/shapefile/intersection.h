@@ -176,7 +176,7 @@ of each, returns 'e' rather than 'v' as one might expect.
 ---------------------------------------------------------------------*/
 template <typename Pt>
 inline char SegSegInt(
-    const Pt a, const Pt b, const Pt c, const Pt d, Pt p )
+    Pt const& a, Pt const& b, Pt const& c, Pt const& d, Pt &p)
 {
   typedef typename bg::coordinate_type<Pt>::type coord_t;
    coord_t  s, t;        // The two parameters of the parametric eqns.
