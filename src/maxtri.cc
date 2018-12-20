@@ -68,13 +68,14 @@ insert_edge(edge_type const& e)
         queue().push(isect_point_type(p, e.data(), eit->edata));
       }
     }
-    if (incr < 0)
+    if (incr < 0 && eit != edge_points.begin())
       --eit;
-    else
+    else if (incr > 0 && eit != edge_points.end())
       ++eit;
 
-    // Start over increasing from insertion point.
-    if ((!intersects || eit == edge_points.end()) && incr < 0)
+    // Once we've reached the left boundary, start over *increasing* from the
+    // insertion point. When we reach the end, the while loop will terminate.
+    if ((!intersects || eit == edge_points.begin()) && incr < 0)
     {
       eit = elb;
       ++eit;
