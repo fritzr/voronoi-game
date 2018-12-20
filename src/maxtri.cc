@@ -21,11 +21,12 @@ namespace cfla { namespace tri
 template<class Tp_>
 MaxTri<Tp_>::~MaxTri(void)
 {
+  polys.clear();
 }
 
 template<class Tp_>
 MaxTri<Tp_>::MaxTri(void)
-  : tris(), edge_points(), max_depth(-1)
+  : tris(), polys(), edge_points(), max_depth(-1)
 {
 }
 

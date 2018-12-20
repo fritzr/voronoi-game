@@ -671,9 +671,8 @@ c_polygon<Pt_>::copy(const c_polygon& other)
     destroy();
 
     for(auto i=other.cbegin();i!=other.cend();i++){
-        ring_type p(ring_type::UNKNOWN);
-        p.copy(*i);
-        push_back(p);
+        this->emplace_back(i->getType());
+        this->back().copy(*i);
     }
     indexing();
 }

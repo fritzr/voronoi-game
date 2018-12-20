@@ -724,7 +724,7 @@ struct make_sla_traits
 {
   INHERIT_TRAITS(Tp_);
 
-  typedef typename traits::polygon_type value_type; // polygons are the input
+  typedef typename traits::polygon_type *value_type; // isochromes
   typedef typename traits::solution_ref_type solution_type;
 
   typedef typename traits::event_point_type event_type;
@@ -750,6 +750,8 @@ public:
 
   INHERIT_TRAITS(Tp_);
 
+  typedef typename sla::value_type value_type;
+  typedef std::vector<std::unique_ptr<polygon_type> > poly_container;
   typedef std::vector<triangle_type> triangle_container;
   typedef std::set<edge_point_type, event_point_xcompare> edge_point_status;
 
@@ -761,6 +763,7 @@ public:
 
 private:
   triangle_container tris;
+  poly_container polys;
 
   // sweep line status: points of current edges, ordered by X coordinate
   edge_point_status edge_points;
@@ -795,19 +798,21 @@ public:
   // Add triangles from polygon.
   // Same as the constructor form, if you're lazy and want to do it
   // after construction. (Overridden from SLA.)
-  void add_event(polygon_type const& ply)
+  void add_event(value_type const& ply)
   {
-    if (ply.triangles_size() == 0u)
+    polys.emplace_back(ply);
+    if (ply->triangles_size() == 0u)
       throw std::runtime_error("must triangulate the polygon first!");
 
-    for (auto ptri = ply.triangles_begin(); ptri != ply.triangles_end(); ++ptri)
+    for (auto ptri = ply->triangles_begin(); ptri != ply->triangles_end();
+        ++ptri)
     {
       point_type triangle[3] = {
-        ply[ptri->v[0]]->getPos(),
-        ply[ptri->v[1]]->getPos(),
-        ply[ptri->v[2]]->getPos(),
+        (*ply)[ptri->v[0]]->getPos(),
+        (*ply)[ptri->v[1]]->getPos(),
+        (*ply)[ptri->v[2]]->getPos(),
       };
-      tris.emplace_back(ply, triangle);
+      tris.emplace_back(*ply, triangle);
 
 #ifdef MAXTRI_DEBUG
       std::cout << "QUEUE edges" << std::endl
@@ -823,13 +828,6 @@ public:
       queue().emplace(tris.back().edge(0).second());
       queue().emplace(tris.back().edge(0).first());
     }
-  }
-
-  // Safe, non-const version.
-  void add_event(polygon_type& ply)
-  {
-    ply.triangulate();
-    add_event(const_cast<polygon_type const&>(ply));
   }
 
   inline int depth(void) const { return max_depth; }
@@ -879,9 +877,13 @@ private:
       if (!filter(*userp))
         continue;
 
-      // Compute an iso representing the travel time
+      // Compute an isochrome representing the fixed travel time distance to
+      // the nearest facility.
       point_type nearest_facility(nn1(*userp));
-      solver_.add_event(userp->isochrome(nearest_facility));
+
+      polygon_type *p = new polygon_type;
+      userp->isochrome(*p, nearest_facility);
+      solver_.add_event(p);
     }
     solver_.compute();
 

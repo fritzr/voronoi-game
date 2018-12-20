@@ -621,6 +621,7 @@ public:
 
     c_polygon() : super() { area=0; }
     c_polygon(const ring_type &ply) : super() { super::push_back(ply); }
+    c_polygon(const c_polygon &other) : super() { copy(other); }
 
     bool valid() const; //check if this is a valid polygon
 

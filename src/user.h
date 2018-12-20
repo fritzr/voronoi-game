@@ -210,7 +210,14 @@ public:
 
   /* Return an isochrome given a point on its boundary by computing the travel
    * time from the center to that point.  */
-  polygon_type isochrome(point_type const& boundary) const;
+  polygon_type isochrome(point_type const& boundary) const {
+    polygon_type ply;
+    isochrome(ply, boundary);
+    return ply;
+  }
+
+  // Write the isochrome to the given object instead of copying.
+  void isochrome(polygon_type &p, point_type const& boundary) const;
 
   iterator begin(void) { return isolines_.begin(); }
   iterator end(void) { return isolines_.end(); }

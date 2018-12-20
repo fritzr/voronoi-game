@@ -31,19 +31,17 @@ User<Pt_>::isochrome_bounds(point_type const& query,
 }
 
 template<typename Pt_>
-typename User<Pt_>::polygon_type
-User<Pt_>::isochrome(point_type const& query) const
+void
+User<Pt_>::isochrome(polygon_type &result, point_type const& query) const
 {
-  polygon_type result;
-
   const_iterator lower_ring, upper_ring;
-  if (!isochrome_bounds(query, lower_ring, upper_ring))
-    return result;
-
-  // XXX for now we just copy one of the bounds.
-  result.copy(*((upper_ring != isolines_.end()) ? upper_ring : lower_ring));
-  result.triangulate(); // we will need this
-  return result;
+  if (isochrome_bounds(query, lower_ring, upper_ring))
+  {
+    // TODO for now we just copy one of the bounds. We should really generate
+    // an interpolated isochrome from travelTime(query).
+    result.copy(*((upper_ring != isolines_.end()) ? upper_ring : lower_ring));
+    result.triangulate(); // we will need this
+  }
 }
 
 /* Find the travel time given fixed-travel-time (FTT) rings.  */
