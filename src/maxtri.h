@@ -818,6 +818,21 @@ public:
     return orientation(p, r, q);
   }
 
+  // Whether two segments are identical except for their triangle.
+  inline bool same_segment(status_seg_type const& a, status_seg_type const& b)
+    const
+  {
+    // I don't see a good way to factor these checks in common with the same
+    // ones in operator(), so for now just duplicate the code here.
+    const coordinate_type sweepy = sweeper.current_y();
+    const point_type sort_a = isect_sweep(a, sweepy);
+    const point_type sort_b = isect_sweep(b, sweepy);
+
+    return AlmostEqualV(getx(sort_a), getx(sort_b))
+      && AlmostEqualV(gety(sort_a), gety(sort_b))
+      && AlmostEqualV(compare_orientation(a, b), coordinate_type(0));
+  }
+
   // Compare two segments by their top point.
   // If the top point is equal it's a point of intersection, so compare by
   // orientation.
@@ -1212,7 +1227,7 @@ private:
   // Look through the status (in the correct direction) to find which edges
   // intersect the newly inserted edge and queue the intersection points.
   template<typename Iter>
-  void check_intersection(const Iter edge, const Iter begin, const Iter end);
+  void check_intersection(const Iter edge, Iter neighbor, const Iter end);
 
   // Intersect the two line segments defined by Edges.
   // If there is an intersection (return code other than '0'), sets the fields

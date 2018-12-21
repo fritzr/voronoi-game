@@ -56,9 +56,13 @@ template<class Tp_>
 template<typename Iter>
 void
 MaxTri<Tp_>::
-check_intersection(const Iter segment, const Iter neighbor, const Iter end)
+check_intersection(const Iter segment, Iter neighbor, const Iter end)
 {
-  if (segment != end && neighbor != end)
+  if (segment == end || neighbor == end)
+    return;
+
+  const Iter first_neighbor = neighbor;
+  do
   {
     // Check for intersections and queue any we find.
     isect_point_type intersection;
@@ -71,7 +75,15 @@ check_intersection(const Iter segment, const Iter neighbor, const Iter end)
 #endif
       queue().push(intersection);
     }
-  }
+
+    // Typically this isn't a loop, BUT we can have the exact same
+    // segment across several different triangles. Such identical segments will
+    // all be sorted adjacent, so we can loop through them linearly.
+    // We could use a multimap, in which case we'd remove the triangle pointer
+    // sorting criterion and pass iterators from equal_range() to this function.
+    // But then we'd still have to write additional code to implement find()
+    // (in other functions) based on the owning triangle.
+  } while (status.key_comp().same_segment(*first_neighbor, *++neighbor));
 }
 
 template<class Tp_>
