@@ -783,7 +783,7 @@ public:
   // Compare two segments which share a top point by their orientation,
   // where the left-most-facing segment has lower priority matching the x-sort
   // order.
-  static bool
+  static coordinate_type
     compare_orientation(status_seg_type const& a, status_seg_type const& b)
   {
     /* As a precondition, we assume A and B share a top point.
