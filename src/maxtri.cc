@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <functional>
 #include <iterator>
+#include <cmath>
 
 #ifdef DEBUG
 #include <iostream>
@@ -122,20 +123,49 @@ handle_tripoint(tri_point_type const& tpoint)
   // We can do this by just queueing all points twice, but this way is clearer
   // and simplifies event ordering. See the diagrams in the header for
   // reference on which points are which.
+#ifdef MAXTRI_DEBUG
+  size_t status_size = status.size();
+#endif
   switch (tpoint.index)
   {
   case 0:
     insert_edge(tpoint.left_edge());
+#ifdef MAXTRI_DEBUG
+    if (status.size() != status_size + 1)
+      throw runtime_error("failed to uniquely insert left edge!");
+#endif
+
     insert_edge(tpoint.right_edge());
+#ifdef MAXTRI_DEBUG
+    if (status.size() != status_size + 2)
+      throw runtime_error("failed to uniquely insert right edge!");
+#endif
     break;
+
   case 1:
     remove_edge(tpoint.left_edge());
     insert_edge(tpoint.right_edge());
+#ifdef MAXTRI_DEBUG
+    if (status.size() < status_size)
+      throw runtime_error("failed to insert right edge!");
+    if (status.size() > status_size)
+      throw runtime_error("failed to remove left edge!");
+#endif
     break;
+
   case 2:
     remove_edge(tpoint.left_edge());
+#ifdef MAXTRI_DEBUG
+    if (status.size() != status_size - 1)
+      throw runtime_error("failed to remove left edge!");
+#endif
     remove_edge(tpoint.right_edge());
+#ifdef MAXTRI_DEBUG
+    if (status.size() != status_size - 2)
+      throw runtime_error("failed to remove right edge!");
+#endif
     break;
+
   default:
     throw runtime_error("handle_tripoint: bad tpoint index!");
   }
