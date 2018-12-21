@@ -774,7 +774,7 @@ public:
       x_s = x_0;
 
     else
-      x_s = x_1 + ((y_s - y_0) * (x_1 - x_0) / (y_1 - y_0));
+      x_s = x_0 + ((y_s - y_0) * (x_1 - x_0) / (y_1 - y_0));
 
     return point_type(x_s, y_s);
   }
