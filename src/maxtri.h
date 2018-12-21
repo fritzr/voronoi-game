@@ -1253,6 +1253,11 @@ public:
         (*ply)[ptri->v[1]]->getPos(),
         (*ply)[ptri->v[2]]->getPos(),
       };
+
+      // Avoid filthy degenerates, as they will gain us nothing
+      if (Collinear(triangle[0], triangle[1], triangle[2]))
+        continue;
+
       tris.emplace_back(*ply, triangle);
 
 #ifdef MAXTRI_DEBUG
