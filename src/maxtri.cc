@@ -7,6 +7,8 @@
 #ifdef DEBUG
 #include <iostream>
 #include <iomanip>
+#include <fstream>
+#include <sstream>
 #endif
 
 #include "maxtri.h"
@@ -223,6 +225,67 @@ handle_tripoint(tri_point_type const& tpoint)
   }
 }
 
+#ifdef MAXTRI_DEBUG
+
+template<class Tp_>
+void MaxTri<Tp_>::
+dump_status_to_octave(ostream& os)
+{
+  vector<coordinate_type> xs, ys;
+  coordinate_type minx = 0.0, maxx = 1920.0;
+  xs.reserve(status.size());
+  ys.reserve(status.size());
+  for (auto const& segment : status)
+  {
+    coordinate_type x1 = getx(segment.first()), x2 = getx(segment.second());
+
+    if (x1 < minx)
+      minx = x1;
+    if (x1 > maxx)
+      maxx = x1;
+    if (x2 < minx)
+      minx = x2;
+    if (x2 > maxx)
+      maxx = x2;
+
+    xs.push_back(x1);
+    xs.push_back(x2);
+    ys.push_back(gety(segment.first()));
+    ys.push_back(gety(segment.second()));
+  }
+
+  os << "figure();" << endl
+    << "hold on;" << endl
+    // draw the sweep line itself
+    << "plot("
+      " [ " << minx << " ; " << maxx << " ] , "
+      " [ " << _lasty << " ; " << _lasty << " ]"
+      ", 'Color', 'red', 'LineWidth', 2);" << endl;
+
+  // scatter plot for all endpoints
+  os << "scatter([";
+  for (auto const& x : xs)
+    os << x << " ; ";
+  os << "] , [";
+  for (auto const& y : ys)
+    os << y << " ; ";
+  os << "]);" << endl;
+
+  // also, plot each segment separately
+  for (auto const& segment : status)
+  {
+    os << "plot(["
+      << getx(segment.first()) << " ; "
+      << getx(segment.second())
+      << "], ["
+      << gety(segment.first()) << " ; "
+      << gety(segment.second())
+      << "]);" << endl;
+  }
+}
+
+#endif
+
 template<class Tp_>
 void MaxTri<Tp_>::
 handle_event(EventType type, event_point_type const& event)
@@ -260,7 +323,13 @@ handle_event(EventType type, event_point_type const& event)
   }
 
 #ifdef MAXTRI_DEBUG
-  cerr << "status:" << endl;
+  static int status_cnt = 0;
+
+  stringstream ofname_s;
+  ofname_s << "status_" << dec << setw(2) << setfill('0') << status_cnt << ".m";
+  string ofname(ofname_s.str());
+
+  cerr << ofname << ":" << endl;
   int i = 0;
   for (auto const& segment : status)
   {
@@ -268,6 +337,12 @@ handle_event(EventType type, event_point_type const& event)
       << segment << endl;
     ++i;
   }
+
+  ofstream ofstatus(ofname);
+  dump_status_to_octave(ofstatus);
+  ofstatus.close();
+
+  ++status_cnt;
 #endif
 }
 

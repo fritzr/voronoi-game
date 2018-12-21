@@ -1220,6 +1220,10 @@ private:
   char intersect(edge_type const& e1, edge_type const& e2, isect_point_type &ix)
     const;
 
+#ifdef MAXTRI_DEBUG
+  void dump_status_to_octave(std::ostream& os);
+#endif
+
 protected:
   // override
   void handle_event(EventType type, event_point_type const& event);
@@ -1364,7 +1368,6 @@ private:
 
     return out;
   }
-
 
 public:
 
