@@ -21,6 +21,7 @@
 #include <boost/geometry/geometries/register/point.hpp>
 #include <boost/geometry/geometries/register/ring.hpp>
 
+#include "util.h"
 #include "user.h"
 #include "polygon.h"
 #include "intersection.h"
@@ -598,9 +599,70 @@ public:
 };
 
 template<typename Tp_>
-struct event_point_compare_y
+inline bool
+_event_point_ycompare(
+    typename traits<Tp_>::event_point_type const& p1,
+    typename traits<Tp_>::event_point_type const& p2)
 {
+  // We've just found the points are equivalent by value, so compare by...
+
+  // event type
+  if (p1.type() < p2.type())
+    return true;
+  if (p1.type() != p2.type())
+    return false;
+
+  // then by point index (for triangle points)
+  if (p1.type() == TRIPOINT)
+    return p1.point().index < p2.point().index;
+
+  // else // p1.type() == INTERSECTION
+  // otherwise we really don't care, but if it comes to this
+  // then std::set will explode
+  return false;
+}
+
+// Unfortunately this can't be a member function before C++17, so it's best to
+// delegate to a namespace-bound function for now.
+template<typename Pt1_, typename Pt2_>
+inline bool
+_specialized_ycompare(Pt1_ const& p1, Pt2_ const& p2)
+{
+  return false;
+}
+
+template<>
+inline bool
+_specialized_ycompare<
+    traits<float>::event_point_type
+  , traits<float>::event_point_type>
+  (typename traits<float>::event_point_type const& p1,
+   typename traits<float>::event_point_type const& p2)
+{
+  return _event_point_ycompare<float>(p1, p2);
+}
+
+template<>
+inline bool
+_specialized_ycompare<
+    traits<double>::event_point_type
+  , traits<double>::event_point_type>
+  (typename traits<double>::event_point_type const& p1,
+   typename traits<double>::event_point_type const& p2)
+{
+  return _event_point_ycompare<double>(p1, p2);
+}
+
+template<typename Tp_>
+class event_point_compare_y
+{
+public:
   INHERIT_TRAITS(Tp_);
+
+private:
+
+
+public:
 
   // When comparing two edge points A and C in edges E1 = <A,B> and E2 = <C,D>
   // the points are lexicographically sorted by following criteria:
@@ -610,8 +672,9 @@ struct event_point_compare_y
   //   #.  B.y < D.y
   //   #.  B is right edge < D is left edge
   //   #.  B.x < D.x
+  template<typename Pt1_, typename Pt2_>
   inline bool
-  operator()(event_point_type const& p1, event_point_type const& p2) const
+  operator()(Pt1_ const& p1, Pt2_ const& p2) const
   {
     // We can do all this in one big long condition a && (b || (x && d || ...
     // but this is much more readable, and should be equivalent
@@ -628,20 +691,8 @@ struct event_point_compare_y
     if (getx(p1) != getx(p2))
       return false;
 
-    // Then by event type
-    if (p1.type() < p2.type())
-      return true;
-    if (p1.type() != p2.type())
-      return false;
-
-    // Then by point index (for triangle points)
-    if (p1.type() == TRIPOINT)
-      return p1.point().index < p2.point().index;
-
-    // else // p1.type() == INTERSECTION
-    // otherwise we really don't care, but if it comes to this
-    // then std::set will explode
-    return false;
+    // Type-specific fall-back comparisons.
+    return _specialized_ycompare(p1, p2);
   }
 
 };
@@ -943,22 +994,24 @@ public:
   Triangle(polygon_type const& parent, Tri const& input_tri)
     : m_data(new m_type(parent, input_tri))
   {
-    int maxy_index = 0;
-    point_type maxy_point = input_tri[0];
-
     // Find the highest point: this is index 0.
-    if (input_tri[1].y() > maxy_point.y()) maxy_index = 1;
-    if (input_tri[2].y() > maxy_point.y()) maxy_index = 2;
-    maxy_point = input_tri[maxy_index];
+    int maxy_index = 0;
+    event_point_ycompare ycmp;
+
+    if (ycmp(input_tri[maxy_index], input_tri[1]))
+      maxy_index = 1;
+    if (ycmp(input_tri[maxy_index], input_tri[2]))
+      maxy_index = 2;
+    point_type maxy_point = input_tri[maxy_index];
 
     // Find the order of points that form a left turn.
     int left_index = (maxy_index+2) % 3; // equivalent to -1, but not negative
     int right_index = (maxy_index+1) % 3;
     if (leftTurn(input_tri[left_index], maxy_point, input_tri[right_index]))
     {
-      int swp = left_index;
+      int left_swp = left_index;
       left_index = right_index;
-      right_index = swp;
+      right_index = left_swp;
     }
 
     // Now we have the point order.
@@ -969,7 +1022,7 @@ public:
     // Find the lowest of (left, right): this is the second index of E2.
     int e2_first = 1, e2_second = 2;
     bp::direction_1d e2_dir = bp::LEFT;
-    if (points()[1].y() < points()[2].y())
+    if (ycmp(points()[1], points()[2]))
     {
       e2_first = 2;
       e2_second = 1;
@@ -977,12 +1030,12 @@ public:
     }
 
     // Finally we can finish the edges.
-    edges()[0].first().set(points()[0]);
-    edges()[0].second().set(points()[1]);
-    edges()[1].first().set(points()[0]);
-    edges()[1].second().set(points()[2]);
-    edges()[2].first().set(points()[e2_first]);
-    edges()[2].second().set(points()[e2_second]);
+    bg::assign(edges()[0].first(), points()[0]);
+    bg::assign(edges()[0].second(), points()[1]);
+    bg::assign(edges()[1].first(), points()[0]);
+    bg::assign(edges()[1].second(), points()[2]);
+    bg::assign(edges()[2].first(), points()[e2_first]);
+    bg::assign(edges()[2].second(), points()[e2_second]);
     edges()[2].dir(e2_dir);
   }
 
