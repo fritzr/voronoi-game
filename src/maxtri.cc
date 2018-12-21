@@ -54,18 +54,18 @@ template<class Tp_>
 template<typename Iter>
 void
 MaxTri<Tp_>::
-check_intersections(const Iter segment, const Iter begin, const Iter end)
+check_intersection(const Iter segment, const Iter neighbor, const Iter end)
 {
-  for (Iter sit = begin; sit != end && can_intersect(*segment, *sit); ++sit)
+  if (segment != end && neighbor != end)
   {
     // Check for intersections and queue any we find.
     isect_point_type intersection;
-    char code = intersect(segment->edge(), sit->edge(), intersection);
+    char code = intersect(segment->edge(), neighbor->edge(), intersection);
     if ('0' != code && 'v' != code && 'e' != code)
     {
 #ifdef MAXTRI_DEBUG
       cerr << "    found intersection '" << code << "' "
-        << intersection << " with " << *sit << endl;
+        << intersection << " with " << *neighbor << endl;
 #endif
       queue().push(intersection);
     }
@@ -78,18 +78,15 @@ insert_edge(edge_type const& e)
 {
   // Insert the edge by its top point.
   status_iterator elb = status.emplace(e).first;
-  status_iterator eit = elb;
 
   // Look for intersections with edges in the status to the...
 
   // ... left
-  if (getx(e.second()) < getx(e.first()))
-    check_intersections(status_riterator(elb), ++status_riterator(elb),
+  check_intersection(status_riterator(elb), ++status_riterator(elb),
         status.rend());
 
   // ... right
-  else
-    check_intersections(elb, ++status_iterator(elb), status.end());
+  check_intersection(elb, ++status_iterator(elb), status.end());
 }
 
 template<class Tp_>
@@ -115,11 +112,60 @@ template<class Tp_>
 void MaxTri<Tp_>::
 handle_intersection(isect_point_type const& isect)
 {
-  // Swap the edges that intersect in the status. TODO
-  status_seg_type lseg = isect.make_segment(bp::LEFT);
-  status_seg_type rseg = isect.make_segment(bp::RIGHT);
+  // Swap the edges that intersect in the status.
+  // The old left/right edges are now the new right/left edges.
+  status_seg_type lseg_new = isect.make_segment(bp::LEFT);
+  status_seg_type rseg_old(lseg_new.edge());
+  status_seg_type rseg_new = isect.make_segment(bp::RIGHT);
+  status_seg_type lseg_old(rseg_new.edge());
 
-  status_iterator lb = status.lower_bound(lseg);
+  status_iterator lb = status.find(lseg_old);
+  status_iterator rb = status.find(rseg_old);
+#ifdef MAXTRI_DEBUG
+  if (lb == status.end())
+    throw runtime_error("failed to find old left edge!");
+  if (rb == status.end())
+    throw runtime_error("failed to find old right edge!");
+
+  size_t status_size = status.size();
+#else
+  assert(lb != status.end());
+  assert(rb != status.end());
+#endif
+
+  // Perform the swap.
+  lb = status.erase(lb);
+#ifdef MAXTRI_DEBUG
+  if (status.size() != status_size - 1)
+    throw runtime_error("failed to remove old right edge from status!");
+#endif
+  --lb;
+
+  rb = status.erase(rb);
+#ifdef MAXTRI_DEBUG
+  if (status.size() != status_size - 2)
+    throw runtime_error("failed to remove old left edge from status!");
+#endif
+
+  rb = lb = status.insert(lb, lseg_new);
+#ifdef MAXTRI_DEBUG
+  if (status.size() != status_size - 1)
+    throw runtime_error("failed to insert new left edge into status!");
+#endif
+
+  rb = status.insert(rb, rseg_new);
+#ifdef MAXTRI_DEBUG
+  if (status.size() != status_size)
+    throw runtime_error("failed to insert new right edge into status!");
+#endif
+
+  // See if the new left edge intersects with its new left neighbor,
+  // ditto for the new right edge and its right neighbor
+  status_riterator lend = status.rend();
+  check_intersection(status_riterator(lb), ++status_riterator(lb), lend);
+
+  status_iterator rend = status.end();
+  check_intersection(status_iterator(rb), ++status_iterator(rb), rend);
 }
 
 template<class Tp_>
