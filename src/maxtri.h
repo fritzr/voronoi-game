@@ -427,7 +427,8 @@ public:
   inline friend
   std::ostream& operator<<(std::ostream& os, TriEventPoint const& p)
   {
-    os << "[0] joining " << p.left_edge() << " + " << p.right_edge();
+    os << "[" << p.index << "] joining "
+      << p.left_edge() << " + " << p.right_edge();
     return os;
   }
 #endif
