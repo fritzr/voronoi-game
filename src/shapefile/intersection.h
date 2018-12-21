@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <cassert>
+#include <cmath>
 
 #include "boost_geo_poly.h"
 #include <boost/geometry/util/select_coordinate_type.hpp>
@@ -103,17 +104,18 @@ inline bool Between_strict(const Pt a, const Pt b, const Pt c)
     }
 }
 
-
-template <typename C>
-inline bool AlmostEqual3(const C a, const C b)
+template <typename T>
+inline bool AlmostEqualV(const T a, const T b, T tau=SMALLNUMBER)
 {
-    return (fabs(a[0]-b[0])<SMALLNUMBER &&fabs(a[1]-b[1])<SMALLNUMBER && fabs(a[2]-b[2])<SMALLNUMBER);
+    return fabs(a-b)<tau && fabs(a-b)<tau;
 }
 
-template <typename Pt, typename T>
-inline bool AlmostEqual(const Pt a, const Pt b, T tau)
+template <typename Pt>
+inline bool AlmostEqual(const Pt a, const Pt b,
+    typename bg::coordinate_type<Pt>::type tau)
 {
-    return (fabs(bg::get<0>(a)-bg::get<0>(b))<tau &&fabs(bg::get<1>(a)-bg::get<1>(b))<tau);
+    return AlmostEqualV(bg::get<0>(a), bg::get<0>(b), tau)
+      && AlmostEqualV(bg::get<1>(a), bg::get<1>(b), tau);
 }
 
 template <typename Pt>

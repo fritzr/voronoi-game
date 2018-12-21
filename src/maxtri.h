@@ -698,16 +698,12 @@ public:
     // but this is much more readable, and should be equivalent
 
     // Order by y
-    if (gety(p1) < gety(p2))
-      return true;
-    if (gety(p1) != gety(p2))
-      return false;
+    if (!AlmostEqualV(gety(p1), gety(p2)))
+      return gety(p1) < gety(p2);
 
     // Then by x
-    if (getx(p1) < getx(p2))
-      return true;
-    if (getx(p1) != getx(p2))
-      return false;
+    if (!AlmostEqualV(getx(p1), getx(p2)))
+      return getx(p1) < getx(p2);
 
     // Type-specific fall-back comparisons.
     return _specialized_ycompare(p1, p2);
@@ -837,18 +833,14 @@ public:
     const point_type sort_b = isect_sweep(b, sweepy);
 
     // First compare by x/y value
-    if (getx(sort_a) < getx(sort_b))
-      return true;
-    if (getx(sort_a) != getx(sort_b))
-      return false;
+    if (!AlmostEqualV(getx(sort_a), getx(sort_b)))
+      return getx(sort_a) < getx(sort_b);
 
-    if (gety(sort_a) < gety(sort_b))
-      return true;
-    if (gety(sort_a) != gety(sort_b))
-      return false;
+    if (!AlmostEqualV(gety(sort_a), gety(sort_b)))
+      return gety(sort_a) < gety(sort_b);
 
     // If the points are equal, sort by orientation;
-    // the left-heading edge should be first
+    // the left-heading edge should be less to match our x-coordinate check
     coordinate_type turn = compare_orientation(a, b);
 
     // If the points are parallel (same slope), compare by owning triangle
