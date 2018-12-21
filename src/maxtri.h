@@ -766,7 +766,16 @@ public:
       , x_1 = getx(seg.second()), y_1 = gety(seg.second());
 
     // derived from: y=m(x-xa)+ya where m=(yb-ya)/(xb-xa)
-    coordinate_type x_s = x_1 + ((y_s - y_0) * (x_1 - x_0) / (y_1 - y_0));
+    coordinate_type x_s;
+
+    // Degenerate case; segment is parallel to and intersects sweep line.
+    // In this case the y value better be the same as the sweep coordinate...
+    if (y_1 == y_0)
+      x_s = x_0;
+
+    else
+      x_s = x_1 + ((y_s - y_0) * (x_1 - x_0) / (y_1 - y_0));
+
     return point_type(x_s, y_s);
   }
 
@@ -1240,7 +1249,7 @@ public:
       tris.emplace_back(*ply, triangle);
 
 #ifdef MAXTRI_DEBUG
-      std::cout << "QUEUE edges" << std::endl
+      std::cout << "QUEUE triangle" << std::endl
         << "    [0] " << tris.back().edge(0) << std::endl
         << "    [1] " << tris.back().edge(1) << std::endl
         << "    [2] " << tris.back().edge(2) << std::endl;
