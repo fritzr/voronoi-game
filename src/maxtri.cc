@@ -59,8 +59,8 @@ check_intersections(const Iter segment, const Iter begin, const Iter end)
   {
     // Check for intersections and queue any we find.
     isect_point_type intersection;
-    char code;
-    if ('0' != (code = intersect(segment->edge(), sit->edge(), intersection)))
+    char code = intersect(segment->edge(), sit->edge(), intersection);
+    if ('0' != code && 'v' != code && 'e' != code)
     {
 #ifdef MAXTRI_DEBUG
       cerr << "    found intersection '" << code << "' "
