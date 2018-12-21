@@ -11,15 +11,15 @@
 #define HUGENUMBER  1.0e10
 
 /* Whether p1 -> p2 -> p3 forms a left turn.  */
-template<class Pt_>
+template<class Pt1_, class Pt2_, class Pt3_>
 bool
-leftTurn(Pt_ const& p1, Pt_ const& p2, Pt_ const& p3)
+leftTurn(Pt1_ const& p1, Pt2_ const& p2, Pt3_ const& p3)
 {
   auto v = p3;
   bg::subtract_point(v, p2); // normal direction
   auto u = p2;
   bg::subtract_point(u, p1);
-  auto z = u.x() * v.y() - u.y() * v.x();
+  auto z = bg::get<0>(u) * bg::get<1>(v) - bg::get<1>(u) * bg::get<0>(v);
   return z > 0;
 }
 
@@ -140,9 +140,9 @@ inline bool Union(Pt const& a, Pt const& b, Pt const& c, Pt const& d, Pt *p)
 }
 
 
-template <typename Pt>
+template <typename PtIn, typename PtOut>
 inline char ParallelInt(
-    Pt const& a, Pt const& b, Pt const& c, Pt const& d, Pt &p)
+    PtIn const& a, PtIn const& b, PtIn const& c, PtIn const& d, PtOut &p)
 {
    if(!Collinear(a, b, c)) return '0';
 
@@ -174,11 +174,11 @@ segments ab and cd.  Returns p and a char with the following meaning:
 Note that two collinear segments that share just one point, an endpoint
 of each, returns 'e' rather than 'v' as one might expect.
 ---------------------------------------------------------------------*/
-template <typename Pt>
+template <typename PtIn, typename PtOut>
 inline char SegSegInt(
-    Pt const& a, Pt const& b, Pt const& c, Pt const& d, Pt &p)
+    PtIn const& a, PtIn const& b, PtIn const& c, PtIn const& d, PtOut &p)
 {
-  typedef typename bg::coordinate_type<Pt>::type coord_t;
+  typedef typename bg::coordinate_type<PtIn>::type coord_t;
    coord_t  s, t;        // The two parameters of the parametric eqns.
    coord_t  num_s, num_t, denom;   // Numerator and denoninator of equations.
    char    code = '?';    // Return char characterizing intersection.
