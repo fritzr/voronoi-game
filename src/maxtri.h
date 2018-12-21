@@ -801,7 +801,7 @@ public:
      *
      */
     point_type p = b.second(), r = a.first(), q = a.second();
-    return leftTurn(p, r, q);
+    return orientation(p, r, q);
   }
 
   // Compare two segments by their top point.
@@ -831,7 +831,13 @@ public:
 
     // If the points are equal, sort by orientation;
     // the left-heading edge should be first
-    return compare_orientation(a, b);
+    coordinate_type turn = compare_orientation(a, b);
+
+    // If the points are parallel (same slope), compare by owning polygon
+    if (turn == 0)
+      return &a.edge().poly() < &b.edge().poly();
+    else
+      return turn > 0; // left turn
   }
 
 };

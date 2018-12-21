@@ -5,6 +5,7 @@
 #include <cassert>
 
 #include "boost_geo_poly.h"
+#include <boost/geometry/util/select_coordinate_type.hpp>
 
 /* range of real numbers */
 #define SMALLNUMBER 1.0e-10
@@ -12,15 +13,31 @@
 
 /* Whether p1 -> p2 -> p3 forms a left turn.  */
 template<class Pt1_, class Pt2_, class Pt3_>
-bool
-leftTurn(Pt1_ const& p1, Pt2_ const& p2, Pt3_ const& p3)
+typename bg::select_coordinate_type<Pt1_, Pt2_, Pt3_>::type
+orientation(Pt1_ const& p1, Pt2_ const& p2, Pt3_ const& p3)
 {
   auto v = p3;
   bg::subtract_point(v, p2); // normal direction
   auto u = p2;
   bg::subtract_point(u, p1);
   auto z = bg::get<0>(u) * bg::get<1>(v) - bg::get<1>(u) * bg::get<0>(v);
-  return z > 0;
+  return z;
+}
+
+/* Whether p1 -> p2 -> p3 forms a left turn.  */
+template<class Pt1_, class Pt2_, class Pt3_>
+bool
+leftTurn(Pt1_ const& p1, Pt2_ const& p2, Pt3_ const& p3)
+{
+  return orientation(p1, p2, p3) > 0;
+}
+
+/* Whether p1 -> p2 -> p3 forms a right turn.  */
+template<class Pt1_, class Pt2_, class Pt3_>
+bool
+rightTurn(Pt1_ const& p1, Pt2_ const& p2, Pt3_ const& p3)
+{
+  return orientation(p1, p2, p3) < 0;
 }
 
 // This is copied from CG in C
