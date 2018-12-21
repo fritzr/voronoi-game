@@ -101,8 +101,14 @@ remove_edge(edge_type const& e)
   // be adding another edge, but it is handled by a separate event
   status_seg_type edge_segment(e);
   status_iterator elb = status.find(edge_segment);
-  assert(elb != status.end());
-  status.erase(elb);
+
+#ifdef MAXTRI_DEBUG
+  // this should always be true: if it's not, handle_tripoint will catch it
+  if (elb != status.end())
+#else
+  assert (elb != status.end())
+#endif
+    status.erase(elb);
 }
 
 template<class Tp_>
