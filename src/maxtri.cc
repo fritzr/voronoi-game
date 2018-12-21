@@ -1,6 +1,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <functional>
+#include <iterator>
 
 #ifdef DEBUG
 #include <iostream>
@@ -16,18 +17,58 @@ using namespace std;
 namespace cfla { namespace tri
 {
 
-  using ::operator<<;
+using ::operator<<;
+
 
 template<class Tp_>
 MaxTri<Tp_>::~MaxTri(void)
 {
+  status.clear();
+  tris.clear();
   polys.clear();
 }
 
 template<class Tp_>
-MaxTri<Tp_>::MaxTri(void)
-  : tris(), polys(), edge_points(), max_depth(-1)
+char MaxTri<Tp_>::
+intersect(edge_type const& a, edge_type const& b, isect_point_type &result)
+  const
 {
+  char c = '0';
+  // Only consider intersections between edges from triangles belonging to
+  // different polygons.
+  if (&a.poly() != &b.poly())
+  {
+    c = SegSegInt(a.first(), a.second(), b.first(), b.second(), result);
+    if (c != '0')
+    {
+      // Note the position is already set by SegSegInt.
+      result.e1 = a.data();
+      result.e2 = b.data();
+    }
+  }
+  return c;
+}
+
+template<class Tp_>
+template<typename Iter>
+void
+MaxTri<Tp_>::
+check_intersections(const Iter segment, const Iter begin, const Iter end)
+{
+  for (Iter sit = begin; sit != end && can_intersect(*segment, *sit); ++sit)
+  {
+    // Check for intersections and queue any we find.
+    isect_point_type intersection;
+    char code;
+    if ('0' != (code = intersect(segment->edge(), sit->edge(), intersection)))
+    {
+#ifdef MAXTRI_DEBUG
+      cerr << "    found intersection '" << code << "' "
+        << intersection << " with " << *sit << endl;
+#endif
+      queue().push(intersection);
+    }
+  }
 }
 
 template<class Tp_>
@@ -35,113 +76,116 @@ void MaxTri<Tp_>::
 insert_edge(edge_type const& e)
 {
   // Insert the edge by its top point.
-  edge_point_iterator elb = edge_points.insert(e.first()).first;
-  edge_point_iterator eit = elb;
+  status_iterator elb = status.emplace(e).first;
+  status_iterator eit = elb;
 
-  // See if we overlap the left/right edges.
-  --eit;
-  bool intersects = true;
-  int incr = -1;
-  while (intersects && eit != edge_points.end())
-  {
-    // Check for intersection, but only if the edges are from different
-    // polygon triangulations.
-    if (&e.tridata()->poly != &eit->tridata()->poly)
-    {
-      point_type p;
-      char isect_code = SegSegInt(
-          static_cast<point_type const&>(e.first()),
-          static_cast<point_type const&>(e.second()),
-          static_cast<point_type const&>(*eit),
-          static_cast<point_type const&>(eit->other()),
-          p);
-      if (isect_code == '0')
-        intersects = false;
+  // Look for intersections with edges in the status to the...
 
-      // Queue the intersection point.
-      else
-      {
-#ifdef MAXTRI_DEBUG
-        cerr << "    found intersection " << p << " with "
-          << *eit << endl;
-#endif
-        queue().push(isect_point_type(p, e.data(), eit->edata));
-      }
-    }
-    if (incr < 0 && eit != edge_points.begin())
-      --eit;
-    else if (incr > 0 && eit != edge_points.end())
-      ++eit;
+  // ... left
+  if (getx(e.second()) < getx(e.first()))
+    check_intersections(status_riterator(elb), ++status_riterator(elb),
+        status.rend());
 
-    // Once we've reached the left boundary, start over *increasing* from the
-    // insertion point. When we reach the end, the while loop will terminate.
-    if ((!intersects || eit == edge_points.begin()) && incr < 0)
-    {
-      eit = elb;
-      ++eit;
-      incr = 1;
-    }
-  }
-
+  // ... right
+  else
+    check_intersections(elb, ++status_iterator(elb), status.end());
 }
 
 template<class Tp_>
 void MaxTri<Tp_>::
 remove_edge(edge_type const& e)
 {
-  // TODO
+  // Remove the edge from the status.
+  // If this is not the bottom edge ([2]) in the triangle, we will immediately
+  // be adding another edge, but it is handled by a separate event
+  status_seg_type edge_segment(e);
+  status_iterator elb = status.find(edge_segment);
+  assert(elb != status.end());
+  status.erase(elb);
 }
 
 template<class Tp_>
 void MaxTri<Tp_>::
-handle_intersection(isect_point_type const& ix)
+handle_intersection(isect_point_type const& isect)
 {
-  // TODO
+  // Swap the edges that intersect in the status. TODO
+  status_seg_type lseg = isect.make_segment(bp::LEFT);
+  status_seg_type rseg = isect.make_segment(bp::RIGHT);
+
+  status_iterator lb = status.lower_bound(lseg);
 }
 
 template<class Tp_>
 void MaxTri<Tp_>::
-handle_event(bool intersection_event, event_point_type const& event)
+handle_tripoint(tri_point_type const& tpoint)
 {
-
-  if (intersection_event)
+  // We can do this by just queueing all points twice, but this way is clearer
+  // and simplifies event ordering. See the diagrams in the header for
+  // reference on which points are which.
+  switch (tpoint.index)
   {
-    isect_point_type const& isect(event.isect());
-
-#ifdef MAXTRI_DEBUG
-    cerr << "handling intersection of " << isect.e1->edge()
-      << " and " << isect.e2->edge() << endl;
-#endif
-
-    handle_intersection(isect);
+  case 0:
+    insert_edge(tpoint.left_edge());
+    insert_edge(tpoint.right_edge());
+    break;
+  case 1:
+    remove_edge(tpoint.left_edge());
+    insert_edge(tpoint.right_edge());
+    break;
+  case 2:
+    remove_edge(tpoint.left_edge());
+    remove_edge(tpoint.right_edge());
+    break;
+  default:
+    throw runtime_error("handle_tripoint: bad tpoint index!");
   }
+}
 
-  else
+template<class Tp_>
+void MaxTri<Tp_>::
+handle_event(EventType type, event_point_type const& event)
+{
+  _lasty = gety(event);
+
+  switch (type)
   {
-    edge_point_type const& edge_point(event.edge());
-    edge_type const& edge(edge_point.edge());
-
-#ifdef MAXTRI_DEBUG
-  cerr << "handling "
-    << setw(6) << setfill(' ') << (edge_point.dir == bp::LOW ? "FIRST":"SECOND")
-    << " point from "
-    << setw(6) << setfill(' ') << (edge.dir() == bp::LOW ? "LEFT":"RIGHT" )
-    << " edge" << edge << endl;
-#endif
-
-    switch (edge_point.dir.to_int())
+  case INTERSECTION:
     {
-      case bp::LOW: // first (top) point of edge
-        insert_edge(edge); break;
+      isect_point_type const& isect(event.isect());
 
-      case bp::HIGH: // second (bottom) point of edge
-        remove_edge(edge); break;
+#ifdef MAXTRI_DEBUG
+      cerr << "handling intersection " << isect << endl;
+#endif
 
-      default:
-        // unreachable
-        throw std::runtime_error("bad int value for EdgePoint::dir!");
+      handle_intersection(isect);
     }
+    break;
+
+  case TRIPOINT:
+    {
+      tri_point_type const& tri_point(event.point());
+
+#ifdef MAXTRI_DEBUG
+      cerr << "handling point " << tri_point << endl;
+#endif
+
+      handle_tripoint(tri_point);
+    }
+    break;
+
+  default:
+    throw std::runtime_error("unhandled event type!");
   }
+
+#ifdef MAXTRI_DEBUG
+  cerr << "status:" << endl;
+  int i = 0;
+  for (auto const& segment : status)
+  {
+    cerr << "    [" << setw(2) << i << "] " << segment << endl;
+    ++i;
+  }
+#endif
 }
 
 template<class Tp_>

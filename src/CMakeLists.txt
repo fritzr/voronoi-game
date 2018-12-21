@@ -76,10 +76,10 @@ add_executable(${TEST_PROG}
   nn1.h
   voronoi.h
   voronoi.cc
-  maxrect.h
-  maxrect.cc
   maxtri.h
   maxtri.cc
+  maxrect.h
+  maxrect.cc
 
   vgame.h
   #vgame.cc
