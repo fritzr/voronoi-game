@@ -28,6 +28,23 @@
 #include "sweep.h"
 #include "nn1.h"
 
+#ifdef MAXTRI_DEBUG
+struct ioptr
+{
+  const uintptr_t ptrval;
+
+  ioptr(const void *p) : ptrval(reinterpret_cast<uintptr_t>(p)) {}
+
+  inline friend
+  std::ostream &operator<<(std::ostream &os, ioptr const& iop)
+  {
+    os << std::hex << std::setw(2*__SIZEOF_POINTER__) << std::setfill('0')
+      << iop.ptrval;
+    return os;
+  }
+};
+#endif
+
 namespace cfla { namespace tri
 {
 
@@ -924,7 +941,8 @@ public:
 
 #ifdef MAXTRI_DEBUG
   inline friend std::ostream& operator<<(std::ostream& os, Edge const& e) {
-    os << "[ " << e.first() << " => " << e.second() << " ]";
+    os << "[ " << e.first() << " => " << e.second() << " ]"
+      " (@tri=0x" << ioptr(e.tridata()) << ")";
     return os;
   }
 #endif

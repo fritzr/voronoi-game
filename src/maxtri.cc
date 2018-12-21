@@ -212,7 +212,8 @@ handle_event(EventType type, event_point_type const& event)
   int i = 0;
   for (auto const& segment : status)
   {
-    cerr << "    [" << setw(2) << i << "] " << segment << endl;
+    cerr << "    [" << setw(2) << dec << setfill(' ') << i << "] "
+      << segment << endl;
     ++i;
   }
 #endif
