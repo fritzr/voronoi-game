@@ -851,9 +851,9 @@ public:
     // the left-heading edge should be first
     coordinate_type turn = compare_orientation(a, b);
 
-    // If the points are parallel (same slope), compare by owning polygon
-    if (turn == 0)
-      return &a.edge().poly() < &b.edge().poly();
+    // If the points are parallel (same slope), compare by owning triangle
+    if (abs(turn) < SMALLNUMBER)
+      return a.edge().tridata() < b.edge().tridata();
     else
       return turn > 0; // left turn
   }
