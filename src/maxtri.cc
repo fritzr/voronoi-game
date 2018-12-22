@@ -244,7 +244,8 @@ void MaxTri<Tp_>::
 dump_status_to_octave(ostream& os)
 {
   vector<coordinate_type> xs, ys;
-  coordinate_type minx = 0.0, maxx = 1920.0;
+  coordinate_type minx = numeric_limits<coordinate_type>::max()
+                , maxx = numeric_limits<coordinate_type>::lowest();
   xs.reserve(status.size());
   ys.reserve(status.size());
   for (auto const& segment : status)
@@ -267,12 +268,15 @@ dump_status_to_octave(ostream& os)
   }
 
   os << "figure();" << endl
-    << "hold on;" << endl
-    // draw the sweep line itself
-    << "plot("
-      " [ " << minx << " ; " << maxx << " ] , "
-      " [ " << _lasty << " ; " << _lasty << " ]"
-      ", 'Color', 'red', 'LineWidth', 2);" << endl;
+    << "hold on;" << endl;
+  // draw the sweep line itself if we have anything
+  if (status.size() > 0)
+  {
+    os << "plot([ " << minx << " ; " << maxx << " ], "
+               "[ " << _lasty << " ; " << _lasty << " ]"
+               ", 'Color', 'red', 'LineWidth', 2);" << endl
+       << "xlim([ " << minx << " ; " << maxx << " ]);" << endl;
+  }
 
   // scatter plot for all endpoints
   os << "scatter([";

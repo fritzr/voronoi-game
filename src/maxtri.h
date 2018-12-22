@@ -740,7 +740,12 @@ public:
   inline friend
   std::ostream& operator<<(std::ostream& os, StatusSegment const& s)
   {
-    os << s.first() << " -> " << s.second() << " along " << s.edge();
+    os << s.first() << " -> " << s.second();
+    if (!AlmostEqual(s.first(), s.edge().first())
+        || !AlmostEqual(s.second(), s.edge().second()))
+      os << ", fragment of " << s.edge();
+    else
+      os << " (@tri=0x" << ioptr(s.edge().tridata()) << ")";
     return os;
   }
 #endif
