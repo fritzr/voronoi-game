@@ -104,22 +104,24 @@ inline bool Between_strict(const Pt a, const Pt b, const Pt c)
     }
 }
 
-template <typename T>
-inline bool AlmostEqualV(const T a, const T b, T tau=SMALLNUMBER)
+template <typename T1, typename T2, typename T3=decltype(SMALLNUMBER)>
+inline bool AlmostEqualV(const T1 a, const T2 b, T3 tau=SMALLNUMBER)
 {
-    return fabs(a-b)<tau && fabs(a-b)<tau;
+  typedef typename bg::select_most_precise<T1, T2, T3>::type coord_t;
+  coord_t aa = a, bb = b, tt = tau;
+  return std::abs(aa - bb) < tt;
 }
 
-template <typename Pt>
-inline bool AlmostEqual(const Pt a, const Pt b,
-    typename bg::coordinate_type<Pt>::type tau)
+template <typename Pt1, typename Pt2>
+inline bool AlmostEqual(const Pt1 a, const Pt2 b,
+    typename bg::select_coordinate_type<Pt1, Pt2>::type tau)
 {
     return AlmostEqualV(bg::get<0>(a), bg::get<0>(b), tau)
       && AlmostEqualV(bg::get<1>(a), bg::get<1>(b), tau);
 }
 
-template <typename Pt>
-inline bool AlmostEqual(const Pt a, const Pt b)
+template <typename Pt1, typename Pt2>
+inline bool AlmostEqual(const Pt1 a, const Pt2 b)
 {
     return AlmostEqual(a, b, SMALLNUMBER);
 }
