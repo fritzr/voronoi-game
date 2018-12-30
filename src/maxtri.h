@@ -791,28 +791,29 @@ public:
   }
 
   // Compare two segments which share a top point by their orientation,
-  // where the left-most-facing segment has lower priority matching the x-sort
+  // where the left-most-facing segment compares less matching the x-sort
   // order.
   static coordinate_type
-    compare_orientation(status_seg_type const& a, status_seg_type const& b)
+    compare_orientation(status_seg_type const& a, status_seg_type const& b,
+        point_type pivot)
   {
-    /* As a precondition, we assume A and B share a top point.
+    /* As a precondition, we assume A and B share a pivot point.
      * The compare result ("a less than b") is computed as follows,
      * and returned according to the rule that a lefter edge is lesser:
      *
-     *                        *                 *
+     *                        *   <- pivot ->   *
      *                       / \               / \
-     *                   A  / r \  B       B  / r \  A
+     *                   A  / q \  B       B  / q \  A
      *                     /     \           /     \
      *                    <       \         /       >
-     *                   q         p       p         q
+     *                   r         p       p         r
      *
      *  result?             A < B            B < A
-     *  leftTurn(p,r,q)?    true             false
+     *  leftTurn(p,q,r)?    true             false
      *
      */
-    point_type p = b.second(), r = a.first(), q = a.second();
-    return orientation(p, r, q);
+    point_type p = b.second(), r = a.second();
+    return orientation(p, pivot, r);
   }
 
   // Whether two segments are identical except for their triangle.
@@ -827,7 +828,7 @@ public:
 
     return AlmostEqualV(getx(sort_a), getx(sort_b))
       && AlmostEqualV(gety(sort_a), gety(sort_b))
-      && AlmostEqualV(compare_orientation(a, b), coordinate_type(0));
+      && AlmostEqualV(compare_orientation(a, b, sort_a), 0);
   }
 
   // Compare two segments by their top point.
@@ -853,13 +854,13 @@ public:
 
     // If the points are equal, sort by orientation;
     // the left-heading edge should be less to match our x-coordinate check
-    coordinate_type turn = compare_orientation(a, b);
+    coordinate_type turn = compare_orientation(a, b, sort_a);
 
     // If the points are parallel (same slope), compare by owning triangle
-    if (abs(turn) < SMALLNUMBER)
+    if (AlmostEqualV(turn, 0))
       return a.edge().tridata() < b.edge().tridata();
-    else
-      return turn > 0; // left turn
+
+    return turn > 0; // left turn
   }
 
 };
