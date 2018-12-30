@@ -776,14 +776,14 @@ public:
         x_0 = getx(seg.first()), y_0 = gety(seg.first())
       , x_1 = getx(seg.second()), y_1 = gety(seg.second());
 
-    // derived from: y=m(x-xa)+ya where m=(yb-ya)/(xb-xa)
     coordinate_type x_s;
 
     // Degenerate case; segment is parallel to and intersects sweep line.
     // In this case the y value better be the same as the sweep coordinate...
-    if (y_1 == y_0)
+    if (AlmostEqualV(y_1, y_0))
       x_s = x_0;
 
+    // derived from: y=m(x-xa)+ya where m=(yb-ya)/(xb-xa)
     else
       x_s = x_0 + ((y_s - y_0) * (x_1 - x_0) / (y_1 - y_0));
 
