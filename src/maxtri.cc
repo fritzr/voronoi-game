@@ -92,19 +92,25 @@ check_intersection(const Iter segment, Iter neighbor, const Iter end)
 
 template<class Tp_>
 void MaxTri<Tp_>::
+check_intersections(const status_iterator center)
+{
+  // Look left
+  status_riterator rcenter(center);
+  check_intersection(rcenter, ++status_riterator(rcenter), status.rend());
+
+  // Look right
+  check_intersection(center, ++status_iterator(center), status.end());
+}
+
+template<class Tp_>
+void MaxTri<Tp_>::
 insert_edge(edge_type const& e)
 {
   // Insert the edge by its top point.
   status_iterator elb = status.emplace(e).first;
 
-  // Look for intersections with edges in the status to the...
-
-  // ... left
-  check_intersection(status_riterator(elb), ++status_riterator(elb),
-        status.rend());
-
-  // ... right
-  check_intersection(elb, ++status_iterator(elb), status.end());
+  // Look for intersections with adjacent edges in the status.
+  check_intersections(elb);
 }
 
 template<class Tp_>

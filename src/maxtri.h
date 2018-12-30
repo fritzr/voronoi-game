@@ -1229,10 +1229,21 @@ private:
     return test_dir1 != test_dir2;
   }
 
-  // Look through the status (in the correct direction) to find which edges
-  // intersect the newly inserted edge and queue the intersection points.
+  // Look through the status in both directions to find which edges intersect
+  // the given edge. Queue the intersection points.
+  void check_intersections(const status_iterator center);
+
+  // Like check_intersections, but only search in the direction of ++edge.
   template<typename Iter>
   void check_intersection(const Iter edge, Iter neighbor, const Iter end);
+
+  // Leftwards check_intersection: convert arguments to reverse iterators
+  // and pass to check_intersection above. Disambiguated by a reverse end()
+  // iterator.
+  inline void check_intersection(status_iterator edge, status_iterator left,
+      status_riterator rend) {
+    check_intersection(status_riterator(edge), status_riterator(left), rend);
+  }
 
   // Intersect the two line segments defined by Edges.
   // If there is an intersection (return code other than '0'), sets the fields
