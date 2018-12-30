@@ -166,6 +166,13 @@ handle_intersection(isect_point_type const& isect)
   status_seg_type rseg_new = isect.make_segment(bp::RIGHT);
   status_seg_type lseg_old(rseg_new.edge());
 
+#ifdef MAXTRI_DEBUG
+  cerr << "    old  left: " << lseg_old << endl;
+  cerr << "    old right: " << rseg_old << endl;
+  cerr << "    new  left: " << lseg_new << endl;
+  cerr << "    new right: " << rseg_new << endl;
+#endif
+
   status_iterator lb = status.find(lseg_old);
   status_iterator rb = status.find(rseg_old);
 #ifdef MAXTRI_DEBUG
