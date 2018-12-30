@@ -123,8 +123,7 @@ class SolutionCell;
 template<typename Tp_>
 struct compare_status;
 
-template<typename Tp_>
-struct event_point_compare_y;
+class event_point_compare_y;
 
 template<typename Tp_>
 class TriEventPoint;
@@ -167,7 +166,7 @@ struct traits
   typedef TriEventPoint<Tp_>             tri_point_type;
   typedef IXPoint<Tp_>                   isect_point_type;
   typedef EventPoint<Tp_>                event_point_type;
-  typedef event_point_compare_y<Tp_>     event_point_ycompare;
+  typedef event_point_compare_y          event_point_ycompare;
 
   typedef StatusSegment<Tp_>             status_seg_type;
   typedef compare_status<Tp_>            status_compare;
@@ -671,15 +670,8 @@ _specialized_ycompare<
   return _event_point_ycompare<double>(p1, p2);
 }
 
-template<typename Tp_>
 class event_point_compare_y
 {
-public:
-  INHERIT_TRAITS(Tp_);
-
-private:
-
-
 public:
 
   // When comparing two edge points A and C in edges E1 = <A,B> and E2 = <C,D>
