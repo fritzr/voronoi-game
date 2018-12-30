@@ -118,18 +118,41 @@ void MaxTri<Tp_>::
 remove_edge(edge_type const& e)
 {
   // Remove the edge from the status.
-  // If this is not the bottom edge ([2]) in the triangle, we will immediately
-  // be adding another edge, but it is handled by a separate event
   status_seg_type edge_segment(e);
-  status_iterator elb = status.find(edge_segment);
+  status_iterator eub, elb = status.find(edge_segment);
 
-#ifdef MAXTRI_DEBUG
-  // this should always be true: if it's not, handle_tripoint will catch it
-  if (elb != status.end())
+  // Nb. If this is not the bottom edge ([2]) in the triangle, we will
+  // immediately be adding another edge, but it is already done in
+  // handle_tripoint.
+
+#ifndef MAXTRI_DEBUG
+  assert (elb != status.end());
 #else
-  assert (elb != status.end())
+  // this should always be true: if it's not, handle_tripoint should catch it
+  if (elb != status.end())
 #endif
-    status.erase(elb);
+    eub = elb = status.erase(elb);
+  --elb;
+
+  // Now elb, eub refer to the edges immediately left and right of the removed
+  // edge. Theoretically we only need to check for intersections between these
+  // two edges; but because multiple consecutive edges can be from the same
+  // triangle, we need to run the check (which involves a loop) in each
+  // direction. However, we don't want to detect the same point twice.
+
+  // Check to the right of LB, including LB & UB.
+  check_intersection(elb, eub, status.end());
+
+  // Check to the left of UB, skipping LB so we don't check LB & UB twice.
+  if (elb != status.begin())
+  {
+    --elb;
+    if (elb != status.begin())
+    {
+      --elb;
+      check_intersection(eub, elb, status.rend());
+    }
+  }
 }
 
 template<class Tp_>
