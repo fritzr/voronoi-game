@@ -62,17 +62,21 @@ check_intersection(const Iter segment, Iter neighbor, const Iter end)
     return;
 
   const Iter first_neighbor = neighbor;
+  point_type current_point = status_compare::isect_sweep(*segment, current_y());
   do
   {
     // Check for intersections and queue any we find.
+    // Do not queue filthy degenerates or points we've already visited.
     isect_point_type intersection;
     char code = intersect(segment->edge(), neighbor->edge(), intersection);
-    if ('0' != code && 'v' != code && 'e' != code)
+    if ('0' != code && 'v' != code && 'e' != code
+        && event_point_ycompare()(intersection, current_point))
     {
 #ifdef MAXTRI_DEBUG
       cerr << "    found intersection '" << code << "' "
         << intersection << " with " << *neighbor << endl;
 #endif
+      // We can only queue intersection points we haven't visited yet.
       queue().push(intersection);
     }
 
