@@ -845,12 +845,35 @@ public:
     const point_type sort_a = isect_sweep(a, sweepy);
     const point_type sort_b = isect_sweep(b, sweepy);
 
+#ifdef MAXTRI_DEBUG
+    std::cerr
+      << "        comparing " << sort_a << " | " << a << std::endl
+      << "                < " << sort_b << " | " << b << "..." << std::endl
+      << "            -> ";
+#endif
+
     // First compare by x/y value
     if (!AlmostEqualV(getx(sort_a), getx(sort_b)))
-      return getx(sort_a) < getx(sort_b);
+    {
+      bool ret = getx(sort_a) < getx(sort_b);
+#ifdef MAXTRI_DEBUG
+      std::cerr << ret << ":"
+        << " x_a (" << getx(sort_a) << ") " << (ret ? " <" : ">=")
+        << " x_b (" << getx(sort_b) << ")" << std::endl;
+#endif
+      return ret;
+    }
 
     if (!AlmostEqualV(gety(sort_a), gety(sort_b)))
-      return gety(sort_a) < gety(sort_b);
+    {
+      bool ret = gety(sort_a) < gety(sort_b);
+#ifdef MAXTRI_DEBUG
+      std::cerr << ret << ":"
+        << " y_a (" << gety(sort_a) << ") " << (ret ? " <" : ">=")
+        << " y_b (" << gety(sort_b) << ")" << std::endl;
+#endif
+      return ret;
+    }
 
     // If the points are equal, sort by orientation;
     // the left-heading edge should be less to match our x-coordinate check
@@ -858,9 +881,22 @@ public:
 
     // If the points are parallel (same slope), compare by owning triangle
     if (AlmostEqualV(turn, 0))
-      return a.edge().tridata() < b.edge().tridata();
+    {
+      bool ret = a.edge().tridata() < b.edge().tridata();
+#ifdef MAXTRI_DEBUG
+      std::cerr << ret << ": same segment, triangle A "
+        << a.edge().tridata() << (ret ? " <  " : " >= ")
+        << "triangle B " << b.edge().tridata() << std::endl;;
+#endif
+      return ret;
+    }
 
-    return turn > 0; // left turn
+    bool ret = turn > 0; // left turn
+#ifdef MAXTRI_DEBUG
+    std::cerr << ret << ": " << (ret ? " left" : "right") << " turn "
+      << b.second() << " -> " << sort_a << " -> " << a.second() << std::endl;
+#endif
+    return ret;
   }
 
 };
