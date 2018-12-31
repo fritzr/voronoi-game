@@ -498,7 +498,7 @@ public:
 
     const edge_type *left_edge = &edge2();
     const edge_type *right_edge = &edge1();
-    if (!leftTurn(a, left_edge->second(), right_edge->second()))
+    if (!leftTurn(right_edge->second(), a, left_edge->second()))
     {
       const edge_type *left_swp = left_edge;
       left_edge = right_edge;
