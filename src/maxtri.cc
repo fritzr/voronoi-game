@@ -223,13 +223,9 @@ handle_intersection(isect_point_type const& isect)
     throw runtime_error("failed to insert new right edge into status!");
 #endif
 
-  // See if the new left edge intersects with its new left neighbor,
-  // ditto for the new right edge and its right neighbor
-  status_riterator lend = status.rend();
-  check_intersection(status_riterator(lb), ++status_riterator(lb), lend);
-
-  status_iterator rend = status.end();
-  check_intersection(status_iterator(rb), ++status_iterator(rb), rend);
+  // See if the new edges intersect with their neighbors.
+  check_intersections(lb);
+  check_intersections(rb);
 }
 
 template<class Tp_>
