@@ -195,7 +195,8 @@ handle_intersection(isect_point_type const& isect)
   if (status.size() != status_size - 1)
     throw runtime_error("failed to remove old right edge from status!");
 #endif
-  --lb;
+  if (lb != status.begin())
+    --lb;
 
   rb = status.erase(rb);
 #ifdef MAXTRI_DEBUG
