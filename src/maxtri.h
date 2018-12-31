@@ -1244,6 +1244,19 @@ private:
   char intersect(edge_type const& e1, edge_type const& e2, isect_point_type &ix)
     const;
 
+
+  inline void update_sweep(coordinate_type new_y) {
+#ifdef MAXTRI_DEBUG
+    std::cerr << "SWEEP " << _lasty << " -> " << new_y << std::endl;
+#endif
+    _lasty = new_y;
+  }
+
+  template<typename Point>
+  inline void update_sweep(Point new_y_point) {
+    update_sweep(gety(new_y_point));
+  }
+
 #ifdef MAXTRI_DEBUG
   void dump_status_to_octave(std::ostream& os);
 #endif
@@ -1270,7 +1283,7 @@ public:
     super_type::insert(begin, end);
   }
 
-  coordinate_type current_y(void) const {
+  inline coordinate_type current_y(void) const {
     return _lasty;
   }
 

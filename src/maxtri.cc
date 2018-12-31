@@ -201,6 +201,11 @@ handle_intersection(isect_point_type const& isect)
     throw runtime_error("failed to remove old left edge from status!");
 #endif
 
+  // Update the sweep line to the intersection point now that we've removed the
+  // intersecting edges. Now when we insert them they should be swapped
+  // relative to their old positions.
+  update_sweep(isect);
+
   rb = lb = status.insert(lb, lseg_new);
 #ifdef MAXTRI_DEBUG
   if (status.size() != status_size - 1)
@@ -226,6 +231,9 @@ template<class Tp_>
 void MaxTri<Tp_>::
 handle_tripoint(tri_point_type const& tpoint)
 {
+  // Update the sweep line to the point of this event.
+  update_sweep(tpoint.value());
+
   // We can do this by just queueing all points twice, but this way is clearer
   // and simplifies event ordering. See the diagrams in the header for
   // reference on which points are which.
@@ -313,7 +321,7 @@ dump_status_to_octave(ostream& os)
   if (status.size() > 0)
   {
     os << "plot([ " << minx << " ; " << maxx << " ], "
-               "[ " << _lasty << " ; " << _lasty << " ]"
+               "[ " << current_y() << " ; " << current_y() << " ]"
                ", 'Color', 'red', 'LineWidth', 2);" << endl
        << "xlim([ " << minx << " ; " << maxx << " ]);" << endl;
   }
@@ -346,8 +354,6 @@ template<class Tp_>
 void MaxTri<Tp_>::
 handle_event(EventType type, event_point_type const& event)
 {
-  _lasty = gety(event);
-
   switch (type)
   {
   case INTERSECTION:
