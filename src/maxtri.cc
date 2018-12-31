@@ -87,7 +87,9 @@ check_intersection(const Iter segment, Iter neighbor, const Iter end)
     // sorting criterion and pass iterators from equal_range() to this function.
     // But then we'd still have to write additional code to implement find()
     // (in other functions) based on the owning triangle.
-  } while (status.key_comp().same_segment(*first_neighbor, *++neighbor));
+    ++neighbor;
+  } while (neighbor != end
+      && status.key_comp().same_segment(*first_neighbor, *neighbor));
 }
 
 template<class Tp_>
