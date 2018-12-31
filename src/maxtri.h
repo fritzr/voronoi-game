@@ -488,11 +488,17 @@ public:
   inline edge_type const& edge1(void) const { return e1->edge(); }
   inline edge_type const& edge2(void) const { return e2->edge(); }
 
-  // Assign to the segment a-b such that a is the intersection point and
-  // b is the lowest endpoint of the preferred edge. The direction refers to
-  // the edge direction past the point of intersection.
+  inline edge_type const& left_edge(void) const {
+    return get_edge(bp::LEFT);
+  }
+
+  inline edge_type const& right_edge(void) const {
+    return get_edge(bp::RIGHT);
+  }
+
+  // Return the edge aiming the given direction (below the intersection point).
   // bp::LEFT means the left-most angled segment (converse to bp::RIGHT).
-  status_seg_type make_segment(bp::direction_1d preferred_direction) const
+  edge_type const& get_edge(bp::direction_1d preferred_direction) const
   {
     point_type a(*this);
 
@@ -506,10 +512,10 @@ public:
     }
 
     if (preferred_direction == bp::LEFT)
-      return status_seg_type(*left_edge, a);
+      return *left_edge;
 
     else // (preferred_direction == bp::RIGHT)
-      return status_seg_type(*right_edge, a);
+      return *right_edge;
   }
 };
 
@@ -712,39 +718,25 @@ class StatusSegment
 public:
   INHERIT_TRAITS(Tp_);
 
-  StatusSegment(const edge_data_type *edge_data, point_type a, point_type b)
-    : edata_(edge_data), first_(a), second_(b)
-  {}
-
   StatusSegment(const edge_type &edge)
-    : edata_(edge.data()), first_(edge.first()), second_(edge.second())
-  {}
-
-  StatusSegment(const edge_type &edge, point_type const& new_top)
-    : edata_(edge.data()), first_(new_top), second_(edge.second())
+    : edata_(edge.data())
   {}
 
   edge_type const& edge(void) const { return edata_->edge(); }
-  point_type const& first(void) const { return first_; }
-  point_type const& second(void) const { return second_; }
+  point_type const& first(void) const { return edge().first(); }
+  point_type const& second(void) const { return edge().second(); }
 
 #ifdef MAXTRI_DEBUG
   inline friend
   std::ostream& operator<<(std::ostream& os, StatusSegment const& s)
   {
-    os << s.first() << " -> " << s.second();
-    if (!AlmostEqual(s.first(), s.edge().first())
-        || !AlmostEqual(s.second(), s.edge().second()))
-      os << ", fragment of " << s.edge();
-    else
-      os << " (@tri=0x" << ioptr(s.edge().tridata()) << ")";
+    os << "&" << s.edge();
     return os;
   }
 #endif
 
 private:
   const edge_data_type *edata_;
-  point_type first_, second_;
 };
 
 

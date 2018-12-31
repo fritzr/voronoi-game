@@ -163,9 +163,9 @@ handle_intersection(isect_point_type const& isect)
 {
   // Swap the edges that intersect in the status.
   // The old left/right edges are now the new right/left edges.
-  status_seg_type lseg_new = isect.make_segment(bp::LEFT);
+  status_seg_type lseg_new(isect.left_edge());
   status_seg_type rseg_old(lseg_new.edge());
-  status_seg_type rseg_new = isect.make_segment(bp::RIGHT);
+  status_seg_type rseg_new(isect.right_edge());
   status_seg_type lseg_old(rseg_new.edge());
 
 #ifdef MAXTRI_DEBUG
