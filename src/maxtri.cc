@@ -73,8 +73,8 @@ check_intersection(const Iter segment, Iter neighbor, const Iter end)
         && event_point_ycompare()(intersection, current_point))
     {
 #ifdef MAXTRI_DEBUG
-      cerr << "    found intersection '" << code << "' "
-        << intersection << " with " << *neighbor << endl;
+      cerr << "    found intersection '" << code << "' " << intersection
+        << endl;
 #endif
       // We can only queue intersection points we haven't visited yet.
       queue().push(intersection);
@@ -187,7 +187,7 @@ handle_intersection(isect_point_type const& isect)
   assert(rb != status.end());
 #endif
 
-  // Perform the swap.
+  // Remove the old edges.
   lb = status.erase(lb);
 #ifdef MAXTRI_DEBUG
   if (status.size() != status_size - 1)
@@ -206,6 +206,8 @@ handle_intersection(isect_point_type const& isect)
   // relative to their old positions.
   update_sweep(isect);
 
+  // Perform the swap by inserting the edges again.
+  // This time they will follow the new world order.
   rb = lb = status.insert(lb, lseg_new);
 #ifdef MAXTRI_DEBUG
   if (status.size() != status_size - 1)
@@ -289,7 +291,7 @@ handle_tripoint(tri_point_type const& tpoint)
 
 template<class Tp_>
 void MaxTri<Tp_>::
-dump_status_to_octave(ostream& os)
+dump_status_to_octave(ostream& os) const
 {
   vector<coordinate_type> xs, ys;
   coordinate_type minx = numeric_limits<coordinate_type>::max()
@@ -348,6 +350,32 @@ dump_status_to_octave(ostream& os)
   }
 }
 
+template<class Tp_>
+void MaxTri<Tp_>::
+debug_status(void) const
+{
+  static int status_cnt = 0;
+
+  stringstream ofname_s;
+  ofname_s << "status_" << dec << setw(2) << setfill('0') << status_cnt << ".m";
+  string ofname(ofname_s.str());
+
+  cerr << ofname << ":" << endl;
+  int i = 0;
+  for (auto const& segment : status)
+  {
+    cerr << "    [" << setw(2) << dec << setfill(' ') << i << "] "
+      << segment << endl;
+    ++i;
+  }
+
+  ofstream ofstatus(ofname);
+  dump_status_to_octave(ofstatus);
+  ofstatus.close();
+
+  ++status_cnt;
+}
+
 #endif
 
 template<class Tp_>
@@ -385,26 +413,7 @@ handle_event(EventType type, event_point_type const& event)
   }
 
 #ifdef MAXTRI_DEBUG
-  static int status_cnt = 0;
-
-  stringstream ofname_s;
-  ofname_s << "status_" << dec << setw(2) << setfill('0') << status_cnt << ".m";
-  string ofname(ofname_s.str());
-
-  cerr << ofname << ":" << endl;
-  int i = 0;
-  for (auto const& segment : status)
-  {
-    cerr << "    [" << setw(2) << dec << setfill(' ') << i << "] "
-      << segment << endl;
-    ++i;
-  }
-
-  ofstream ofstatus(ofname);
-  dump_status_to_octave(ofstatus);
-  ofstatus.close();
-
-  ++status_cnt;
+  debug_status();
 #endif
 }
 

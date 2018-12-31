@@ -1294,7 +1294,8 @@ private:
   }
 
 #ifdef MAXTRI_DEBUG
-  void dump_status_to_octave(std::ostream& os);
+  void dump_status_to_octave(std::ostream& os) const;
+  void debug_status(void) const;
 #endif
 
 protected:
