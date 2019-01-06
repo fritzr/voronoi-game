@@ -1,16 +1,11 @@
 #pragma once
 
 #include <set>
+#include <unordered_map>
 #include <queue>
 #include <vector>
-#include <unordered_set>
 #include <functional>
 #include <boost/array.hpp>
-
-#ifdef MAXTRI_DEBUG
-#include <iostream>
-#include <iomanip>
-#endif
 
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/geometries.hpp> // point_xy, ring
@@ -21,6 +16,12 @@
 #include <boost/geometry/geometries/register/point.hpp>
 #include <boost/geometry/geometries/register/ring.hpp>
 
+#if BOOST_VERSION < 106700
+#include <boost/functional/hash.hpp>
+#else
+#include <boost/container_hash/hash.hpp>
+#endif
+
 #include "util.h"
 #include "user.h"
 #include "polygon.h"
@@ -29,17 +30,41 @@
 #include "nn1.h"
 
 #ifdef MAXTRI_DEBUG
+
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+
+// With debug enabled, don't inline stuff so it's easier to debug.
+#define MTINLINE
+
+#define MTFAIL(...) { \
+  std::stringstream ss; \
+  ss << __PRETTY_FUNCTION__ << ": " << __VA_ARGS__; \
+  throw std::runtime_error(ss.str()); \
+}
+
+#define MTDEBUG(...) __VA_ARGS__
+
+#else
+
+#define MTINLINE inline
+#define MTFAIL(...)
+#define MTDEBUG(...)
+#endif
+
+#ifdef MAXTRI_DEBUG
 struct ioptr
 {
   const uintptr_t ptrval;
 
   ioptr(const void *p) : ptrval(reinterpret_cast<uintptr_t>(p)) {}
 
-  inline friend
+  MTINLINE friend
   std::ostream &operator<<(std::ostream &os, ioptr const& iop)
   {
-    os << std::hex << std::setw(2*__SIZEOF_POINTER__) << std::setfill('0')
-      << iop.ptrval;
+    os << "0x" << std::hex << std::setw(2*sizeof(iop.ptrval))
+      << std::setfill('0') << iop.ptrval;
     return os;
   }
 };
@@ -58,7 +83,6 @@ namespace bgm = boost::geometry::model;
 template<typename Tp_>
   using point_xy = boost::geometry::model::d2::point_xy<Tp_>;
 
-
 } } // end namespace cfla::tri
 
 // Adapt point_xy to boost::polygon point_concept
@@ -75,7 +99,7 @@ namespace boost { namespace polygon
       typedef typename bg::traits::coordinate_type<cfla::tri::point_xy<Tp_> >
         ::type coordinate_type;
 
-      static inline coordinate_type get(const cfla::tri::point_xy<Tp_> &p,
+      static MTINLINE coordinate_type get(const cfla::tri::point_xy<Tp_> &p,
           orientation_2d orient)
         { return (orient == HORIZONTAL) ? p.x() : p.y(); }
     };
@@ -86,7 +110,7 @@ namespace boost { namespace polygon
       typedef typename bg::traits::coordinate_type<cfla::tri::point_xy<Tp_> >
         ::type coordinate_type;
 
-      static inline void set(cfla::tri::point_xy<Tp_> &p,
+      static MTINLINE void set(cfla::tri::point_xy<Tp_> &p,
           orientation_2d orient, coordinate_type value) {
         switch (orient.to_int()) {
           case VERTICAL: p.y(value); break;
@@ -94,7 +118,7 @@ namespace boost { namespace polygon
         }
       }
 
-      static inline cfla::tri::point_xy<Tp_>
+      static MTINLINE cfla::tri::point_xy<Tp_>
         construct(coordinate_type x, coordinate_type y) {
           return cfla::tri::point_xy<Tp_> (x, y);
         }
@@ -102,6 +126,20 @@ namespace boost { namespace polygon
 
 } } // end namespace boost::polygon
 
+namespace boost {
+  template <typename Coord>
+  struct hash<cfla::tri::point_xy<Coord> >
+  {
+    inline size_t operator()(cfla::tri::point_xy<Coord>  const& p) const
+    {
+      std::size_t hval = 0u;
+      hash_combine(hval, geometry::get<0>(p));
+      hash_combine(hval, geometry::get<1>(p));
+      return hval;
+    }
+  };
+
+} // end namespace boost
 
 namespace cfla { namespace tri
 {
@@ -123,13 +161,16 @@ class SolutionCell;
 template<typename Tp_>
 struct compare_status;
 
+template<typename Tp_>
+struct compare_segment_unique;
+
 class event_point_compare_y;
 
 template<typename Tp_>
 class TriEventPoint;
 
 template<typename Tp_>
-class IXPoint;
+class IXEvent;
 
 template<typename Tp_>
 class EventPoint;
@@ -164,12 +205,13 @@ struct traits
   typedef Triangle<Tp_>                  triangle_type;
 
   typedef TriEventPoint<Tp_>             tri_point_type;
-  typedef IXPoint<Tp_>                   isect_point_type;
+  typedef IXEvent<Tp_>                   isect_event_type;
   typedef EventPoint<Tp_>                event_point_type;
   typedef event_point_compare_y          event_point_ycompare;
 
   typedef StatusSegment<Tp_>             status_seg_type;
   typedef compare_status<Tp_>            status_compare;
+  typedef compare_segment_unique<Tp_>    status_equal_compare;
 
   typedef c_polygon<point_type>          polygon_type;
   typedef SolutionCell<Tp_>              solution_ref_type;
@@ -191,12 +233,13 @@ struct traits
   typedef typename traits::triangle_type triangle_type; \
   \
   typedef typename traits::tri_point_type tri_point_type; \
-  typedef typename traits::isect_point_type isect_point_type; \
+  typedef typename traits::isect_event_type isect_event_type; \
   typedef typename traits::event_point_type event_point_type; \
   typedef typename traits::event_point_ycompare event_point_ycompare; \
   \
   typedef typename traits::status_seg_type status_seg_type; \
   typedef typename traits::status_compare status_compare; \
+  typedef typename traits::status_equal_compare status_equal_compare; \
   \
   typedef typename traits::polygon_type polygon_type; \
   typedef typename traits::solution_ref_type solution_ref_type; \
@@ -204,6 +247,8 @@ struct traits
   typedef typename traits::solver_type solver_type; \
 
 // functions
+
+using ::operator<<;
 
 template<class T>
 typename std::enable_if<!std::numeric_limits<T>::is_integer, bool>::type
@@ -221,7 +266,7 @@ typename std::enable_if<!std::numeric_limits<T>::is_integer, bool>::type
  * triangles, will always be a convex shape with a single boundary.  */
 namespace boost { namespace geometry {
   template<typename Tp_>
-    inline bool is_convex(typename traits<Tp_>::solution_cell_type const& c)
+    MTINLINE bool is_convex(typename traits<Tp_>::solution_cell_type const& c)
     {
       return true;
     }
@@ -271,6 +316,14 @@ gety(Point const& p) {
 
 // classes
 
+// These are used to describe triangle points, and follow the definitions in
+// Triangle.
+enum PointHeight {
+    TOP=0
+  , MIDDLE
+  , BOTTOM
+};
+
 template<class Tp_>
 struct triangle_data
 {
@@ -283,6 +336,8 @@ struct triangle_data
   polygon_type const& poly; // parent polygon
   point_array points;
   edge_array edges;
+  // whether the middle point is point 1 or 2
+  int middle_point_index;
 
   template <class Tri>
   triangle_data(polygon_type const& parent, Tri const& input_tri)
@@ -292,21 +347,43 @@ struct triangle_data
           { this, 1, input_tri[0], input_tri[0], bp::LEFT },
           { this, 2, input_tri[0], input_tri[0], bp::LEFT },
         })
+      , middle_point_index(1)
   {
   }
 
   // parent edge
-  inline edge_type const& edge(int index) const {
+  MTINLINE edge_type const& edge(int index) const {
+#ifdef MAXTRI_DEBUG
     if (index < 0)
-      throw std::runtime_error("triangle_data: negative edge index!");
+      MTFAIL("negative edge index!");
+#endif
     return edges[index % 3];
   }
 
-  inline point_type const& point(int index) const {
+  MTINLINE point_type const& point(int index) const {
+#ifdef MAXTRI_DEBUG
     if (index < 0)
-      throw std::runtime_error("triangle_data: negative point index!");
-    return points[index % 3];
+      MTFAIL("negative point index!");
+    if (index > 2)
+      MTFAIL("out of bounds index!");
+#endif
+    return points[index];
   }
+
+  MTINLINE point_type const& top(void) const { return point(TOP); }
+  MTINLINE point_type const& middle(void) const { return point(MIDDLE); }
+  MTINLINE point_type const& bottom(void) const { return point(BOTTOM); }
+
+  MTINLINE int top_index(void) const { return 0; }
+  MTINLINE int middle_index(void) const { return middle_point_index; }
+  MTINLINE int bottom_index(void) const { return (middle_point_index * 2) % 3; }
+  /* middle_point_index is either 1 or 2.
+   * multiplying by 2 mod 3 maps 1 <-> 2, so we get the bottom index
+   * without using a conditional:
+   *  0 * 2 = 0, 0 % 3 = 0
+   *  1 * 2 = 2, 2 % 3 = 2
+   *  2 * 2 = 4, 4 % 3 = 1
+   */
 };
 
 template<class Tp_>
@@ -328,7 +405,7 @@ struct edge_data
   {}
 
   // parent edge
-  inline edge_type const& edge(void) const {
+  MTINLINE edge_type const& edge(void) const {
     return tri->edges[index];
   }
 };
@@ -361,21 +438,21 @@ public:
   }
 
   // parent edge
-  inline edge_type const& edge(void) const {
+  MTINLINE edge_type const& edge(void) const {
     return edata->tri->edges[edata->index];
   }
 
   // return the point at the other end of this edge
-  inline edge_point_type const& other(void) const {
+  MTINLINE edge_point_type const& other(void) const {
     return (dir == bp::LOW) ? edata->second : edata->first;
   }
 
-  inline const triangle_data_type *tridata(void) const {
+  MTINLINE const triangle_data_type *tridata(void) const {
     return edata->tri;
   }
 
 #ifdef MAXTRI_DEBUG
-  inline friend std::ostream& operator<<(std::ostream& os, EdgePoint const& p) {
+  MTINLINE friend std::ostream& operator<<(std::ostream& os, EdgePoint const& p) {
     os << "(" << p.x() << " , " << p.y() << ")";
     return os;
   }
@@ -391,12 +468,19 @@ public:
 
   const triangle_data_type *tridata;
   int index;
+  PointHeight height;
 
-  TriEventPoint(const triangle_data_type *tdata, int point_index)
-    : tridata(tdata), index(point_index)
+  TriEventPoint()
+    : tridata(nullptr), index(-1), height(TOP)
   {}
 
-  point_type const& value(void) const { return tridata->point(index); }
+  TriEventPoint(const triangle_data_type *tdata, int point_index, PointHeight h)
+    : tridata(tdata), index(point_index), height(h)
+  {}
+
+  MTINLINE point_type const& value(void) const {
+    return tridata->point(index);
+  }
 
  /* When looking into the center of the triangle from a TriEventPoint,
   * the two edges that share it are considered the "left" and "right" edges
@@ -417,7 +501,7 @@ public:
   *                            right edge: E1                 >
   */
 
-  inline edge_type const& left_edge(void) const
+  MTINLINE edge_type const& left_edge(void) const
   {
     static const int left_edge_indexes[] = {
       /* point index -> left edge index */
@@ -428,7 +512,7 @@ public:
     return tridata->edges[left_edge_indexes[index]];
   }
 
-  inline edge_type const& right_edge(void) const
+  MTINLINE edge_type const& right_edge(void) const
   {
     static const int right_edge_indexes[] = {
       /* point index -> right edge index */
@@ -440,7 +524,7 @@ public:
   }
 
 #ifdef MAXTRI_DEBUG
-  inline friend
+  MTINLINE friend
   std::ostream& operator<<(std::ostream& os, TriEventPoint const& p)
   {
     os << "[" << p.index << "] joining "
@@ -450,73 +534,145 @@ public:
 #endif
 };
 
-// Intersection point
+/* Intersection point.
+ *
+ * An intersection point is classically the intersection of TWO segments...
+ * But we need to handle many segments intersecting at the same point.
+ * Generally this sounds rare, but actually in the case of several collinear
+ * (parallel overlapping) segments, a single independent segment that
+ * intersects any of them would otherwise form a pairwise intersection with
+ * each of them, resulting in many separate intersection events at the same
+ * point.
+ *
+ * Here is an example where B and C are collinear, and both intersect A at P.
+ * Let's say B comes before C by nature of the order in which it was inserted.
+ * Classically, the status tree progresses as shown on the right:
+ *
+ *    A      B C
+ *     \     /
+ *       \  /      L1. A B C    ISECT A,B: SWAP A,B
+ *      P  X       L2. B A C    ISECT A,C: SWAP A,C
+ *        /  \     L3. B C A    ...
+ *       /     \
+ *
+ * However, there is no way to represent L2. without directly accessing
+ * the status tree nodes; in C++ we would have to modify the comparator so that
+ * we could remove A and insert it again, and the set would order A after
+ * B but before C. This is a problem because B and C are the same segment as
+ * far as the comparator is concerned. Thus, any such collection of collinear
+ * segments like B, C must be handled atomically with respect to some other
+ * intersecting segment like A. That is, the tree must transition directly
+ * from state L1. to L3. in our example above.
+ *
+ * This means each intersection point needs to track a set of segments!
+ * To do this we have to keep a[n unordered] map of intersection sets keyed
+ * on position for fast lookup. When we identify that two segments intersect,
+ * we have to lookup the intersection set by position and add to it, then
+ * handle the intersection exactly once.
+ */
+
+// Specialization of hash for StatusSegment: hash first based on endpoints
+// then on triangle data.
 template<typename Tp_>
-class IXPoint : public point_xy<Tp_>
+struct hash_segment
+{
+  INHERIT_TRAITS(Tp_);
+
+  typedef status_seg_type argument_type;
+  typedef size_t result_type;
+
+  hash_segment() {}
+
+  inline bool operator()(argument_type const& seg) const
+  {
+    size_t hval = 0u;
+    ::boost::hash_combine(hval, seg.first());
+    ::boost::hash_combine(hval, seg.second());
+    ::boost::hash_combine(hval, seg.edge().tridata());
+    return hval;
+  }
+};
+
+template<typename Tp_>
+class IXEvent : public point_xy<Tp_>
 {
 public:
   INHERIT_TRAITS(Tp_);
 
   typedef point_xy<Tp_> super;
 
-  const edge_data<Tp_> *e1, *e2;
+  // Tracks the segments which form this point. They cannot be in any
+  // particular order until the instant the intersection point is handled.  The
+  // only reason the main status tree can do this is because the order is
+  // corrected whenever segments are swapped due to an intersection. From this
+  // class' perspective, we don't know if one of our segments is swapped with
+  // another one due to a different intersection point, so we can't keep our
+  // set up-to-date. That's okay -- we just don't want to have any segment
+  // added multiple times. Thus, we use an unordered_set.
+  typedef std::unordered_set<
+    /* Key */ status_seg_type
+    /* Hash */, hash_segment<Tp_>
+    /* KeyEqual */, status_equal_compare
+    > segment_set;
+
+  typedef typename segment_set::iterator iterator;
+  typedef typename segment_set::const_iterator const_iterator;
+  typedef typename segment_set::size_type size_type;
 
   using super::x;
   using super::y;
 
-  IXPoint()
-    : super(), e1(nullptr), e2(nullptr)
+  IXEvent()
+    : super(), segments_(status_equal_compare())
   {}
 
-  template<typename Pt_>
-  IXPoint(Pt_ const& point,
-      const edge_data<Tp_> *edge1,
-      const edge_data<Tp_> *edge2)
-    : super(point), e1(edge1), e2(edge2)
+  ~IXEvent()
   {}
+
+  IXEvent(IXEvent const& other)
+    : super(getx(other), gety(other)), segments_(other.segments_)
+  {}
+
+  // Construct from point.
+  template<typename Pt_>
+  IXEvent(Pt_ const& point)
+    : super(point), segments_()
+  {}
+
+  // Record that two segments intersect at this point.
+  inline void insert(status_seg_type const& a, status_seg_type const& b)
+  {
+    segments_.insert(a);
+    segments_.insert(b);
+  }
+
+  // Methods.
+
+  inline segment_set const& segments(void) const { return segments_; }
+  inline const_iterator begin(void) const { return segments().cbegin(); }
+  inline const_iterator end(void) const { return segments().cend(); }
+  inline const_iterator cbegin(void) const { return segments().cbegin(); }
+  inline const_iterator cend(void) const { return segments().cend(); }
+  inline size_type size(void) const { return segments().size(); }
 
 #ifdef MAXTRI_DEBUG
-  inline friend
-  std::ostream& operator<<(std::ostream& os, IXPoint const& p)
+  MTINLINE friend
+  std::ostream& operator<<(std::ostream& os, IXEvent const& p)
   {
-    os << static_cast<super const&>(p)
-      << " from " << p.edge1() << " and " << p.edge2();
+    os << "intersection at " << static_cast<super const&>(p) << " from:"
+      << std::endl;
+    int index = 0;
+    for (auto const& segment : p.segments())
+    {
+      os << "    [" << std::setw(2) << std::setfill(' ') << index
+        << "] " << segment << std::endl;
+    }
     return os;
   }
 #endif
 
-  inline edge_type const& edge1(void) const { return e1->edge(); }
-  inline edge_type const& edge2(void) const { return e2->edge(); }
-
-  inline edge_type const& left_edge(void) const {
-    return get_edge(bp::LEFT);
-  }
-
-  inline edge_type const& right_edge(void) const {
-    return get_edge(bp::RIGHT);
-  }
-
-  // Return the edge aiming the given direction (below the intersection point).
-  // bp::LEFT means the left-most angled segment (converse to bp::RIGHT).
-  edge_type const& get_edge(bp::direction_1d preferred_direction) const
-  {
-    point_type a(*this);
-
-    const edge_type *left_edge = &edge2();
-    const edge_type *right_edge = &edge1();
-    if (!leftTurn(right_edge->second(), a, left_edge->second()))
-    {
-      const edge_type *left_swp = left_edge;
-      left_edge = right_edge;
-      right_edge = left_swp;
-    }
-
-    if (preferred_direction == bp::LEFT)
-      return *left_edge;
-
-    else // (preferred_direction == bp::RIGHT)
-      return *right_edge;
-  }
+private:
+  segment_set segments_;
 };
 
 enum EventType
@@ -532,7 +688,7 @@ struct event_data
 
   union {
     tri_point_type point;
-    isect_point_type isect;
+    point_type isect;
   } u;
 
   EventType type;
@@ -540,8 +696,8 @@ struct event_data
   event_data(tri_point_type const& e)
     : u{.point=e}, type(TRIPOINT) {}
 
-  event_data(isect_point_type const& i)
-    : u{.isect=i}, type(INTERSECTION) {}
+  event_data(point_type const& ix)
+    : u{.isect=ix}, type(INTERSECTION) {}
 
   ~event_data()
   {
@@ -550,7 +706,7 @@ struct event_data
     case TRIPOINT:
       (u.point).~TriEventPoint();
     case INTERSECTION:
-      (u.isect).~IXPoint();
+      (u.isect).~point_type();
     default:
       // should be unreachable!
       break;
@@ -572,47 +728,51 @@ public:
   EventPoint(tri_point_type const& point)
     : m_union(new m_type(point)) {}
 
-  EventPoint(IXPoint<Tp_> const& ipoint)
+  EventPoint(IXEvent<Tp_> const& ipoint)
     : m_union(new m_type(ipoint)) {}
 
-  inline EventType type(void) const {
+  MTINLINE EventType type(void) const {
     return m_union->type;
   }
 
-  inline tri_point_type const& point(void) const {
+  MTINLINE tri_point_type const& point(void) const {
+#ifdef MAXTRI_DEBUG
     if (type() != TRIPOINT)
-      throw std::runtime_error("EventPoint: type mismatch (exp. TRIPOINT)");
+      MTFAIL("type mismatch, got " << type() << ", expected TRIPOINT");
+#endif
     return m_union->u.point;
   }
 
-  inline isect_point_type const& isect(void) const {
+  MTINLINE point_type const& isect(void) const {
+#ifdef MAXTRI_DEBUG
     if (type() != INTERSECTION)
-      throw std::runtime_error("EventPoint: type mismatch (exp. INTERSECTION)");
+      MTFAIL("type mismatch, got " << type() << ", expected INTERSECTION");
+#endif
     return m_union->u.isect;
   }
 
-  inline coordinate_type x(void) const
+  MTINLINE coordinate_type x(void) const
   {
     switch (type())
     {
     case TRIPOINT:
-      return bg::get<0>(point().value());
+      return getx(point().value());
     case INTERSECTION:
-      return bg::get<0>(isect());
+      return getx(isect());
     default:
       // should be unreachable!
       return -1;
     }
   }
 
-  inline coordinate_type y(void) const
+  MTINLINE coordinate_type y(void) const
   {
     switch (type())
     {
     case TRIPOINT:
-      return bg::get<1>(point().value());
+      return gety(point().value());
     case INTERSECTION:
-      return bg::get<1>(isect());
+      return gety(isect());
     default:
       // should be unreachable!
       return -1;
@@ -689,7 +849,7 @@ public:
   //   #.  B is right edge < D is left edge
   //   #.  B.x < D.x
   template<typename Pt1_, typename Pt2_>
-  inline bool
+  MTINLINE bool
   operator()(Pt1_ const& p1, Pt2_ const& p2) const
   {
     // We can do all this in one big long condition a && (b || (x && d || ...
@@ -699,9 +859,9 @@ public:
     if (!AlmostEqualV(gety(p1), gety(p2)))
       return gety(p1) < gety(p2);
 
-    // Then by x
+    // Then by x (in reverse)
     if (!AlmostEqualV(getx(p1), getx(p2)))
-      return getx(p1) < getx(p2);
+      return getx(p2) < getx(p1);
 
     // Type-specific fall-back comparisons.
     return _specialized_ycompare(p1, p2);
@@ -709,14 +869,16 @@ public:
 
 };
 
-// Element of the status tree -- like an Edge, but it's not always a full
-// triangle edge, e.g. when one point is formed by the intersection of two
-// Edges.
+// Element of the status tree -- reference to an Edge.
 template<typename Tp_>
 class StatusSegment
 {
 public:
   INHERIT_TRAITS(Tp_);
+
+  StatusSegment(const StatusSegment& other)
+    : edata_(other.edge().data())
+  {}
 
   StatusSegment(const edge_type &edge)
     : edata_(edge.data())
@@ -727,7 +889,7 @@ public:
   point_type const& second(void) const { return edge().second(); }
 
 #ifdef MAXTRI_DEBUG
-  inline friend
+  MTINLINE friend
   std::ostream& operator<<(std::ostream& os, StatusSegment const& s)
   {
     os << "&" << s.edge();
@@ -782,54 +944,39 @@ public:
     return point_type(x_s, y_s);
   }
 
-  // Compare two segments which share a top point by their orientation,
-  // where the left-most-facing segment compares less matching the x-sort
-  // order.
+  /* Returns the orientation from the end of B through a pivot point where A
+   * and B intersect to the end of A.
+   *
+   * The orientation value is such that right turn < parallel =~ 0 < left turn:
+   *
+   *          *   <- pivot ->   *
+   *         / \               / \
+   *     A  / q \  B       B  / q \  A
+   *       /     \           /     \
+   *      <       \         /       >
+   *     r         p       p         r
+   *
+   *      left turn        right turn
+   *        A < B             B < A
+   */
   static coordinate_type
     compare_orientation(status_seg_type const& a, status_seg_type const& b,
         point_type pivot)
   {
-    /* As a precondition, we assume A and B share a pivot point.
-     * The compare result ("a less than b") is computed as follows,
-     * and returned according to the rule that a lefter edge is lesser:
-     *
-     *                        *   <- pivot ->   *
-     *                       / \               / \
-     *                   A  / q \  B       B  / q \  A
-     *                     /     \           /     \
-     *                    <       \         /       >
-     *                   r         p       p         r
-     *
-     *  result?             A < B            B < A
-     *  leftTurn(p,q,r)?    true             false
-     *
-     */
+    // As a precondition, we assume A and B share the pivot point.
     point_type p = b.second(), r = a.second();
     return orientation(p, pivot, r);
   }
 
-  // Whether two segments are identical except for their triangle.
-  inline bool same_segment(status_seg_type const& a, status_seg_type const& b)
-    const
-  {
-    // I don't see a good way to factor these checks in common with the same
-    // ones in operator(), so for now just duplicate the code here.
-    const coordinate_type sweepy = sweeper.current_y();
-    const point_type sort_a = isect_sweep(a, sweepy);
-    const point_type sort_b = isect_sweep(b, sweepy);
-
-    return AlmostEqualV(getx(sort_a), getx(sort_b))
-      && AlmostEqualV(gety(sort_a), gety(sort_b))
-      && AlmostEqualV(compare_orientation(a, b, sort_a), 0);
-  }
-
-  // Compare two segments by their top point.
-  // If the top point is equal it's a point of intersection, so compare by
-  // orientation.
+  // Compare two segments by their intersection with the sweep line.
+  // At intersection points we compare by orientation.
+  //
   // Note that this must dynamically use the sweep line's current y value.
-  // Don't worry! We manually swap elements in the set before the comparison
-  // would be invalidated, since this can only happen at intersection points.
-  inline bool operator()(status_seg_type const& a, status_seg_type const& b)
+  // Don't worry! The order only changes at intersection points, at which time
+  // we remove the segments, change the ordering (sweep line position), and
+  // re-insert the only segments which could have been invalidated (the
+  // segments forming the intersection).
+  MTINLINE bool operator()(status_seg_type const& a, status_seg_type const& b)
     const
   {
     const coordinate_type sweepy = sweeper.current_y();
@@ -868,22 +1015,22 @@ public:
     }
 
     // If the points are equal, sort by orientation;
-    // the left-heading edge should be less to match our x-coordinate check
     coordinate_type turn = compare_orientation(a, b, sort_a);
 
-    // If the points are parallel (same slope), compare by owning triangle
+    // If the segments are collinear (parallel + overlap) they are unsortable.
+    // They will be put in the same equal_range in the status multiset and
+    // must be dealt with specially.
     if (AlmostEqualV(turn, 0))
     {
-      bool ret = a.edge().tridata() < b.edge().tridata();
 #ifdef MAXTRI_DEBUG
-      std::cerr << ret << ": same segment, triangle A "
-        << a.edge().tridata() << (ret ? " <  " : " >= ")
-        << "triangle B " << b.edge().tridata() << std::endl;;
+      std::cerr << true << ": collinear (equal)" << std::endl;
 #endif
-      return ret;
+      return true;
     }
 
-    bool ret = turn > 0; // left turn
+    // The left-heading edge should be less so it is first in a left-to-right
+    // (low-to-high) traversal of the sweep status.
+    bool ret = turn > 0; // true for left turn
 #ifdef MAXTRI_DEBUG
     std::cerr << ret << ": " << (ret ? " left" : "right") << " turn "
       << b.second() << " -> " << sort_a << " -> " << a.second() << std::endl;
@@ -891,6 +1038,24 @@ public:
     return ret;
   }
 
+};
+
+// This is used as KeyEqual for unordered sorting of segments in the IXEvent
+// segments set.  All we care about here is to uniquely identify segments.
+template<typename Tp_>
+struct compare_segment_unique
+{
+  INHERIT_TRAITS(Tp_);
+
+  inline bool operator()(status_seg_type const& a, status_seg_type const& b)
+    const
+  {
+    // Both points have to be equal of course...
+    // Then disambiguate by the owning triangle.
+    return AlmostEqual(a.first(), b.first())
+      && AlmostEqual(a.second(), b.second())
+      && a.edge().tridata() == b.edge().tridata();
+  }
 };
 
 } } // end namespace cfla::tri
@@ -901,9 +1066,9 @@ BOOST_GEOMETRY_REGISTER_POINT_2D_GET_SET(
     cfla::tri::EdgePoint<double>, double, cs::cartesian, x, y, x, y);
 
 BOOST_GEOMETRY_REGISTER_POINT_2D_GET_SET(
-    cfla::tri::IXPoint<float>, float, cs::cartesian, x, y, x, y);
+    cfla::tri::IXEvent<float>, float, cs::cartesian, x, y, x, y);
 BOOST_GEOMETRY_REGISTER_POINT_2D_GET_SET(
-    cfla::tri::IXPoint<double>, double, cs::cartesian, x, y, x, y);
+    cfla::tri::IXEvent<double>, double, cs::cartesian, x, y, x, y);
 
 BOOST_GEOMETRY_REGISTER_POINT_2D_CONST(
     cfla::tri::TriEventPoint<float>, float, cs::cartesian, value().x(), value().y());
@@ -937,45 +1102,45 @@ public:
 
   // methods
 
-  inline bool operator==(Edge const& e) const {
+  MTINLINE bool operator==(Edge const& e) const {
     return (&tridata() == &tridata()) && (dir() == e.dir())
       //&& almost_equal(this->first, e.first)
       //&& almost_equal(this->second, e.second)
       ;
   }
 
-  inline const edge_data<Tp_> *data(void) const { return m_data.get(); }
-  inline edge_data<Tp_> *data(void) { return m_data.get(); }
-  inline const triangle_data<Tp_> *tridata(void) const { return m_data->tri; }
+  MTINLINE const edge_data<Tp_> *data(void) const { return m_data.get(); }
+  MTINLINE edge_data<Tp_> *data(void) { return m_data.get(); }
+  MTINLINE const triangle_data<Tp_> *tridata(void) const { return m_data->tri; }
 
   polygon_type const& poly(void) const { return tridata()->poly; }
 
-  inline edge_point_type& first(void) { return m_data->first; }
-  inline edge_point_type const& first(void) const { return m_data->first; }
+  MTINLINE edge_point_type& first(void) { return m_data->first; }
+  MTINLINE edge_point_type const& first(void) const { return m_data->first; }
 
-  inline edge_point_type& second(void) { return m_data->second; }
-  inline edge_point_type const& second(void) const { return m_data->second; }
+  MTINLINE edge_point_type& second(void) { return m_data->second; }
+  MTINLINE edge_point_type const& second(void) const { return m_data->second; }
 
-  inline int index(void) const { return m_data->index; }
+  MTINLINE int index(void) const { return m_data->index; }
 
-  inline bp::direction_1d dir(void) const { return m_data->dir; }
-  inline void dir(bp::direction_1d d) { m_data->dir = d; }
+  MTINLINE bp::direction_1d dir(void) const { return m_data->dir; }
+  MTINLINE void dir(bp::direction_1d d) { m_data->dir = d; }
 
-  inline int depth(void) const { return m_data->depth; }
-  inline void depth(int d) { m_data->depth = d; }
+  MTINLINE int depth(void) const { return m_data->depth; }
+  MTINLINE void depth(int d) { m_data->depth = d; }
 
   // return the next/previous linked edge
-  inline Edge const& nextEdge(void) const {
+  MTINLINE Edge const& nextEdge(void) const {
     return tridata()->edge((index() + 1) % 3); // +1 mod 3
   }
-  inline Edge const& prevEdge(void) const {
+  MTINLINE Edge const& prevEdge(void) const {
     return tridata()->edge((index() + 2) % 3); // -1 mod 3
   }
 
 #ifdef MAXTRI_DEBUG
-  inline friend std::ostream& operator<<(std::ostream& os, Edge const& e) {
+  MTINLINE friend std::ostream& operator<<(std::ostream& os, Edge const& e) {
     os << "[ " << e.first() << " => " << e.second() << " ]"
-      " (@tri=0x" << ioptr(e.tridata()) << ")";
+      " (@tri=" << ioptr(e.tridata()) << ")";
     return os;
   }
 #endif
@@ -1001,10 +1166,10 @@ namespace boost { namespace geometry { namespace traits {
   {
     typedef cfla::tri::Edge<Tp_> segment_type;
     typedef typename cfla::tri::traits<Tp_>::coordinate_type coordinate_type;
-    static inline coordinate_type get(segment_type const& s) {
+    static MTINLINE coordinate_type get(segment_type const& s) {
       return geometry::get<Dimension>(s.first);
     }
-    static inline void set(segment_type& s, coordinate_type const& value) {
+    static MTINLINE void set(segment_type& s, coordinate_type const& value) {
       geometry::set<Dimension>(s.first, value);
     }
   };
@@ -1019,14 +1184,14 @@ namespace cfla { namespace tri {
  * bottom edge E2 is either <1,2> (left) or <2,1> (right); the second endpoint
  * of E2 is always the point at the lowest height.
  *
- *       [0]
+ *       [0]                TOP
  * (0,1)  *
  * V E0  /  \  E1 V
  *      /     \  (0,2)
- * [1] *- _    \
+ * [1] *- _    \            MIDDLE
  *         - _   \
  *             - _\
- *        E2 >     * [2]
+ *        E2 >     * [2]    BOTTOM
  *        (1,2) or (2,1)
  *
  * In this case:
@@ -1034,6 +1199,9 @@ namespace cfla { namespace tri {
  *     E1 === (0, 2) ; dir = RIGHT
  *     E2 === (1, 2) ; dir = LEFT
  *
+ * Additionally, we describe the vertices as "top", "middle", and "bottom".
+ * Top is always point[0]; then middle and bottom are either [1] or [2]
+ * depending on which is higher. These follow the event queue sort order.
  */
 
 template<class Tp_>
@@ -1088,13 +1256,15 @@ public:
 
     // Find the lowest of (left, right): this is the second index of E2.
     int e2_first = 1, e2_second = 2;
-    bp::direction_1d e2_dir = bp::LEFT;
+    bp::direction_1d e2_side = bp::LEFT;
     if (ycmp(points()[1], points()[2]))
     {
       e2_first = 2;
       e2_second = 1;
-      e2_dir = bp::RIGHT;
+      e2_side = bp::RIGHT;
     }
+
+    m_data->middle_point_index = e2_first;
 
     // Finally we can finish the edges.
     bg::assign(edges()[0].first(), points()[0]);
@@ -1103,28 +1273,51 @@ public:
     bg::assign(edges()[1].second(), points()[2]);
     bg::assign(edges()[2].first(), points()[e2_first]);
     bg::assign(edges()[2].second(), points()[e2_second]);
-    edges()[2].dir(e2_dir);
+    edges()[2].dir(e2_side);
   }
 
 private:
-  inline point_array& points(void) { return m_data->points; }
-  inline edge_array& edges(void) { return m_data->edges; }
+  MTINLINE point_array& points(void) { return m_data->points; }
+  MTINLINE edge_array& edges(void) { return m_data->edges; }
 
 public:
-  inline point_array const& points(void) const { return m_data->points; }
-  inline edge_array const& edges(void) const { return m_data->edges; }
-  inline polygon_type const& poly(void) const { return m_data->poly; }
-  inline const triangle_data_type *data(void) const { return m_data.get(); }
+  MTINLINE point_array const& points(void) const { return m_data->points; }
+  MTINLINE edge_array const& edges(void) const { return m_data->edges; }
+  MTINLINE polygon_type const& poly(void) const { return m_data->poly; }
+  MTINLINE const triangle_data_type *data(void) const { return m_data.get(); }
 
-  // methods
-  inline edge_type const& edge(int i) const { return edges()[i % size()]; }
-  inline point_type const& operator[](int i) const { return points()[i]; }
-  inline size_t size(void) const { return 3u; }
+  MTINLINE point_type const& point(int i) const { return m_data->point(i); }
+  // Top, middle, and bottom points as described above.
+  MTINLINE point_type const& point(PointHeight h) const {
+    switch(h) {
+      case BOTTOM: return bottom();
+      case MIDDLE: return middle();
+      default:
+      case TOP: return top();
+    }
+  }
 
-  inline iterator begin() { return points().begin(); }
-  inline iterator end() { return points().end(); }
-  inline const_iterator begin() const { return points().cbegin(); }
-  inline const_iterator end() const { return points().cend(); }
+  MTINLINE point_type const& top(void) const { return m_data->top(); }
+  MTINLINE point_type const& middle(void) const { return m_data->middle(); }
+  MTINLINE point_type const& bottom(void) const { return m_data->bottom(); }
+
+  MTINLINE edge_type const& edge(int i) const { return edges()[i % size()]; }
+  MTINLINE point_type const& operator[](int i) const { return points()[i]; }
+  MTINLINE size_t size(void) const { return 3u; }
+
+  // Push the three triangle points (as tri_point_type objects)
+  template<typename InsertIter>
+  MTINLINE void insert(InsertIter it) const
+  {
+    *it++ = tri_point_type(data(), m_data->top_index(), TOP);
+    *it++ = tri_point_type(data(), m_data->middle_index(), MIDDLE);
+    *it++ = tri_point_type(data(), m_data->bottom_index(), BOTTOM);
+  }
+
+  MTINLINE iterator begin() { return points().begin(); }
+  MTINLINE iterator end() { return points().end(); }
+  MTINLINE const_iterator begin() const { return points().cbegin(); }
+  MTINLINE const_iterator end() const { return points().cend(); }
 };
 
 } } // end namespace cfla::tri
@@ -1155,11 +1348,11 @@ public:
     : source_tris_({ &t1, &t2 }), depth_(-1)
   {}
 
-  inline int depth(void) const { return depth_; }
+  MTINLINE int depth(void) const { return depth_; }
 
-  inline iterator begin(void) const { return source_tris_.cbegin(); }
-  inline iterator end(void) const { return source_tris_.cend(); }
-  inline size_type size(void) const { return source_tris_.size(); }
+  MTINLINE iterator begin(void) const { return source_tris_.cbegin(); }
+  MTINLINE iterator end(void) const { return source_tris_.cend(); }
+  MTINLINE size_type size(void) const { return source_tris_.size(); }
 
   // Intersect the input triangles to form the final solution cell.
   solution_cell_type cell(void) const
@@ -1189,7 +1382,7 @@ struct make_sla_traits
 
   typedef sla_traits<value_type, event_type, solution_type, etraits> type;
 
-  inline static EventType get_type(event_type const& e) {
+  MTINLINE static EventType get_type(event_type const& e) {
     return e.type();
   }
 };
@@ -1207,10 +1400,18 @@ public:
   typedef typename sla::value_type value_type;
   typedef std::vector<std::unique_ptr<polygon_type> > poly_container;
   typedef std::vector<triangle_type> triangle_container;
-  typedef std::set<status_seg_type, status_compare> event_status;
+  typedef std::multiset<status_seg_type, status_compare> event_status;
 
   typedef typename event_status::iterator status_iterator;
   typedef typename event_status::reverse_iterator status_riterator;
+
+  // See IXEvent for a detailed description of what this is and why we need it.
+  typedef std::unordered_map<
+    /* Key */ point_type
+    /* T */, isect_event_type
+    /* Hash */, ::boost::hash<point_type>
+    /* KeyEqual */, almost_equal_to<point_type>
+    > isect_event_map;
 
   typedef typename super_type::solution_type solution_type;
   typedef typename super_type::solution_container solution_container;
@@ -1222,58 +1423,51 @@ private:
 
   // sweep line status: points of current edges, ordered by X coordinate
   event_status status;
+  isect_event_map intersections;
   int max_depth;
   coordinate_type _lasty;
 
   void insert_edge(edge_type const& e);
   void remove_edge(edge_type const& e);
 
-  void handle_intersection(isect_point_type const& event);
+  void handle_intersection(point_type const& event);
   void handle_tripoint(tri_point_type const& p);
 
   using super_type::solutions;
   using super_type::queue;
 
-  // Quick check for whether the ray given by the directed
-  // segment (first->second) intersects the test segment.
-  // This means the line segment e *might* intersect it.
-  // This assumes already that the highest point of test is in the proper
-  // direction. This is used for the loop condition in insert_edge(), so we
-  // already know that test is sorted by x in the correct direction.
-  inline
-  bool can_intersect(status_seg_type const& seg, status_seg_type const& test)
-  {
-    bool test_dir1 = getx(seg.second()) - getx(test.first()) < 0;
-    bool test_dir2 = getx(seg.second()) - getx(test.second()) < 0;
-
-    // One point must be to the left, the other to the right.
-    return test_dir1 != test_dir2;
-  }
-
   // Look through the status in both directions to find which edges intersect
   // the given edge. Queue the intersection points.
   void check_intersections(const status_iterator center);
 
-  // Like check_intersections, but only search in the direction of ++edge.
+  // Check for intersections between edge and every segment in [begin, end).
   template<typename Iter>
-  void check_intersection(const Iter edge, Iter neighbor, const Iter end);
-
-  // Leftwards check_intersection: convert arguments to reverse iterators
-  // and pass to check_intersection above. Disambiguated by a reverse end()
-  // iterator.
-  inline void check_intersection(status_iterator edge, status_iterator left,
-      status_riterator rend) {
-    check_intersection(status_riterator(edge), status_riterator(left), rend);
-  }
+  void intersect_range(const Iter edge, Iter begin, const Iter end);
 
   // Intersect the two line segments defined by Edges.
   // If there is an intersection (return code other than '0'), sets the fields
   // of ix appropriately.
-  char intersect(edge_type const& e1, edge_type const& e2, isect_point_type &ix)
-    const;
+  char intersect(edge_type const& a, edge_type const& b, point_type &pt) const {
+    return SegSegInt(a.first(), a.second(), b.first(), b.second(), pt);
+  }
 
+  // Find a segment unambiguously in the status tree.
+  // We need a special check for this since the status is a multiset.
+  inline status_iterator find_unique(status_seg_type const& query) const
+  {
+    auto range = status.equal_range(query);
+    status_iterator it = range.first;
+    status_equal_compare equal;
+    while (it != range.second && it != status.end() && !equal(query, *it))
+      ++it;
+    if (it == range.second)
+      it = status.end();
 
-  inline void update_sweep(coordinate_type new_y) {
+    // We may or may not have found what the user wanted. We'll never know.
+    return it;
+  }
+
+  MTINLINE void update_sweep(coordinate_type new_y) {
 #ifdef MAXTRI_DEBUG
     std::cerr << "SWEEP " << _lasty << " -> " << new_y << std::endl;
 #endif
@@ -1281,7 +1475,7 @@ private:
   }
 
   template<typename Point>
-  inline void update_sweep(Point new_y_point) {
+  MTINLINE void update_sweep(Point new_y_point) {
     update_sweep(gety(new_y_point));
   }
 
@@ -1312,7 +1506,7 @@ public:
     super_type::insert(begin, end);
   }
 
-  inline coordinate_type current_y(void) const {
+  MTINLINE coordinate_type current_y(void) const {
     return _lasty;
   }
 
@@ -1342,26 +1536,28 @@ public:
 
 #ifdef MAXTRI_DEBUG
       std::cout << "QUEUE triangle" << std::endl
+        << "  POINTS" << std::endl
+        << "    [0] " << tris.back()[0] << std::endl
+        << "    [1] " << tris.back()[1] << std::endl
+        << "    [2] " << tris.back()[2] << std::endl
+        << "  EDGES" << std::endl
         << "    [0] " << tris.back().edge(0) << std::endl
         << "    [1] " << tris.back().edge(1) << std::endl
         << "    [2] " << tris.back().edge(2) << std::endl;
 #endif
 
-      const triangle_data_type *const tri_data = tris.back().data();
-      queue().emplace(tri_point_type(tri_data, 0));
-      queue().emplace(tri_point_type(tri_data, 1));
-      queue().emplace(tri_point_type(tri_data, 2));
+      tris.back().insert(emplace_inserter(queue()));
     }
   }
 
-  inline int depth(void) const { return max_depth; }
+  MTINLINE int depth(void) const { return max_depth; }
 
   // Return the solution cells.
-  inline size_t size(void) const { return solutions().size(); }
-  inline solution_iterator begin(void) const { return solutions().cbegin(); }
-  inline solution_iterator end(void) const { return solutions().cend(); }
+  MTINLINE size_t size(void) const { return solutions().size(); }
+  MTINLINE solution_iterator begin(void) const { return solutions().cbegin(); }
+  MTINLINE solution_iterator end(void) const { return solutions().cend(); }
 
-  inline solution_type const& solution(int idx) const { return *(begin()+idx); }
+  MTINLINE solution_type const& solution(int idx) const { return *(begin()+idx); }
 };
 
 /* Adapter for MaxTri which conforms to the cfla_traits::solver_type
@@ -1457,7 +1653,7 @@ public:
     return u.center();
   }
 
-  inline static coordinate_type
+  MTINLINE static coordinate_type
     distance(user_type const& user, point_type const& p) {
       return user.travelTime(p);
     }

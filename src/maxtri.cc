@@ -20,9 +20,6 @@ using namespace std;
 namespace cfla { namespace tri
 {
 
-using ::operator<<;
-
-
 template<class Tp_>
 MaxTri<Tp_>::~MaxTri(void)
 {
@@ -32,96 +29,118 @@ MaxTri<Tp_>::~MaxTri(void)
 }
 
 template<class Tp_>
-char MaxTri<Tp_>::
-intersect(edge_type const& a, edge_type const& b, isect_point_type &result)
-  const
-{
-  char c = '0';
-  // Only consider intersections between edges from triangles belonging to
-  // different polygons.
-  if (&a.poly() != &b.poly())
-  {
-    c = SegSegInt(a.first(), a.second(), b.first(), b.second(), result);
-    if (c != '0')
-    {
-      // Note the position is already set by SegSegInt.
-      result.e1 = a.data();
-      result.e2 = b.data();
-    }
-  }
-  return c;
-}
-
-template<class Tp_>
 template<typename Iter>
 void
 MaxTri<Tp_>::
-check_intersection(const Iter segment, Iter neighbor, const Iter end)
+intersect_range(const Iter segment, Iter begin, const Iter end)
 {
-  if (segment == end || neighbor == end)
+  if (segment == end || begin == end)
     return;
 
-  const Iter first_neighbor = neighbor;
+  // Check intersection with each segment from [neighbor, end).
   point_type current_point = status_compare::isect_sweep(*segment, current_y());
-  do
+
+  // See the comments for IXEvent.
+  while (begin != end)
   {
+#ifdef MAXTRI_DEBUG
+    cerr << "    checking intersection with " << *begin << endl;
+#endif
+
     // Check for intersections and queue any we find.
     // Do not queue filthy degenerates or points we've already visited.
-    isect_point_type intersection;
-    char code = intersect(segment->edge(), neighbor->edge(), intersection);
+    point_type pt;
+    char code = intersect(segment->edge(), begin->edge(), pt);
     if ('0' != code && 'v' != code && 'e' != code
-        && event_point_ycompare()(intersection, current_point))
+        && event_point_ycompare()(pt, current_point))
     {
 #ifdef MAXTRI_DEBUG
-      cerr << "    found intersection '" << code << "' " << intersection
-        << endl;
+      cerr << "    found intersection '" << code << "' " << pt << endl;
 #endif
-      // We can only queue intersection points we haven't visited yet.
-      queue().push(intersection);
+
+      // We need to look up the intersection in the intersection map to see if
+      // we've already found an intersection here.
+      auto ixit = intersections.find(pt);
+
+      // If it doesn't exist yet, this is the first intersection at this point.
+      if (ixit == intersections.end())
+      {
+        auto insert = intersections.insert(make_pair(pt, isect_event_type(pt)));
+        assert(insert.second);
+        ixit = insert.first; // ref to the newly inserted pair.
+
+        // Queue the intersection the first time we find it.
+        // Subsequent intersections at the same point will just add segments.
+        queue().emplace(ixit->second);
+      }
+
+      // Record that these segments also form this intersection.
+      ixit->second.insert(*segment, *begin);
     }
 
-    // Typically this isn't a loop, BUT we can have the exact same
-    // segment across several different triangles. Such identical segments will
-    // all be sorted adjacent, so we can loop through them linearly.
-    // We could use a multimap, in which case we'd remove the triangle pointer
-    // sorting criterion and pass iterators from equal_range() to this function.
-    // But then we'd still have to write additional code to implement find()
-    // (in other functions) based on the owning triangle.
-    ++neighbor;
-  } while (neighbor != end
-      && status.key_comp().same_segment(*first_neighbor, *neighbor));
+    ++begin;
+  }
 }
 
+// Check new intersections for a segment based on the current status.
 template<class Tp_>
 void MaxTri<Tp_>::
 check_intersections(const status_iterator center)
 {
-  // Look left
-  status_riterator rcenter(center);
-  check_intersection(rcenter, ++status_riterator(rcenter), status.rend());
+  // don't call us with a bad segment!
+  assert(center != status.end());
 
-  // Look right
-  check_intersection(center, ++status_iterator(center), status.end());
+  auto range = status.equal_range(*center);
+  status_iterator right = range.second;
+  status_iterator left = range.first;
+
+  // Look for intersections with the left-adjacent edge(s).
+  if (left != center && left != status.end() && left != status.begin())
+  {
+    auto left_range = status.equal_range(*--left);
+    status_riterator left_begin = status_riterator(left_range.second);
+    status_riterator left_end = status_riterator(left_range.first);
+    intersect_range(status_riterator(center), left_begin, left_end);
+  }
+
+  // Look for intersections with the right-adjacent edge(s).
+  if (right != center && left != right && right != status.end())
+  {
+    auto right_range = status.equal_range(*++right);
+    status_iterator right_begin = status_iterator(right_range.first);
+    status_iterator right_end = status_iterator(right_range.second);
+    intersect_range(center, right_begin, right_end);
+  }
 }
 
 template<class Tp_>
 void MaxTri<Tp_>::
 insert_edge(edge_type const& e)
 {
-  // Insert the edge by its top point.
-  status_iterator elb = status.emplace(e).first;
+#ifdef MAXTRI_DEBUG
+  cerr << "  inserting " << e << endl;
+#endif
 
-  // Look for intersections with adjacent edges in the status.
-  check_intersections(elb);
+  // Insert the edge by its top point.
+  // It is always inserted as the upper bound of any equal_range.
+  status_iterator eit = status.insert(e);
+  assert(eit != status.end());
+
+  check_intersections(eit);
 }
 
 template<class Tp_>
 void MaxTri<Tp_>::
 remove_edge(edge_type const& e)
 {
+#ifdef MAXTRI_DEBUG
+  size_t status_size = status.size();
+  cerr << "  removing " << e << endl;
+#endif
+
   // Remove the edge from the status.
   status_seg_type edge_segment(e);
-  status_iterator eub, elb = status.find(edge_segment);
+  status_iterator eub, elb = find_unique(edge_segment);
 
   // Nb. If this is not the bottom edge ([2]) in the triangle, we will
   // immediately be adding another edge, but it is already done in
@@ -131,101 +150,106 @@ remove_edge(edge_type const& e)
   assert (elb != status.end());
 #else
   // this should always be true: if it's not, handle_tripoint should catch it
-  if (elb != status.end())
+  if (elb == status.end())
+    MTFAIL("edge not found!");
 #endif
-    eub = elb = status.erase(elb);
+
+  eub = elb = status.erase(elb);
   --elb;
+
+#ifdef MAXTRI_DEBUG
+  if (status.size() != status_size - 1)
+    MTFAIL("failed to remove edge!");
+#endif
 
   // Now elb, eub refer to the edges immediately left and right of the removed
   // edge. Theoretically we only need to check for intersections between these
-  // two edges; but because multiple consecutive edges can be from the same
-  // triangle, we need to run the check (which involves a loop) in each
-  // direction. However, we don't want to detect the same point twice.
-
-  // Check to the right of LB, including LB & UB.
-  check_intersection(elb, eub, status.end());
-
-  // Check to the left of UB, skipping LB so we don't check LB & UB twice.
-  if (elb != status.begin())
-  {
-    --elb;
-    if (elb != status.begin())
-    {
-      --elb;
-      check_intersection(eub, elb, status.rend());
-    }
-  }
+  // two edges, but pass them both to the helper anyway.
+  // It's okay if we find the same intersection twice, because it should end up
+  // collapsing in the unordered_set used by IXEvent.
+  check_intersections(elb);
+  check_intersections(eub);
 }
 
 template<class Tp_>
 void MaxTri<Tp_>::
-handle_intersection(isect_point_type const& isect)
+handle_intersection(point_type const& isect_point)
 {
-  // Swap the edges that intersect in the status.
-  // The old left/right edges are now the new right/left edges.
-  status_seg_type lseg_new(isect.left_edge());
-  status_seg_type rseg_old(lseg_new.edge());
-  status_seg_type rseg_new(isect.right_edge());
-  status_seg_type lseg_old(rseg_new.edge());
+  // The first step is to reorder all the segments which form the intersection.
+  //
+  // Because we don't have access to the internal tree nodes of a C++ set,
+  // we have to do this by removing the segments, modifying the comparator,
+  // then re-inserting the segments so they'll be sorted correctly by the
+  // updated comparator.
+  //
+  // This sounds like bad news, but it's actually fine, since the algorithm is
+  // designed so that the change in comparison criteria happens only after each
+  // intersection point, and affects only the intersecting segments! Therefore
+  // we are not modifying the sort order of any nodes existing in the tree.
 
 #ifdef MAXTRI_DEBUG
-  cerr << "    old  left: " << lseg_old << endl;
-  cerr << "    old right: " << rseg_old << endl;
-  cerr << "    new  left: " << lseg_new << endl;
-  cerr << "    new right: " << rseg_new << endl;
+  size_t status_size;
 #endif
 
-  status_iterator lb = status.find(lseg_old);
-  status_iterator rb = status.find(rseg_old);
+  // Lookup the actual intersection event from its point.
+  auto ixit = intersections.find(isect_point);
+  assert(ixit != intersections.end());
+  isect_event_type const& isect = ixit->second;
+
+  // Remove the segments forming the intersection (so we can add them later).
+  for (auto it = isect.begin(); it != isect.end(); ++it)
+  {
 #ifdef MAXTRI_DEBUG
-  if (lb == status.end())
-    throw runtime_error("failed to find old left edge!");
-  if (rb == status.end())
-    throw runtime_error("failed to find old right edge!");
-
-  size_t status_size = status.size();
-#else
-  assert(lb != status.end());
-  assert(rb != status.end());
+    status_size = status.size();
 #endif
 
-  // Remove the old edges.
-  lb = status.erase(lb);
+    status_iterator segit = find_unique(*it);
+
 #ifdef MAXTRI_DEBUG
-  if (status.size() != status_size - 1)
-    throw runtime_error("failed to remove old right edge from status!");
+    if (segit == status.end())
+      MTFAIL("failed to find old segment " << *it);
 #endif
-  if (lb != status.begin())
-    --lb;
 
-  rb = status.erase(rb);
+    status.erase(segit);
+
 #ifdef MAXTRI_DEBUG
-  if (status.size() != status_size - 2)
-    throw runtime_error("failed to remove old left edge from status!");
+    if (status.size() != status_size - 1)
+      MTFAIL("failed to remove old segment " << *it);
 #endif
+  }
 
   // Update the sweep line to the intersection point now that we've removed the
-  // intersecting edges. Now when we insert them they should be swapped
-  // relative to their old positions.
-  update_sweep(isect);
+  // intersecting segments. This changes the sorting criteria, since the
+  // comparator refers to us for the y-position of the sweep line.
+  // Now when we insert the segments again they should be in the correct order.
+  // Classically this equates to a single swap.
+  update_sweep(isect_point);
 
-  // Perform the swap by inserting the edges again.
+  // Perform the reordering by inserting the intersecting segments again.
   // This time they will follow the new world order.
-  rb = lb = status.insert(lb, lseg_new);
+  // We need to remember each segment that is inserted, so we can check for
+  // intersections after they're all added again.
+  std::vector<status_iterator> new_segments;
+  for (auto it = isect.begin(); it != isect.end(); ++it)
+  {
 #ifdef MAXTRI_DEBUG
-  if (status.size() != status_size - 1)
-    throw runtime_error("failed to insert new left edge into status!");
+    status_size = status.size();
 #endif
 
-  rb = status.insert(rb, rseg_new);
-#ifdef MAXTRI_DEBUG
-  if (status.size() != status_size)
-    throw runtime_error("failed to insert new right edge into status!");
-#endif
+    status_iterator newit = status.insert(*it);
+    new_segments.push_back(newit);
 
-  // See if the new edges intersect with their neighbors.
-  check_intersections(lb);
-  check_intersections(rb);
+#ifdef MAXTRI_DEBUG
+    if (status.size() != status_size + 1)
+      MTFAIL("failed to insert new segment!");
+#endif
+  }
+
+  // Now that the sweep line has been updated to the intersection point and the
+  // intersecting segments have been reordered, we have to check each of these
+  // segments for their next point of intersection below the sweep line.
+  for (auto const& segiter : new_segments)
+    check_intersections(segiter);
 }
 
 template<class Tp_>
@@ -233,56 +257,34 @@ void MaxTri<Tp_>::
 handle_tripoint(tri_point_type const& tpoint)
 {
   // Update the sweep line to the point of this event.
+  // Though this implicitly modifies the status comparator, no segments can be
+  // reordered in the status as a result because of the invariants of the
+  // algorithm.
   update_sweep(tpoint.value());
 
-  // We can do this by just queueing all points twice, but this way is clearer
-  // and simplifies event ordering. See the diagrams in the header for
-  // reference on which points are which.
-#ifdef MAXTRI_DEBUG
-  size_t status_size = status.size();
-#endif
-  switch (tpoint.index)
-  {
-  case 0:
-    insert_edge(tpoint.left_edge());
-#ifdef MAXTRI_DEBUG
-    if (status.size() != status_size + 1)
-      throw runtime_error("failed to uniquely insert left edge!");
-#endif
-
-    insert_edge(tpoint.right_edge());
-#ifdef MAXTRI_DEBUG
-    if (status.size() != status_size + 2)
-      throw runtime_error("failed to uniquely insert right edge!");
-#endif
+  // We could queue all points twice (once for the top of each segment, once
+  // for the bottom of each segment) but handling each point of the triangle
+  // is clearer and simplifies event ordering. The diagram from the header
+  // is reproduced below for reference.
+  switch (tpoint.height)              /*                                     */
+  {                                   /*          [0]                TOP     */
+  case TOP:                           /*    (0,1)  *                         */
+    insert_edge(tpoint.left_edge());  /*    V E0  /  \  E1 V                 */
+    insert_edge(tpoint.right_edge()); /*         /     \  (0,2)              */
+    break;                            /*    [1] *- _    \            MIDDLE  */
+                                      /*            - _   \                  */
+  case MIDDLE:                        /*                - _\                 */
+    remove_edge(tpoint.left_edge());  /*           E2 >     * [2]    BOTTOM  */
+    insert_edge(tpoint.right_edge()); /*           (1,2) or (2,1)            */
     break;
 
-  case 1:
+  case BOTTOM:
     remove_edge(tpoint.left_edge());
-    insert_edge(tpoint.right_edge());
-#ifdef MAXTRI_DEBUG
-    if (status.size() < status_size)
-      throw runtime_error("failed to insert right edge!");
-    if (status.size() > status_size)
-      throw runtime_error("failed to remove left edge!");
-#endif
-    break;
-
-  case 2:
-    remove_edge(tpoint.left_edge());
-#ifdef MAXTRI_DEBUG
-    if (status.size() != status_size - 1)
-      throw runtime_error("failed to remove left edge!");
-#endif
     remove_edge(tpoint.right_edge());
-#ifdef MAXTRI_DEBUG
-    if (status.size() != status_size - 2)
-      throw runtime_error("failed to remove right edge!");
-#endif
     break;
 
   default:
-    throw runtime_error("handle_tripoint: bad tpoint index!");
+    MTFAIL("bad tpoint index!");
   }
 }
 
@@ -385,13 +387,13 @@ handle_event(EventType type, event_point_type const& event)
   {
   case INTERSECTION:
     {
-      isect_point_type const& isect(event.isect());
+      point_type const& isect_point(event.isect());
 
 #ifdef MAXTRI_DEBUG
-      cerr << "handling intersection " << isect << endl;
+      cerr << "handling intersection " << isect_point << endl;
 #endif
 
-      handle_intersection(isect);
+      handle_intersection(isect_point);
     }
     break;
 
@@ -408,7 +410,7 @@ handle_event(EventType type, event_point_type const& event)
     break;
 
   default:
-    throw std::runtime_error("unhandled event type!");
+    MTFAIL("unhandled event type!");
   }
 
 #ifdef MAXTRI_DEBUG
