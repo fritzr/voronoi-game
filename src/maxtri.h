@@ -38,11 +38,11 @@
 // With debug enabled, don't inline stuff so it's easier to debug.
 #define MTINLINE
 
-#define MTFAIL(...) { \
+#define MTFAIL(...) do { \
   std::stringstream ss; \
   ss << __PRETTY_FUNCTION__ << ": " << __VA_ARGS__; \
   throw std::runtime_error(ss.str()); \
-}
+} while(0)
 
 #define MTDEBUG(...) __VA_ARGS__
 
@@ -665,7 +665,7 @@ public:
     int index = 0;
     for (auto const& segment : p.segments())
     {
-      os << "    [" << std::setw(2) << std::setfill(' ') << index
+      os << "    [" << std::setw(2) << std::setfill(' ') << index++
         << "] " << segment << std::endl;
     }
     return os;

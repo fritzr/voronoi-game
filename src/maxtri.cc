@@ -87,6 +87,10 @@ check_intersections(status_iterator center)
   // don't call us with a bad segment!
   assert(center != status.end());
 
+#ifdef MAXTRI_DEBUG
+  cerr << "    looking for intersections around " << *center << endl;
+#endif
+
   auto range = status.equal_range(*center);
 
   // Innner bounds.
@@ -108,6 +112,9 @@ check_intersections(status_iterator center)
    *
    * Ultimately, we want to check *center for intersections with all the
    * left (L) and right (R) segments, but not the segments in its own range (C).
+   * We use reverse iterators in the left direction, and forward iterators in
+   * the right direction so the actual checking code in intersect_range can be
+   * the same.
    */
 
   // Look for intersections with the left-adjacent edge(s).
@@ -121,6 +128,14 @@ check_intersections(status_iterator center)
     status_riterator left_end = status.rend();
     if (left_last != status.end())
       left_end = status_riterator(left_last);
+
+#ifdef MAXTRI_DEBUG
+      cerr << "      left: from " << *left_begin << " up to ";
+      if (left_end != status.rend())
+        cerr << *left_end;
+      else
+        cerr << "REND" << endl;
+#endif
 
     intersect_range(*center, left_begin, left_end);
   }
@@ -136,6 +151,15 @@ check_intersections(status_iterator center)
       status_iterator right_end = status.upper_bound(*right_begin);
       if (right_end != status.end())
         ++right_end;
+
+#ifdef MAXTRI_DEBUG
+      cerr << "      right: from " << *right_begin << " up to ";
+      if (right_end != status.end())
+        cerr << *right_end;
+      else
+        cerr << "END" << endl;
+#endif
+
       intersect_range(*center, right_begin, right_end);
     }
   }
@@ -224,11 +248,16 @@ handle_intersection(point_type const& isect_point)
   assert(ixit != intersections.end());
   isect_event_type const& isect = ixit->second;
 
+#ifdef MAXTRI_DEBUG
+  cerr << "handling " << isect;
+#endif
+
   // Remove the segments forming the intersection (so we can add them later).
   for (auto it = isect.begin(); it != isect.end(); ++it)
   {
 #ifdef MAXTRI_DEBUG
     status_size = status.size();
+    cerr << "    removing old segment " << *it << endl;
 #endif
 
     status_iterator segit = find_unique(*it);
@@ -262,6 +291,7 @@ handle_intersection(point_type const& isect_point)
   {
 #ifdef MAXTRI_DEBUG
     status_size = status.size();
+    cerr << "    re-inserting segment " << *it << endl;
 #endif
 
     status_iterator newit = status.insert(*it);
@@ -272,6 +302,11 @@ handle_intersection(point_type const& isect_point)
       MTFAIL("failed to insert new segment!");
 #endif
   }
+
+#ifdef MAXTRI_DEBUG
+  cerr << "reordered ";
+  debug_status();
+#endif
 
   // Now that the sweep line has been updated to the intersection point and the
   // intersecting segments have been reordered, we have to check each of these
@@ -416,10 +451,6 @@ handle_event(EventType type, event_point_type const& event)
   case INTERSECTION:
     {
       point_type const& isect_point(event.isect());
-
-#ifdef MAXTRI_DEBUG
-      cerr << "handling intersection " << isect_point << endl;
-#endif
 
       handle_intersection(isect_point);
     }
