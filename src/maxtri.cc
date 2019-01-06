@@ -105,10 +105,10 @@ check_intersections(status_iterator center)
    *    ---------------------------------------------------------------
    *   |  X  X  X      L  L  L      C  C  C      R  R  R      Z  Z  Z  |
    *    ---------------------------------------------------------------
-   *            ^      ^     ^      ^  ^  ^      ^            ^
-   *     left_end      |     |   left  |  right  |            right_end
-   *         left_last |     |       center      |
-   *              left_begin |                   | right_begin
+   *            ^      ^     ^      ^  ^         ^            ^
+   *     left_end      |     |      |  | center  |            right_end
+   *         left_last |     |      | left       | right (upper_bound)
+   *              left_begin |    (lower_bound)  | right_begin
    *
    * Ultimately, we want to check *center for intersections with all the
    * left (L) and right (R) segments, but not the segments in its own range (C).
@@ -120,12 +120,13 @@ check_intersections(status_iterator center)
   // Look for intersections with the left-adjacent edge(s).
   if (left != status.end() && left != status.begin())
   {
-    // Move out of the equal_range on center into the range to the left.
+    // Move out of the lower_bound on center into the range to the left.
     // Nb. converting to reverse_iterator subtracts 1 from the pointer.
     status_riterator left_begin = status_riterator(left);
 
     status_iterator left_last = status.lower_bound(*left_begin);
     status_riterator left_end = status.rend();
+
     if (left_last != status.end())
       left_end = status_riterator(left_last);
 
@@ -143,25 +144,20 @@ check_intersections(status_iterator center)
   // Look for intersections with the right-adjacent edge(s).
   if (right != status.end())
   {
-    // Move out of the equal_range on center into the range to the right.
+    // The upper_bound is already in the right-adjacent range.
+    // Upper-bounding that range already puts us past the end like we want.
     status_iterator right_begin = right;
-    ++right_begin;
-    if (right_begin != status.end())
-    {
-      status_iterator right_end = status.upper_bound(*right_begin);
-      if (right_end != status.end())
-        ++right_end;
+    status_iterator right_end = status.upper_bound(*right_begin);
 
 #ifdef MAXTRI_DEBUG
-      cerr << "      right: from " << *right_begin << " up to ";
-      if (right_end != status.end())
-        cerr << *right_end;
-      else
-        cerr << "END" << endl;
+    cerr << "      right: from " << *right_begin << " up to ";
+    if (right_end != status.end())
+      cerr << *right_end;
+    else
+      cerr << "END" << endl;
 #endif
 
-      intersect_range(*center, right_begin, right_end);
-    }
+    intersect_range(*center, right_begin, right_end);
   }
 }
 
@@ -315,6 +311,11 @@ handle_intersection(point_type const& isect_point)
   // Now that the sweep line has been updated to the intersection point and the
   // intersecting segments have been reordered, we have to check each of these
   // segments for their next point of intersection below the sweep line.
+  // Technically this will make too many comparisons, as each newly inserted
+  // segment will be compared to the segment it just intersected, but
+  // classically they should only look in the opposite direction.
+  // That's fine, as it's easier than keeping track of which segments ended up
+  // on which side of the intersection.
   for (auto const& segiter : new_segments)
     check_intersections(segiter);
 }
