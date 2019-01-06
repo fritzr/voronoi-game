@@ -15,14 +15,12 @@
 #include <boost/geometry/arithmetic/arithmetic.hpp>
 #include <boost/geometry/arithmetic/dot_product.hpp>
 #include <boost/geometry/algorithms/equals.hpp>
-#include <boost/geometry/util/math.hpp>
 
 #include "adapt_boost_poly.h"
 
 using namespace std;
 namespace bp = boost::polygon;
 namespace bg = boost::geometry;
-namespace bgmth = boost::geometry::math;
 
 #ifdef WIN32
 extern "C"{
@@ -36,27 +34,6 @@ template<typename Pt_>
 ply_vertex<Pt_>::~ply_vertex()
 {
     //doing nothing for now
-}
-
-template<typename Pt_, typename T>
-void
-normalize(Pt_ &p, T &magnitude)
-{
-  typedef typename bg::coordinate_type<Pt_>::type coord_t;
-
-  // normalize
-  magnitude = bgmth::sqrt(bg::dot_product(p, p));
-  if (!bgmth::equals(magnitude, coord_t(0)))
-    bg::divide_value(p, magnitude);
-}
-
-template<typename Pt_>
-void normalize(Pt_ &p)
-{
-  typedef typename bg::coordinate_type<Pt_>::type coord_t;
-
-  coord_t magnitude_unused;
-  normalize(p, magnitude_unused);
 }
 
 // - compute normal

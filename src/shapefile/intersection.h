@@ -7,10 +7,35 @@
 
 #include "boost_geo_poly.h"
 #include <boost/geometry/util/select_coordinate_type.hpp>
+#include <boost/geometry/util/math.hpp>
+
+namespace bgmth = boost::geometry::math;
 
 /* range of real numbers */
 #define SMALLNUMBER 1.0e-10
 #define HUGENUMBER  1.0e10
+
+template<typename Pt_, typename T>
+void
+normalize(Pt_ &p, T &magnitude)
+{
+  typedef typename bg::coordinate_type<Pt_>::type coord_t;
+
+  // normalize
+  magnitude = bgmth::sqrt(bg::dot_product(p, p));
+  if (!bgmth::equals(magnitude, coord_t(0)))
+    bg::divide_value(p, magnitude);
+}
+
+template<typename Pt_>
+void
+normalize(Pt_ &p)
+{
+  typedef typename bg::coordinate_type<Pt_>::type coord_t;
+
+  coord_t magnitude_unused;
+  normalize(p, magnitude_unused);
+}
 
 /* Whether p1 -> p2 -> p3 forms a left turn.  */
 template<class Pt1_, class Pt2_, class Pt3_>
