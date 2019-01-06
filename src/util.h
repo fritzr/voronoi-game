@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <vector>
 #include <list>
+#include <iterator>
 
 #ifdef MSVC
 #define __attribute__()
@@ -119,5 +120,52 @@ ostream& operator<<(ostream& os, list<T> const& l) {
 }
 
 } // end namespace std
+
+
+template <class Container>
+  class push_insert_iterator:
+    public std::iterator<std::output_iterator_tag,void,void,void,void>
+{
+protected:
+  Container* container;
+
+public:
+  typedef Container container_type;
+  explicit push_insert_iterator(Container& x) : container(&x) {}
+  push_insert_iterator<Container>& operator=(
+      typename Container::const_reference value)
+    { container->push(value); return *this; }
+  push_insert_iterator<Container>& operator* (){ return *this; }
+  push_insert_iterator<Container>& operator++ (){ return *this; }
+  push_insert_iterator<Container> operator++ (int){ return *this; }
+};
+
+template<typename Container>
+push_insert_iterator<Container> push_inserter(Container& container){
+  return push_insert_iterator<Container>(container);
+}
+
+template <class Container>
+  class emplace_insert_iterator:
+    public std::iterator<std::output_iterator_tag,void,void,void,void>
+{
+protected:
+  Container* container;
+
+public:
+  typedef Container container_type;
+  explicit emplace_insert_iterator(Container& x) : container(&x) {}
+  template<typename Tp_>
+  emplace_insert_iterator<Container>& operator=(Tp_ &&value)
+    { container->emplace(value); return *this; }
+  emplace_insert_iterator<Container>& operator* (){ return *this; }
+  emplace_insert_iterator<Container>& operator++ (){ return *this; }
+  emplace_insert_iterator<Container> operator++ (int){ return *this; }
+};
+
+template<typename Container>
+emplace_insert_iterator<Container> emplace_inserter(Container& container){
+  return emplace_insert_iterator<Container>(container);
+}
 
 #endif // DEBUG

@@ -23,28 +23,6 @@
 #include "sweep.h"
 #include "nn1.h"
 
-template <class Container>
-  class push_insert_iterator:
-    public std::iterator<std::output_iterator_tag,void,void,void,void>
-{
-protected:
-  Container* container;
-
-public:
-  typedef Container container_type;
-  explicit push_insert_iterator(Container& x) : container(&x) {}
-  push_insert_iterator<Container>& operator=(
-      typename Container::const_reference value)
-    { container->push(value); return *this; }
-  push_insert_iterator<Container>& operator* (){ return *this; }
-  push_insert_iterator<Container>& operator++ (){ return *this; }
-  push_insert_iterator<Container> operator++ (int){ return *this; }
-};
-
-template<typename Container>
-push_insert_iterator<Container> push_inserter(Container& container){
-  return push_insert_iterator<Container>(container);
-}
 
 namespace cfla { namespace rect
 {
