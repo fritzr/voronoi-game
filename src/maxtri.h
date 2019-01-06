@@ -1021,12 +1021,13 @@ public:
     // If the segments are collinear (parallel + overlap) they are unsortable.
     // They will be put in the same equal_range in the status multiset and
     // must be dealt with specially.
+    // Equals means we should return false associatively.
     if (AlmostEqualV(turn, 0))
     {
 #ifdef MAXTRI_DEBUG
-      std::cerr << true << ": collinear (equal)" << std::endl;
+      std::cerr << false << ": collinear (equal)" << std::endl;
 #endif
-      return true;
+      return false;
     }
 
     // The left-heading edge should be less so it is first in a left-to-right
