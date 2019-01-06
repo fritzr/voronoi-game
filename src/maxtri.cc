@@ -294,21 +294,21 @@ handle_tripoint(tri_point_type const& tpoint)
   // for the bottom of each segment) but handling each point of the triangle
   // is clearer and simplifies event ordering. The diagram from the header
   // is reproduced below for reference.
-  switch (tpoint.height)              /*                                     */
-  {                                   /*          [0]                TOP     */
-  case TOP:                           /*    (0,1)  *                         */
-    insert_edge(tpoint.left_edge());  /*    V E0  /  \  E1 V                 */
-    insert_edge(tpoint.right_edge()); /*         /     \  (0,2)              */
-    break;                            /*    [1] *- _    \            MIDDLE  */
-                                      /*            - _   \                  */
-  case MIDDLE:                        /*                - _\                 */
-    remove_edge(tpoint.left_edge());  /*           E2 >     * [2]    BOTTOM  */
-    insert_edge(tpoint.right_edge()); /*           (1,2) or (2,1)            */
+  switch (tpoint.height)               /*                                 */
+  {                                    /*       [0]                TOP    */
+  case TOP:                            /* (0,1)  *                        */
+    insert_edge(tpoint.top_edge());    /* V E0  /  \  E1 V                */
+    insert_edge(tpoint.bottom_edge()); /*      /     \  (0,2)             */
+    break;                             /* [1] *- _    \            MIDDLE */
+                                       /*         - _   \                 */
+  case MIDDLE:                         /*             - _\                */
+    remove_edge(tpoint.top_edge());    /*        E2 >     * [2]    BOTTOM */
+    insert_edge(tpoint.bottom_edge()); /*        (1,2) or (2,1)           */
     break;
 
   case BOTTOM:
-    remove_edge(tpoint.left_edge());
-    remove_edge(tpoint.right_edge());
+    remove_edge(tpoint.top_edge());
+    remove_edge(tpoint.bottom_edge());
     break;
 
   default:

@@ -482,45 +482,46 @@ public:
     return tridata->point(index);
   }
 
- /* When looking into the center of the triangle from a TriEventPoint,
-  * the two edges that share it are considered the "left" and "right" edges
-  * with respect to the point according to the turn direction from the
-  * bisector of the two edges to the other point of the edge.
-  * The indexes are consistent regardless of the triangle's actual shape
-  * according to their definitions in the comments for the Triangle class.
-  * Here is the same example diagram:
+ /* From the perspective of the algorithm, we need to visit the edges in the
+  * correct order. For the top point we insert both edges, and for the bottom
+  * point we remove both edges. Since the operation is the same on both edges
+  * it doesn't matter which is which. But for the middle point (which can be
+  * point [1] or [2]) we need to remove the edge we inserted from [0], and
+  * insert the other edge which will be removed by the bottom point.
+  * Therefore we define a TOP edge and BOTTOM edge for each point with respect
+  * to the point indexes as defined by Triangle:
   *
-  *       [0]               [0]                               >
-  *        *                    left edge: E1               / left edge
-  * V E0  /  \  E1 V           right edge: E0   exterior  /
-  *      /     \            [1]                         /
-  * [1] *- _    \               left edge: E0         * - - - - - > bisector
-  *         - _   \            right edge: E2           \  interior
-  *             - _\        [2]                           \
-  *        E2 >    * [2]        left edge: E2               \ right edge
-  *                            right edge: E1                 >
+  *       [0]               [0]
+  *        *                     top edge: E0
+  * V E0  /  \  E1 V          bottom edge: E1
+  *      /     \            [1]
+  * [1] *- _    \                top edge: E0
+  *         - _   \           bottom edge: E2
+  *             - _\        [2]
+  *        E2 >    * [2]         top edge: E1
+  *                           bottom edge: E2
   */
 
-  MTINLINE edge_type const& left_edge(void) const
+  MTINLINE edge_type const& top_edge(void) const
   {
-    static const int left_edge_indexes[] = {
-      /* point index -> left edge index */
-      /* 0 -> */ 1,
-      /* 1 -> */ 0,
-      /* 2 -> */ 2,
-    };
-    return tridata->edges[left_edge_indexes[index]];
-  }
-
-  MTINLINE edge_type const& right_edge(void) const
-  {
-    static const int right_edge_indexes[] = {
-      /* point index -> right edge index */
+    static const int top_edge_indexes[] = {
+      /* point index -> top edge index */
       /* 0 -> */ 0,
-      /* 1 -> */ 2,
+      /* 1 -> */ 0,
       /* 2 -> */ 1,
     };
-    return tridata->edges[right_edge_indexes[index]];
+    return tridata->edges[top_edge_indexes[index]];
+  }
+
+  MTINLINE edge_type const& bottom_edge(void) const
+  {
+    static const int bottom_edge_indexes[] = {
+      /* point index -> bottom edge index */
+      /* 0 -> */ 1,
+      /* 1 -> */ 2,
+      /* 2 -> */ 2,
+    };
+    return tridata->edges[bottom_edge_indexes[index]];
   }
 
 #ifdef MAXTRI_DEBUG
@@ -528,7 +529,7 @@ public:
   std::ostream& operator<<(std::ostream& os, TriEventPoint const& p)
   {
     os << "[" << p.index << "] joining "
-      << p.left_edge() << " + " << p.right_edge();
+      << p.top_edge() << " and " << p.bottom_edge();
     return os;
   }
 #endif
