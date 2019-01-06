@@ -151,6 +151,15 @@ inline bool AlmostEqual(const Pt1 a, const Pt2 b)
     return AlmostEqual(a, b, SMALLNUMBER);
 }
 
+// Similar to std::equal_to; functor adapter for AlmostEqual.
+template<typename Point>
+struct almost_equal_to
+{
+  inline bool operator()(const Point& lhs, const Point& rhs) const {
+    return AlmostEqual(lhs, rhs);
+  }
+};
+
 
 // compute union of two colinear  segments ab and cd
 // place the union in p
