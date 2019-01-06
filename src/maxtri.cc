@@ -207,7 +207,8 @@ remove_edge(edge_type const& e)
 #endif
 
   eub = elb = status.erase(elb);
-  --elb;
+  if (elb != status.begin())
+    --elb;
 
 #ifdef MAXTRI_DEBUG
   if (status.size() != status_size - 1)
@@ -219,8 +220,11 @@ remove_edge(edge_type const& e)
   // two edges, but pass them both to the helper anyway.
   // It's okay if we find the same intersection twice, because it should end up
   // collapsing in the unordered_set used by IXEvent.
-  check_intersections(elb);
-  check_intersections(eub);
+  if (elb != status.end())
+    check_intersections(elb);
+
+  if (eub != status.end() && elb != eub)
+    check_intersections(eub);
 }
 
 template<class Tp_>
