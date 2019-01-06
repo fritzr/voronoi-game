@@ -1438,11 +1438,11 @@ private:
 
   // Look through the status in both directions to find which edges intersect
   // the given edge. Queue the intersection points.
-  void check_intersections(const status_iterator center);
+  void check_intersections(status_iterator center);
 
   // Check for intersections between edge and every segment in [begin, end).
   template<typename Iter>
-  void intersect_range(const Iter edge, Iter begin, const Iter end);
+  void intersect_range(status_seg_type const& seg, Iter begin, Iter end);
 
   // Intersect the two line segments defined by Edges.
   // If there is an intersection (return code other than '0'), sets the fields

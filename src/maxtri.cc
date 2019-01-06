@@ -32,15 +32,12 @@ template<class Tp_>
 template<typename Iter>
 void
 MaxTri<Tp_>::
-intersect_range(const Iter segment, Iter begin, const Iter end)
+intersect_range(status_seg_type const& segment, Iter begin, Iter end)
 {
-  if (segment == end || begin == end)
-    return;
-
   // Check intersection with each segment from [neighbor, end).
-  point_type current_point = status_compare::isect_sweep(*segment, current_y());
+  point_type current_point = status_compare::isect_sweep(segment, current_y());
 
-  // See the comments for IXEvent.
+  // See the comments on IXEvent for why this is a loop.
   while (begin != end)
   {
 #ifdef MAXTRI_DEBUG
@@ -50,7 +47,7 @@ intersect_range(const Iter segment, Iter begin, const Iter end)
     // Check for intersections and queue any we find.
     // Do not queue filthy degenerates or points we've already visited.
     point_type pt;
-    char code = intersect(segment->edge(), begin->edge(), pt);
+    char code = intersect(segment.edge(), begin->edge(), pt);
     if ('0' != code && 'v' != code && 'e' != code
         && event_point_ycompare()(pt, current_point))
     {
@@ -75,7 +72,7 @@ intersect_range(const Iter segment, Iter begin, const Iter end)
       }
 
       // Record that these segments also form this intersection.
-      ixit->second.insert(*segment, *begin);
+      ixit->second.insert(segment, *begin);
     }
 
     ++begin;
@@ -85,31 +82,62 @@ intersect_range(const Iter segment, Iter begin, const Iter end)
 // Check new intersections for a segment based on the current status.
 template<class Tp_>
 void MaxTri<Tp_>::
-check_intersections(const status_iterator center)
+check_intersections(status_iterator center)
 {
   // don't call us with a bad segment!
   assert(center != status.end());
 
   auto range = status.equal_range(*center);
+
+  // Innner bounds.
   status_iterator right = range.second;
   status_iterator left = range.first;
 
+  /* The following diagram illustrates the iterators below referring to
+   * segments in the sweep status, where the same letter indicates segments in
+   * the same equal_range:
+   *
+   *      0  1  2      3  4  5      6  7  8      9 10 11     12 13 14
+   *    ---------------------------------------------------------------
+   *   |  X  X  X      L  L  L      C  C  C      R  R  R      Z  Z  Z  |
+   *    ---------------------------------------------------------------
+   *            ^      ^     ^      ^  ^  ^      ^            ^
+   *     left_end      |     |   left  |  right  |            right_end
+   *         left_last |     |       center      |
+   *              left_begin |                   | right_begin
+   *
+   * Ultimately, we want to check *center for intersections with all the
+   * left (L) and right (R) segments, but not the segments in its own range (C).
+   */
+
   // Look for intersections with the left-adjacent edge(s).
-  if (left != center && left != status.end() && left != status.begin())
+  if (left != status.end() && left != status.begin())
   {
-    auto left_range = status.equal_range(*--left);
-    status_riterator left_begin = status_riterator(left_range.second);
-    status_riterator left_end = status_riterator(left_range.first);
-    intersect_range(status_riterator(center), left_begin, left_end);
+    // Move out of the equal_range on center into the range to the left.
+    // Nb. converting to reverse_iterator subtracts 1 from the pointer.
+    status_riterator left_begin = status_riterator(left);
+
+    status_iterator left_last = status.lower_bound(*left_begin);
+    status_riterator left_end = status.rend();
+    if (left_last != status.end())
+      left_end = status_riterator(left_last);
+
+    intersect_range(*center, left_begin, left_end);
   }
 
   // Look for intersections with the right-adjacent edge(s).
-  if (right != center && left != right && right != status.end())
+  if (right != status.end())
   {
-    auto right_range = status.equal_range(*++right);
-    status_iterator right_begin = status_iterator(right_range.first);
-    status_iterator right_end = status_iterator(right_range.second);
-    intersect_range(center, right_begin, right_end);
+    // Move out of the equal_range on center into the range to the right.
+    status_iterator right_begin = right;
+    ++right_begin;
+    if (right_begin != status.end())
+    {
+      status_iterator right_end = status.upper_bound(*right_begin);
+      if (right_end != status.end())
+        ++right_end;
+      intersect_range(*center, right_begin, right_end);
+    }
   }
 }
 
