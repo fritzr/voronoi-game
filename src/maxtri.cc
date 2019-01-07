@@ -572,8 +572,8 @@ initialize(void)
 
 struct clique_visitor
 {
-  clique_visitor(std::set<int> &ref)
-    : max_clique(ref), max_depth(0u)
+  clique_visitor(std::set<int> &clique_ref, size_t &depth_ref)
+    : max_clique(clique_ref), max_depth(depth_ref)
   {}
 
   template<typename Clique, typename Graph>
@@ -596,7 +596,7 @@ struct clique_visitor
   }
 
   std::set<int> &max_clique;
-  size_t max_depth;
+  size_t &max_depth;
 };
 
 
@@ -627,7 +627,8 @@ finalize(void)
 #endif
 
   std::set<int> max_clique;
-  clique_visitor visitor(max_clique);
+  size_t max_size = 0u;
+  clique_visitor visitor(max_clique, max_size);
   bron_kerbosch_all_cliques(*graph, visitor);
 
   // Pull the solution triangles from the index set.
