@@ -40,7 +40,7 @@ intersect_range(status_seg_type const& segment, Iter begin, Iter end)
   // See the comments on IXEvent for why this is a loop.
   while (begin != end)
   {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     cerr << "    checking intersection with " << *begin << endl;
 #endif
 
@@ -51,7 +51,7 @@ intersect_range(status_seg_type const& segment, Iter begin, Iter end)
     if ('0' != code && 'v' != code && 'e' != code
         && event_point_ycompare()(pt, current_point))
     {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
       cerr << "    found intersection '" << code << "' " << pt << endl;
 #endif
 
@@ -87,7 +87,7 @@ check_intersections(status_iterator center)
   // don't call us with a bad segment!
   assert(center != status.end());
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   cerr << "    looking for intersections around " << *center << endl;
 #endif
 
@@ -130,7 +130,7 @@ check_intersections(status_iterator center)
     if (left_last != status.end())
       left_end = status_riterator(left_last);
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
       cerr << "      left: from " << *left_begin << " up to ";
       if (left_end != status.rend())
         cerr << *left_end;
@@ -149,7 +149,7 @@ check_intersections(status_iterator center)
     status_iterator right_begin = right;
     status_iterator right_end = status.upper_bound(*right_begin);
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     cerr << "      right: from " << *right_begin << " up to ";
     if (right_end != status.end())
       cerr << *right_end;
@@ -165,7 +165,7 @@ template<class Tp_>
 void MaxTri<Tp_>::
 insert_edge(edge_type const& e)
 {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   cerr << "  inserting " << e << endl;
 #endif
 
@@ -181,7 +181,7 @@ template<class Tp_>
 void MaxTri<Tp_>::
 remove_edge(edge_type const& e)
 {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   size_t status_size = status.size();
   cerr << "  removing " << e << endl;
 #endif
@@ -194,7 +194,7 @@ remove_edge(edge_type const& e)
   // immediately be adding another edge, but it is already done in
   // handle_tripoint.
 
-#ifndef MAXTRI_DEBUG
+#ifndef MAXTRI_DEBUG_INTERSECT
   assert (elb != status.end());
 #else
   // this should always be true: if it's not, handle_tripoint should catch it
@@ -206,7 +206,7 @@ remove_edge(edge_type const& e)
   if (elb != status.begin())
     --elb;
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   if (status.size() != status_size - 1)
     MTFAIL("failed to remove edge!");
 #endif
@@ -239,7 +239,7 @@ handle_intersection(point_type const& isect_point)
   // intersection point, and affects only the intersecting segments! Therefore
   // we are not modifying the sort order of any nodes existing in the tree.
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   size_t status_size;
 #endif
 
@@ -248,28 +248,28 @@ handle_intersection(point_type const& isect_point)
   assert(ixit != intersections.end());
   isect_event_type const& isect = ixit->second;
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   cerr << "handling " << isect;
 #endif
 
   // Remove the segments forming the intersection (so we can add them later).
   for (auto it = isect.begin(); it != isect.end(); ++it)
   {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     status_size = status.size();
     cerr << "    removing old segment " << *it << endl;
 #endif
 
     status_iterator segit = find_unique(*it);
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     if (segit == status.end())
       MTFAIL("failed to find old segment " << *it);
 #endif
 
     status.erase(segit);
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     if (status.size() != status_size - 1)
       MTFAIL("failed to remove old segment " << *it);
 #endif
@@ -289,7 +289,7 @@ handle_intersection(point_type const& isect_point)
   std::vector<status_iterator> new_segments;
   for (auto it = isect.begin(); it != isect.end(); ++it)
   {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     status_size = status.size();
     cerr << "    re-inserting segment " << *it << endl;
 #endif
@@ -297,16 +297,11 @@ handle_intersection(point_type const& isect_point)
     status_iterator newit = status.insert(*it);
     new_segments.push_back(newit);
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     if (status.size() != status_size + 1)
       MTFAIL("failed to insert new segment!");
 #endif
   }
-
-#ifdef MAXTRI_DEBUG
-  cerr << "reordered ";
-  debug_status();
-#endif
 
   // Now that the sweep line has been updated to the intersection point and the
   // intersecting segments have been reordered, we have to check each of these
@@ -356,7 +351,7 @@ handle_tripoint(tri_point_type const& tpoint)
   }
 }
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
 
 template<class Tp_>
 void MaxTri<Tp_>::
@@ -465,7 +460,7 @@ handle_event(EventType type, event_point_type const& event)
     {
       tri_point_type const& tri_point(event.point());
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
       cerr << "handling point " << tri_point << endl;
 #endif
 
@@ -477,7 +472,7 @@ handle_event(EventType type, event_point_type const& event)
     MTFAIL("unhandled event type!");
   }
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   debug_status();
 #endif
 }

@@ -51,7 +51,8 @@
 #define MTINLINE inline
 #define MTFAIL(...)
 #define MTDEBUG(...)
-#endif
+
+#endif // MAXTRI_DEBUG
 
 #ifdef MAXTRI_DEBUG
 struct ioptr
@@ -68,7 +69,7 @@ struct ioptr
     return os;
   }
 };
-#endif
+#endif // MAXTRI_DEBUG
 
 namespace cfla { namespace tri
 {
@@ -353,7 +354,7 @@ struct triangle_data
 
   // parent edge
   MTINLINE edge_type const& edge(int index) const {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     if (index < 0)
       MTFAIL("negative edge index!");
 #endif
@@ -361,7 +362,7 @@ struct triangle_data
   }
 
   MTINLINE point_type const& point(int index) const {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     if (index < 0)
       MTFAIL("negative point index!");
     if (index > 2)
@@ -737,7 +738,7 @@ public:
   }
 
   MTINLINE tri_point_type const& point(void) const {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     if (type() != TRIPOINT)
       MTFAIL("type mismatch, got " << type() << ", expected TRIPOINT");
 #endif
@@ -745,7 +746,7 @@ public:
   }
 
   MTINLINE point_type const& isect(void) const {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     if (type() != INTERSECTION)
       MTFAIL("type mismatch, got " << type() << ", expected INTERSECTION");
 #endif
@@ -985,7 +986,7 @@ public:
     const point_type sort_a = isect_sweep(a, sweepy);
     const point_type sort_b = isect_sweep(b, sweepy);
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     std::cerr
       << "        comparing " << sort_a << " | " << a << std::endl
       << "                < " << sort_b << " | " << b << "..." << std::endl
@@ -996,7 +997,7 @@ public:
     if (!AlmostEqualV(getx(sort_a), getx(sort_b)))
     {
       bool ret = getx(sort_a) < getx(sort_b);
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
       std::cerr << ret << ":"
         << " x_a (" << getx(sort_a) << ") " << (ret ? " <" : ">=")
         << " x_b (" << getx(sort_b) << ")" << std::endl;
@@ -1007,7 +1008,7 @@ public:
     if (!AlmostEqualV(gety(sort_a), gety(sort_b)))
     {
       bool ret = gety(sort_a) < gety(sort_b);
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
       std::cerr << ret << ":"
         << " y_a (" << gety(sort_a) << ") " << (ret ? " <" : ">=")
         << " y_b (" << gety(sort_b) << ")" << std::endl;
@@ -1024,7 +1025,7 @@ public:
     // Equals means we should return false associatively.
     if (AlmostEqualV(turn, 0))
     {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
       std::cerr << false << ": collinear (equal)" << std::endl;
 #endif
       return false;
@@ -1033,7 +1034,7 @@ public:
     // The left-heading edge should be less so it is first in a left-to-right
     // (low-to-high) traversal of the sweep status.
     bool ret = turn > 0; // true for left turn
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     std::cerr << ret << ": " << (ret ? " left" : "right") << " turn "
       << b.second() << " -> " << sort_a << " -> " << a.second() << std::endl;
 #endif
@@ -1139,7 +1140,7 @@ public:
     return tridata()->edge((index() + 2) % 3); // -1 mod 3
   }
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   MTINLINE friend std::ostream& operator<<(std::ostream& os, Edge const& e) {
     os << "[ " << e.first() << " => " << e.second() << " ]"
       " (@tri=" << ioptr(e.tridata()) << ")";
@@ -1470,7 +1471,7 @@ private:
   }
 
   MTINLINE void update_sweep(coordinate_type new_y) {
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
     std::cerr << "SWEEP " << _lasty << " -> " << new_y << std::endl;
 #endif
     _lasty = new_y;
@@ -1481,7 +1482,7 @@ private:
     update_sweep(gety(new_y_point));
   }
 
-#ifdef MAXTRI_DEBUG
+#ifdef MAXTRI_DEBUG_INTERSECT
   void dump_status_to_octave(std::ostream& os) const;
   void debug_status(void) const;
 #endif
@@ -1536,8 +1537,8 @@ public:
 
       tris.emplace_back(*ply, triangle);
 
-#ifdef MAXTRI_DEBUG
-      std::cout << "QUEUE triangle" << std::endl
+#ifdef MAXTRI_DEBUG_INTERSECT
+      std::cerr << "QUEUE triangle" << std::endl
         << "  POINTS" << std::endl
         << "    [0] " << tris.back()[0] << std::endl
         << "    [1] " << tris.back()[1] << std::endl
