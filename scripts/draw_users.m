@@ -1,4 +1,4 @@
-function [points, rings, shppoints, shprings] ...
+function [points, shppoints, rings, shprings] ...
     = draw_users (filename, draw_index, axes)
 % -- draw_users(FILE[, DRAW_INDEX[, AXES]])
 % -- POINTS, RINGS, SHP_POINTS, SHP_RINGS = draw_users(...)
@@ -14,9 +14,12 @@ function [points, rings, shppoints, shprings] ...
 %
 %     The return vectors are as follows:
 %     POINTS     -- Nx2 vector of [ X Y ] center user points.
-%     RINGS      -- 1xM cell array: each element is an Nx2 polygon vector
 %     SHP_POINTS -- struct array of all points
+%     RINGS      -- 1xM cell array: each element is an Nx2 polygon vector
 %     SHP_RINGS  -- struct array of all rings
+%
+%     If RINGS is omitted, only POINTS will be read/drawn and no modifications
+%     to the filename will be used (we will read <FILE>.{shp,dbf}).
 %
 %     For help on the format of SHP_POINTS/SHP_RINGS, see the shaperead
 %     function. This function requires that the geometry, and shapefile
@@ -31,8 +34,15 @@ function [points, rings, shppoints, shprings] ...
     axes = [0 1920 0 1080];
   end
 
-  point_file = [filename '_points'];
-  rings_file = [filename '_rings'];
+  read_rings = nargout >= 3;
+
+  if read_rings,
+    point_file = [filename '_points'];
+    rings_file = [filename '_rings'];
+  else
+    point_file = filename ;
+    rings_file = '';
+  end
 
   shppoints = shaperead(point_file);
   points = [ [shppoints.X]' [shppoints.Y]' ];
@@ -44,11 +54,13 @@ function [points, rings, shppoints, shprings] ...
       draw_index = colon(1, length(points));
   end
 
-  shprings = shaperead(rings_file);
-  nrings = length(shprings);
-  rings = cell(1, nrings);
-  for i = 1:nrings,
-    rings{i} = [ [shprings(i).X]' [shprings(i).Y]' ];
+  if read_rings,
+    shprings = shaperead(rings_file);
+    nrings = length(shprings);
+    rings = cell(1, nrings);
+    for i = 1:nrings,
+      rings{i} = [ [shprings(i).X]' [shprings(i).Y]' ];
+    end
   end
 
   if length(draw_index) > 0,
@@ -59,6 +71,10 @@ function [points, rings, shppoints, shprings] ...
     widths = 200 .* ones(1,length(draw_index));
     scatter(points(draw_index,1), points(draw_index,2), widths, draw_index, ...
         'filled');
+
+    if ! read_rings,
+      return
+    end
 
     % draw rings with colors matching the center point,
     for i = 1:length(rings),
