@@ -1461,6 +1461,12 @@ private:
     update_sweep(gety(new_y_point));
   }
 
+#ifdef MAXTRI_DEBUG
+  void dump_tris_to_octave(std::ostream& os) const;
+  void dump_solution_to_octave(std::ostream& os,
+      std::set<int> const& indexes, solution_cell_type const& sol) const;
+#endif
+
 #ifdef MAXTRI_DEBUG_INTERSECT
   void dump_status_to_octave(std::ostream& os) const;
   void debug_status(void) const;

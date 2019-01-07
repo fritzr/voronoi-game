@@ -15,6 +15,9 @@
 #include "intersection.h"
 
 #include <boost/graph/bron_kerbosch_all_cliques.hpp>
+#ifdef MAXTRI_DEBUG
+#include <boost/graph/graphviz.hpp>
+#endif
 
 using namespace std;
 using namespace boost;
@@ -370,6 +373,57 @@ handle_tripoint(tri_point_type const& tpoint)
   }
 }
 
+#ifdef MAXTRI_DEBUG
+
+template<class Tp_>
+void MaxTri<Tp_>::
+dump_tris_to_octave(ostream& os) const
+{
+  os << "hold on;" << endl;
+
+  int color_id = 1;
+  for (const triangle_type &t : tris)
+  {
+    cerr << "    [" << setw(2) << setfill(' ') << (color_id-1) << "] "
+      << t.point(0) << " " << t.point(1) << " " << t.point(2) << endl;
+
+    os << "tri = [ ";
+    for (auto const& point : t.points())
+      os << getx(point) << " , " << gety(point) << " ; ";
+    os << " ];" << endl
+       << "fill(tri(:,1), tri(:,2), " << color_id++ << ");" << endl;
+  }
+}
+
+template<class Tp_>
+void MaxTri<Tp_>::
+dump_solution_to_octave(ostream& os, std::set<int> const& indexes,
+    solution_cell_type const& solution) const
+{
+  os << "hold on;" << endl;
+
+  // Fill all composite triangles
+  int color_id = 1;
+  for (int idx : indexes)
+  {
+    os << "tri = [ ";
+    const triangle_type &t = tris[idx];
+    for (auto const& point : t.points())
+      os << getx(point) << " , " << gety(point) << " ; ";
+    os << " ];" << endl
+       << "fill(tri(:,1), tri(:,2), " << color_id++ << ");" << endl;
+  }
+
+  // Then fill the solution
+  os << "sol = [ ";
+  for (auto const& point : solution)
+    os << getx(point) << " , " << gety(point) << " ; ";
+  os << " ];" << endl
+    << "fill(sol(:,1), sol(:,2), 'k');" << endl;
+}
+
+#endif
+
 #ifdef MAXTRI_DEBUG_INTERSECT
 
 template<class Tp_>
@@ -440,7 +494,8 @@ debug_status(void) const
   static int status_cnt = 0;
 
   stringstream ofname_s;
-  ofname_s << "status_" << dec << setw(2) << setfill('0') << status_cnt << ".m";
+  ofname_s << "./scripts/status_" // %02d
+    << dec << setw(2) << setfill('0') << status_cnt << ".m";
   string ofname(ofname_s.str());
 
   cerr << ofname << ":" << endl;
@@ -503,6 +558,14 @@ initialize(void)
   if (graph)
     delete graph;
 
+#ifdef MAXTRI_DEBUG
+  string tri_path("./scripts/triangles.m");
+  cerr << "dumping triangles to " << tri_path << endl;
+  ofstream trif(tri_path);
+  dump_tris_to_octave(trif);
+  trif.close();
+#endif
+
   // One slot per triangle.
   graph = new components_graph(tris.size());
 }
@@ -514,14 +577,19 @@ struct clique_visitor
   {}
 
   template<typename Clique, typename Graph>
-  void clique(Clique const& c, Graph const& g) {
+  void clique(Clique const& c, Graph const& g)
+  {
     std::set<int> current_clique;
     size_t current_depth = 0u;
-    for (auto it = c.begin(); it != c.end(); ++it) {
+
+    for (auto it = c.begin(); it != c.end(); ++it)
+    {
       current_clique.insert(*it);
       ++current_depth;
     }
-    if (current_depth > max_depth) {
+
+    if (current_depth > max_depth)
+    {
       max_depth = current_depth;
       max_clique = current_clique;
     }
@@ -550,6 +618,14 @@ finalize(void)
   // This is the group of maximally intersecting triangles.
   // We could modify our clique visitor to track all cells at the max depth...
   // But for now we'll just choose the first one we encounter.
+#ifdef MAXTRI_DEBUG
+  string graph_path("./data/adjacency.gvz");
+  cerr << "dumping graph to " << graph_path << endl;
+  ofstream graphf(graph_path);
+  boost::write_graphviz(graphf, *graph);
+  graphf.close();
+#endif
+
   std::set<int> max_clique;
   clique_visitor visitor(max_clique);
   bron_kerbosch_all_cliques(*graph, visitor);
@@ -563,6 +639,27 @@ finalize(void)
   // Intersect all the triangles together.
   solution_cell_type s;
   intersection(max_clique_triangles.begin(), max_clique_triangles.end(), s);
+
+#ifdef MAXTRI_DEBUG
+  cerr << "solution from triangles: " << endl;
+  for (int index : max_clique)
+  {
+    triangle_type const& tri = tris[index];
+    cerr << "    [" << setw(2) << setfill(' ') << index << "] "
+      << tri.point(0) << "  " << tri.point(1) << "  " << tri.point(2)
+      << endl;
+  }
+
+  cerr << "with bounds: ";
+  for (auto const& point : s)
+    cerr << point << " ";
+  cerr << endl;
+
+  ofstream ofsol("./scripts/solution.m");
+  dump_solution_to_octave(ofsol, max_clique, s);
+  ofsol.close();
+#endif
+
   solutions().push_back(s);
 }
 
