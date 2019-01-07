@@ -56,3 +56,5 @@ data/
 # Octave workspace
 *workspace
 /*.m
+scripts/solution.m
+scripts/triangles.m
