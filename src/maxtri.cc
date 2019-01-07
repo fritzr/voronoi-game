@@ -14,7 +14,10 @@
 #include "maxtri.h"
 #include "intersection.h"
 
+#include <boost/graph/bron_kerbosch_all_cliques.hpp>
+
 using namespace std;
+using namespace boost;
 
 // competitive facility location algorithms
 namespace cfla { namespace tri
@@ -26,6 +29,11 @@ MaxTri<Tp_>::~MaxTri(void)
   status.clear();
   tris.clear();
   polys.clear();
+  if (graph)
+  {
+    delete graph;
+    graph = nullptr;
+  }
 }
 
 template<class Tp_>
@@ -260,6 +268,17 @@ handle_intersection(point_type const& isect_point)
     cerr << "    removing old segment " << *it << endl;
 #endif
 
+    /* While we're at it, mark every triangle composing this point as
+     * intersecting if their lines actually do intersect.
+     *
+     * Many of the iterations of this loop will be duplicates, but an
+     * undirected adjacency matrix will squash those.
+     * In the common case, this line runs twice, once for each line.  */
+    for (auto it2 = isect.begin(); it2 != isect.end(); ++it2)
+      if (it2 != it && (status.key_comp()(*it, *it2)
+            || status.key_comp()(*it2, *it)))
+        add_edge(it->edge().tridata()->id, it2->edge().tridata()->id, *graph);
+
     status_iterator segit = find_unique(*it);
 
 #ifdef MAXTRI_DEBUG_INTERSECT
@@ -481,14 +500,70 @@ template<class Tp_>
 void MaxTri<Tp_>::
 initialize(void)
 {
-  // TODO
+  if (graph)
+    delete graph;
+
+  // One slot per triangle.
+  graph = new components_graph(tris.size());
 }
+
+struct clique_visitor
+{
+  clique_visitor(std::set<int> &ref)
+    : max_clique(ref), max_depth(0u)
+  {}
+
+  template<typename Clique, typename Graph>
+  void clique(Clique const& c, Graph const& g) {
+    std::set<int> current_clique;
+    size_t current_depth = 0u;
+    for (auto it = c.begin(); it != c.end(); ++it) {
+      current_clique.insert(*it);
+      ++current_depth;
+    }
+    if (current_depth > max_depth) {
+      max_depth = current_depth;
+      max_clique = current_clique;
+    }
+  }
+
+  std::set<int> &max_clique;
+  size_t max_depth;
+};
+
 
 template<class Tp_>
 void MaxTri<Tp_>::
 finalize(void)
 {
-  // TODO
+  // Re-orient triangles to make boost happy.
+  std::vector<solution_cell_type> new_triangles;
+  new_triangles.reserve(tris.size());
+  for (triangle_type const &t : tris)
+  {
+    new_triangles.emplace_back();
+    bg::assign(new_triangles.back(), t);
+    bg::correct(new_triangles.back());
+  }
+
+  // Get the index set of the max clique.
+  // This is the group of maximally intersecting triangles.
+  // We could modify our clique visitor to track all cells at the max depth...
+  // But for now we'll just choose the first one we encounter.
+  std::set<int> max_clique;
+  clique_visitor visitor(max_clique);
+  bron_kerbosch_all_cliques(*graph, visitor);
+
+  // Pull the solution triangles from the index set.
+  std::vector<solution_cell_type> max_clique_triangles;
+  max_clique_triangles.reserve(new_triangles.size());
+  for (int triangle_index : max_clique)
+    max_clique_triangles.push_back(new_triangles[triangle_index]);
+
+  // Intersect all the triangles together.
+  solution_cell_type s;
+  intersection(max_clique_triangles.begin(), max_clique_triangles.end(), s);
+  solutions().push_back(s);
 }
 
 template class MaxTri<double>;

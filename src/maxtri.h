@@ -16,6 +16,9 @@
 #include <boost/geometry/geometries/register/point.hpp>
 #include <boost/geometry/geometries/register/ring.hpp>
 
+#include <boost/graph/undirected_graph.hpp>
+#include <boost/graph/adjacency_matrix.hpp>
+
 #if BOOST_VERSION < 106700
 #include <boost/functional/hash.hpp>
 #else
@@ -157,9 +160,6 @@ template<typename Tp_>
 class EdgePoint;
 
 template<typename Tp_>
-class SolutionCell;
-
-template<typename Tp_>
 struct compare_status;
 
 template<typename Tp_>
@@ -215,7 +215,6 @@ struct traits
   typedef compare_segment_unique<Tp_>    status_equal_compare;
 
   typedef c_polygon<point_type>          polygon_type;
-  typedef SolutionCell<Tp_>              solution_ref_type;
   typedef bgm::ring<point_type>          solution_cell_type;
   typedef MaxTri<coordinate_type>        solver_type;
 };
@@ -243,7 +242,6 @@ struct traits
   typedef typename traits::status_equal_compare status_equal_compare; \
   \
   typedef typename traits::polygon_type polygon_type; \
-  typedef typename traits::solution_ref_type solution_ref_type; \
   typedef typename traits::solution_cell_type solution_cell_type; \
   typedef typename traits::solver_type solver_type; \
 
@@ -263,16 +261,6 @@ typename std::enable_if<!std::numeric_limits<T>::is_integer, bool>::type
     || std::abs(x-y) < std::numeric_limits<T>::min();
 }
 
-/* Note that solution cells, which are formed from the intersection of many
- * triangles, will always be a convex shape with a single boundary.  */
-namespace boost { namespace geometry {
-  template<typename Tp_>
-    MTINLINE bool is_convex(typename traits<Tp_>::solution_cell_type const& c)
-    {
-      return true;
-    }
-} } // end namespace boost::geometry
-
 /* Intersect many geometries into out.  */
 template<typename Iter, typename Polygon>
 bool
@@ -285,20 +273,22 @@ intersection(Iter begin, Iter end, Polygon& out)
   auto const& first = *begin++;
   if (begin == end)
   {
-    bg::assign(out, *first);
+    bg::assign(out, first);
     return true;
   }
 
   // Case B. two geometries, return their intersection
   auto const& second = *begin++;
-  if (!bg::intersection(*first, *second, out))
+  if (!bg::intersection(first, second, out))
     return false;
 
   // Case C. many geometries, return the cumulative intersection with A&B
   while (begin != end)
+  {
     // XXX is providing out twice okay??
-    if (!bg::intersection(*(*begin++), out, out))
+    if (!bg::intersection(*begin++, out, out))
       return false;
+  }
 
   return true;
 }
@@ -333,16 +323,29 @@ struct triangle_data
   typedef edge_type edge_array[3];
   typedef std::array<point_type, 3> point_array;
 
+  typedef typename point_array::iterator iterator;
+  typedef typename point_array::const_iterator const_iterator;
+  typedef typename point_array::size_type size_type;
+  typedef typename point_array::difference_type difference_type;
+  typedef typename point_array::value_type value_type;
+
+  inline iterator begin(void) { return points.begin(); }
+  inline iterator end(void) { return points.end(); }
+  inline const_iterator begin(void) const { return points.begin(); }
+  inline const_iterator end(void) const { return points.end(); }
+  inline const_iterator cbegin(void) const { return points.cbegin(); }
+  inline const_iterator cend(void) const { return points.cend(); }
+
   // members
+  int id; // index of the triangle in the triangle list; serves as unique ID
   polygon_type const& poly; // parent polygon
   point_array points;
   edge_array edges;
-  // whether the middle point is point 1 or 2
-  int middle_point_index;
+  int middle_point_index; // whether the middle point is point 1 or 2
 
   template <class Tri>
-  triangle_data(polygon_type const& parent, Tri const& input_tri)
-    : poly(parent), points()
+  triangle_data(polygon_type const& parent, Tri const& input_tri, int idx)
+    : id(idx), poly(parent), points()
       , edges({ // to be filled in by Triangle constructor
           { this, 0, input_tri[0], input_tri[0], bp::RIGHT },
           { this, 1, input_tri[0], input_tri[0], bp::LEFT },
@@ -1221,6 +1224,8 @@ public:
   typedef typename m_type::edge_array edge_array;
   typedef typename m_type::point_array point_array;
 
+  bg::order_selector point_order = bg::counterclockwise;
+
   typedef typename point_array::iterator iterator;
   typedef typename point_array::const_iterator const_iterator;
   typedef typename point_array::size_type size_type;
@@ -1229,8 +1234,8 @@ public:
 
   // constructors
   template <class Tri>
-  Triangle(polygon_type const& parent, Tri const& input_tri)
-    : m_data(new m_type(parent, input_tri))
+  Triangle(polygon_type const& parent, Tri const& input_tri, int index)
+    : m_data(new m_type(parent, input_tri, index))
   {
     // Find the highest point: this is index 0.
     int maxy_index = 0;
@@ -1317,57 +1322,20 @@ public:
     *it++ = tri_point_type(data(), m_data->bottom_index(), BOTTOM);
   }
 
-  MTINLINE iterator begin() { return points().begin(); }
-  MTINLINE iterator end() { return points().end(); }
-  MTINLINE const_iterator begin() const { return points().cbegin(); }
-  MTINLINE const_iterator end() const { return points().cend(); }
+  inline iterator begin() { return points().begin(); }
+  inline iterator end() { return points().end(); }
+  inline const_iterator begin() const { return points().cbegin(); }
+  inline const_iterator end() const { return points().cend(); }
+  inline const_iterator cbegin() const { return points().cbegin(); }
+  inline const_iterator cend() const { return points().cend(); }
 };
 
 } } // end namespace cfla::tri
 
 BOOST_GEOMETRY_REGISTER_RING_TEMPLATED(cfla::tri::Triangle);
+BOOST_GEOMETRY_REGISTER_RING_TEMPLATED(cfla::tri::triangle_data);
 
 namespace cfla { namespace tri {
-
-template<class Tp_>
-class SolutionCell
-{
-public:
-  INHERIT_TRAITS(Tp_);
-
-  // triangles which form the maximal intersection
-  typedef typename std::unordered_set<const triangle_type*> triangle_ref_set;
-
-  typedef typename triangle_ref_set::const_iterator iterator;
-  typedef typename triangle_ref_set::size_type size_type;
-
-private:
-  triangle_ref_set source_tris_;
-  int depth_;
-
-public:
-  // A solution cell must be formed from at least two triangles.
-  SolutionCell(triangle_type const& t1, triangle_type const& t2)
-    : source_tris_({ &t1, &t2 }), depth_(-1)
-  {}
-
-  MTINLINE int depth(void) const { return depth_; }
-
-  MTINLINE iterator begin(void) const { return source_tris_.cbegin(); }
-  MTINLINE iterator end(void) const { return source_tris_.cend(); }
-  MTINLINE size_type size(void) const { return source_tris_.size(); }
-
-  // Intersect the input triangles to form the final solution cell.
-  solution_cell_type cell(void) const
-  {
-    solution_cell_type out;
-    if (size() == 0)
-      return out;
-    intersection(source_tris_.begin(), source_tris_.end(), out);
-    return out;
-  }
-
-};
 
 template<typename Tp_>
 struct make_sla_traits
@@ -1375,7 +1343,7 @@ struct make_sla_traits
   INHERIT_TRAITS(Tp_);
 
   typedef typename traits::polygon_type *value_type; // isochromes
-  typedef typename traits::solution_ref_type solution_type;
+  typedef typename traits::solution_cell_type solution_type;
 
   typedef typename traits::event_point_type event_type;
   typedef typename traits::event_point_ycompare event_compare;
@@ -1420,6 +1388,14 @@ public:
   typedef typename super_type::solution_container solution_container;
   typedef typename solution_container::const_iterator solution_iterator;
 
+  /* Keep an adjacency list of triangles which overlap so we can find the
+   * solution from the max clique in the end. Each vertex of the graph maps 1-1
+   * with a triangle.
+   *
+   * This is not as efficient as it is for rectangles (squares) but it works
+   * for now. */
+  typedef b::adjacency_matrix<b::undirectedS> components_graph;
+
 private:
   triangle_container tris;
   poly_container polys;
@@ -1429,6 +1405,9 @@ private:
   isect_event_map intersections;
   int max_depth;
   coordinate_type _lasty;
+
+  // connected components graph
+  components_graph *graph;
 
   void insert_edge(edge_type const& e);
   void remove_edge(edge_type const& e);
@@ -1494,17 +1473,20 @@ protected:
   void finalize(void);
 
 public:
+
   ~MaxTri();
 
   // No inputs yet.
   MaxTri()
     : tris(), status(status_compare(*this)), max_depth(-1), _lasty()
+      , graph(nullptr)
   {}
 
   // Construct from a list of input polygons (may be in no particular order).
   template<class Iter>
   MaxTri(Iter begin, Iter end)
     : tris(), status(status_compare(*this)), max_depth(-1), _lasty()
+      , graph(nullptr)
   {
     super_type::insert(begin, end);
   }
@@ -1535,7 +1517,8 @@ public:
       if (Collinear(triangle[0], triangle[1], triangle[2]))
         continue;
 
-      tris.emplace_back(*ply, triangle);
+      // new triangle_type
+      tris.emplace_back(*ply, triangle, tris.size());
 
 #ifdef MAXTRI_DEBUG_INTERSECT
       std::cerr << "QUEUE triangle" << std::endl
@@ -1549,6 +1532,7 @@ public:
         << "    [2] " << tris.back().edge(2) << std::endl;
 #endif
 
+      // queue triangle points
       tris.back().insert(emplace_inserter(queue()));
     }
   }
@@ -1617,7 +1601,7 @@ private:
 
     // Choose a random point in a random solution cell.
     size_type chosen_one = randrange(size_type(0), solver_.size()-1);
-    auto solution = solver_.solution(chosen_one).cell();
+    auto solution = solver_.solution(chosen_one);
 
     bgm::box<point_type> bbox;
     bg::envelope(solution, bbox);
@@ -1675,19 +1659,6 @@ std::ostream& operator<<(std::ostream& os, Edge<U> const& e) {
   return os;
 }
 
-template<typename U>
-std::ostream& operator<<(std::ostream& os, SolutionCell<U> const& e)
-{
-  os << "solution (depth " << e.depth << ", " << e.size() << ")" << std::endl;
-  unsigned int idx = 0u;
-  for (const auto& sol : e)
-  {
-    os << "    [" << std::setw(2) << std::setfill(' ') << idx << "] "
-      << sol << std::endl;
-    idx++;
-  }
-  return os;
-}
 #endif
 
 #undef INHERIT_TRAITS

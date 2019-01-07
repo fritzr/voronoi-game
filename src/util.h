@@ -65,9 +65,6 @@ inline Type randrange(Type min, Type max)
   {
     auto seed = time(NULL);
     rng = new rng_type(seed);
-#ifdef DEBUG
-    std::cerr << "using RNG seed: " << seed << std::endl;
-#endif
   }
 
   typedef typename std::conditional<std::is_integral<Type>::value,
