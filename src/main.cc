@@ -493,6 +493,21 @@ dumpDistances(ostream& os, const vector<User2d> &users,
 }
 #endif
 
+static void
+output_flipped(Mat img, std::string output_path="")
+{
+  Mat flipped;
+  cv::flip(img, flipped, 0);
+
+  if (output_path.empty())
+  {
+    cv::imshow("output", flipped);
+    cv::waitKey(0);
+  }
+  else
+    cv::imwrite(output_path, flipped);
+}
+
 std::default_random_engine* rng = nullptr;
 
 template<class Game> /* VGame */
@@ -531,8 +546,7 @@ play_game(Mat img, vector<User2d> users,
     {
       // First show the next solution circle.
       circle(img, b2cv(next_facility), 10, FONT_COLOR, -1);
-      imshow("output", img);
-      waitKey(0);
+      output_flipped(img, opts.output_path);
     }
     // Show the solution as the right player's color.
     circle(img, b2cv(next_facility), 10, pcolor, -1);
@@ -587,13 +601,8 @@ int main(int argc, char *argv[])
     /*play_game<RectGame>(img, users, p1sites, p2sites)*/
     ;
 
-  if (opts.output_path.empty())
-  {
-    imshow("output", img);
-    waitKey(0);
-  }
-  else
-    imwrite(opts.output_path, img);
+  // Flip the image so Y grows upwards.
+  output_flipped(img, opts.output_path);
 
   if (rng != nullptr)
     delete rng;
