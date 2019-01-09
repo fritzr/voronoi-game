@@ -16,7 +16,7 @@ implementations floating around.
    * [Authors](#authors)
    * [References](#references)
 
-<!-- Added by: foreese, at: 2019-01-09T16:43-0500 -->
+<!-- Added by: foreese, at: 2019-01-09T16:56-0500 -->
 
 <!--te-->
 
@@ -24,7 +24,8 @@ implementations floating around.
 
 This project is an attempt at implementing a practical and realistic
 *Competitive Facility Location* algorithm. It is based on several works,
-primarily those of (Imai and Asano 1983) and (Banik et al. 2017).
+primarily those of (Imai and Asano [1983](#ref-IMAI1983310)) and (Banik
+et al. [2017](#ref-BANIK201753)).
 
 # Input
 
@@ -108,7 +109,7 @@ George Mason University
 Banik, Aritra, Bhaswar B. Bhattacharya, Sandip Das, and Satyaki
 Mukherjee. 2017. “The Discrete Voronoi Game in R2.” *Computational
 Geometry* 63 (Supplement C): 53–62.
-<https://doi.org/https://doi.org/10.1016/j.comgeo.2017.02.003>.
+<https://doi.org/10.1016/j.comgeo.2017.02.003>.
 
 </div>
 
@@ -117,7 +118,7 @@ Geometry* 63 (Supplement C): 53–62.
 Imai, Hiroshi, and Takao Asano. 1983. “Finding the Connected Components
 and a Maximum Clique of an Intersection Graph of Rectangles in the
 Plane.” *Journal of Algorithms* 4 (4): 310–23.
-<https://doi.org/https://doi.org/10.1016/0196-6774(83)90012-3>.
+<https://doi.org/10.1016/0196-6774(83)90012-3>.
 
 </div>
 
