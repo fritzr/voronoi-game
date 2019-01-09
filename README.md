@@ -1,91 +1,130 @@
-# Competitive Facility Location with the Voronoi Game
+---
+Author: Fritz Reese
+Title: Competitive Facility Location with the Voronoi Game
+bibliography: './README.bib'
+csl: './acm-siggraph.csl'
+---
 
-This project aims to implement some algorithms in the field of *Competitive
-Facility Location*. There are many papers on the problem itself (see
-[References](#References)), but there appear to be few implementations floating
-around.
+Competitive Facility Location with the Voronoi Game
+===================================================
 
-# Table of contents
+This project aims to implement some algorithms in the field of
+*Competitive Facility Location*. There are many papers on the problem
+itself (see [References](#References)), but there appear to be few
+implementations floating around.
+
+Table of contents
+=================
 
 <!--ts-->
-   * [Competitive Facility Location with the Voronoi Game](#competitive-facility-location-with-the-voronoi-game)
-   * [Table of contents](#table-of-contents)
-   * [Input](#input)
-   * [Building](#building)
-   * [Authors](#authors)
-   * [References](#references)
+
+-   [Competitive Facility Location with the Voronoi
+    Game](#competitive-facility-location-with-the-voronoi-game)
+-   [Table of contents](#table-of-contents)
+-   [Input](#input)
+-   [Building](#building)
+-   [Authors](#authors)
+-   [References](#references)
 
 <!-- Added by: fritz, at: 2018-10-15T18:35-0400 -->
-
 <!--te-->
 
-# Input
+Methods
+=======
 
-This program reads and writes in the
-[ESRI Shapefile](https://en.wikipedia.org/wiki/Shapefile) format.
-This format is chosen because it is widely used in the GIS community,
-and the specification is open. ESRI has published a
+This project is an attempt at implementing a practical and realistic
+*Competitive Facility Location* algorithm. It is based on several works,
+primarily those of \[Imai and Asano 1983\] and \[Banik et al. 2017\].
+
+Input
+=====
+
+This program reads and writes in the [ESRI
+Shapefile](https://en.wikipedia.org/wiki/Shapefile) format. This format
+is chosen because it is widely used in the GIS community, and the
+specification is open. ESRI has published a
 [whitepaper](https://www.esri.com/library/whitepapers/pdfs/shapefile.pdf)
 detailing the file specification.
 
-There are several ways to read and write these files. This project provides
-some very basic Python scripts in the `scripts/` subdirectory which can be used
-to generate and plot shapefile test data.
+There are several ways to read and write these files. This project
+provides some very basic Python scripts in the `scripts/` subdirectory
+which can be used to generate and plot shapefile test data.
 
 There are low-level APIs available for many languages; see for example
-[shapelib](http://shapelib.maptools.org/) and [GDAL](https://www.gdal.org/) for
-C/C++, or [pyshp](https://github.com/GeospatialPython/pyshp) for Python.
+[shapelib](http://shapelib.maptools.org/) and
+[GDAL](https://www.gdal.org/) for C/C++, or
+[pyshp](https://github.com/GeospatialPython/pyshp) for Python.
 
 The easiest and most powerful way to view and create shapefiles
-(especially large files) is to use the proprietary [ArcGIS](https://arcgis.com)
-software. If you don't have access to ArcGIS, you can use
-[GNU Octave](https://www.gnu.org/software/octave/) with the
-[octave-mapping](https://octave.sourceforge.io/mapping/index.html) plugin
-package. (Note this package requires `octave-geometry` and `octave-io`.)
+(especially large files) is to use the proprietary
+[ArcGIS](https://arcgis.com) software. If you don't have access to
+ArcGIS, you can use [GNU Octave](https://www.gnu.org/software/octave/)
+with the
+[octave-mapping](https://octave.sourceforge.io/mapping/index.html)
+plugin package. (Note this package requires `octave-geometry` and
+`octave-io`.)
 
 A "shapefile" is actually a collection of several files with the same
-base name and different extensions. The shape file itself ends in `.shp`,
-but alongside it is usually at least `.dbf` and `.shx` files. Whenever a "path
-to a shapefile" is requested, the path requested should actually the basename
-common to the `.shp`, `.dbf` and `.shx` files.
+base name and different extensions. The shape file itself ends in
+`.shp`, but alongside it is usually at least `.dbf` and `.shx` files.
+Whenever a "path to a shapefile" is requested, the path requested should
+actually the basename common to the `.shp`, `.dbf` and `.shx` files.
 
-# Building
+Building
+========
 
-The source code uses C++11 features. This means `g++ >= 4.8.5` and a functional
-C++ build environment is required. If you are using `g++` versions 5.0 through
-5.4, you will also need static C++ libraries (on linux, it is typically
-sufficient to install `libstdc++-static`.
+The source code uses C++11 features. This means `g++ >= 4.8.5` and a
+functional C++ build environment is required. If you are using `g++`
+versions 5.0 through 5.4, you will also need static C++ libraries (on
+linux, it is typically sufficient to install `libstdc++-static`.
 
-Additionally, development versions of the following libraries are required to
-build. The versions shown are the earliest known accepted versions:
+Additionally, development versions of the following libraries are
+required to build. The versions shown are the earliest known accepted
+versions:
 
-| Package  | Known Supported Versions |
-| -------- | ------------------------ |
-| OpenCV   | >= 2.4.5                 |
-| boost    | >= 1.59.0                |
-| GNU GMP  | >= 6.0.0                 |
-| GNU MPFR | >= 3.1.1                 |
-| Shapelib | >= 1.3.0                 |
+  Package    Known Supported Versions
+  ---------- --------------------------
+  OpenCV     \>= 2.4.5
+  boost      \>= 1.59.0
+  GNU GMP    \>= 6.0.0
+  GNU MPFR   \>= 3.1.1
+  Shapelib   \>= 1.3.0
 
-To use the shapefile helpers in the `scripts/` subdirectory you will need:
+To use the shapefile helpers in the `scripts/` subdirectory you will
+need:
 
-| Package | Known Supported Versions |
-| ------- | ------------------------ |
-| Python  | 2.7 - 3.x                |
-| pyshp   | >= 1.2.1                 |
+  Package   Known Supported Versions
+  --------- --------------------------
+  Python    2.7 - 3.x
+  pyshp     \>= 1.2.1
 
-Additionally, for `plotshp.py`, you will need `tkinter` and `matplotlib`.
+Additionally, for `plotshp.py`, you will need `tkinter` and
+`matplotlib`.
 
-# Authors
+Authors
+=======
 
-  __Fritz Reese__  
-  *M.S. Computer Science*, George Mason University, 2018.
+**Fritz Reese**\
+*M.S. Computer Science*, George Mason University, 2018.
 
-  __[Jyh-Ming Lien](https://cs.gmu.edu/~jmlien/doku.php)__  
-  *Ph.D. Computer Science*, Texas A&M University, 2006.  
-  Department of Computer Science  
-  George Mason University
+**[Jyh-Ming Lien](https://cs.gmu.edu/~jmlien/doku.php)**\
+*Ph.D. Computer Science*, Texas A&M University, 2006.\
+Department of Computer Science\
+George Mason University
 
-# References
+References {#references .unnumbered}
+==========
 
-**TODO**
+::: {#refs .references}
+::: {#ref-BANIK201753}
+[Banik, A., Bhattacharya, B.B., Das, S., and Mukherjee, S.]{.smallcaps}
+2017. The discrete voronoi game in r2. *Computational Geometry* *63*,
+Supplement C, 53--62.
+:::
+
+::: {#ref-IMAI1983310}
+[Imai, H. and Asano, T.]{.smallcaps} 1983. Finding the connected
+components and a maximum clique of an intersection graph of rectangles
+in the plane. *Journal of Algorithms* *4*, 4, 310--323.
+:::
+:::
