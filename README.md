@@ -8,16 +8,15 @@ implementations floating around.
 # Table of contents
 
 <!--ts-->
+   * [Competitive Facility Location with the Voronoi Game](#competitive-facility-location-with-the-voronoi-game)
+   * [Table of contents](#table-of-contents)
+   * [Methods](#methods)
+   * [Input](#input)
+   * [Building](#building)
+   * [Authors](#authors)
+   * [References](#references)
 
-  - [Competitive Facility Location with the Voronoi
-    Game](#competitive-facility-location-with-the-voronoi-game)
-  - [Table of contents](#table-of-contents)
-  - [Input](#input)
-  - [Building](#building)
-  - [Authors](#authors)
-  - [References](#references)
-
-<!-- Added by: fritz, at: 2018-10-15T18:35-0400 -->
+<!-- Added by: foreese, at: 2019-01-09T16:43-0500 -->
 
 <!--te-->
 
