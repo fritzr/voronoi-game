@@ -7,11 +7,9 @@ PANDOC ?= pandoc
 
 OUT    := $(TOP)/README.md
 IN     := $(DOC)/README.md.in
-CSLFIL := $(DOC)/acm-siggraph.csl
 BIBFIL := $(DOC)/README.bib
 
-PANFLAGS = --bibliography $(BIBFIL) --csl $(CSLFIL) --filter pandoc-citeproc \
-	   -r markdown -t markdown-citations -s $< -o $@
+PANFLAGS = --bibliography $(BIBFIL) --atx-headers -t gfm-citations -s $< -o $@
 
 $(OUT): $(IN) $(BIBFIL) $(CSLFIL) $(DOC)/Makefile
 	@rm -f $@
