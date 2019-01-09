@@ -16,6 +16,13 @@
 #include <boost/geometry/geometries/register/point.hpp>
 #include <boost/geometry/geometries/register/ring.hpp>
 
+#if BOOST_VERSION == 106000
+// https://svn.boost.org/trac10/ticket/11880
+// adjacency_matrix.hpp uses ice_not after it has been deprecated
+// from type_traits.hpp
+#include <boost/type_traits/ice.hpp>
+#endif
+
 #include <boost/graph/undirected_graph.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
 
