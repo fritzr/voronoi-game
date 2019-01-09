@@ -41,6 +41,7 @@
 
 #ifdef MAXTRI_DEBUG
 
+#include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -1627,6 +1628,13 @@ private:
                         bg::get<bg::max_corner, 1>(bbox));
       out = point_type(randx, randy);
     } while (!bg::within(out, solution));
+
+#ifdef MAXTRI_DEBUG
+    // Append the final solution point to the solution script
+    std::ofstream sol("./scripts/solution.m", std::ios_base::app);
+    sol << "spoint = [" << randx << " , " << randy << "];" << std::endl;
+    sol.close();
+#endif
 
     return out;
   }
