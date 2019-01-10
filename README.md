@@ -2,7 +2,7 @@
 
 This project aims to implement some algorithms in the field of
 Competitive Facility Location (CFL). There are many papers on the
-problem itself (see [References](#References)), but there appear to be
+problem itself (see [References](#references)), but there appear to be
 few implementations floating around.
 
 # Table of contents
@@ -10,20 +10,29 @@ few implementations floating around.
 <!--ts-->
    * [The Voronoi Game](#the-voronoi-game)
    * [Table of contents](#table-of-contents)
-      * [Background](#background)
-      * [Approach](#approach)
+   * [Background](#background)
+      * [Competitive Facility Location](#competitive-facility-location)
+      * [Example](#example)
+      * [CFL in <em>R<sup>2</sup></em>](#cfl-in-r2)
+      * [Line Segment Intersection](#line-segment-intersection)
+   * [Approach](#approach)
       * [L1 P2 Solution](#l1-p2-solution)
       * [Time-based P2 solution](#time-based-p2-solution)
-   * [Shapefiles](#shapefiles)
+         * [Plane Sweep](#plane-sweep)
+         * [Max Depth Calculation](#max-depth-calculation)
+   * [Input and Output](#input-and-output)
+      * [Shapefiles](#shapefiles)
    * [Building](#building)
    * [Authors](#authors)
    * [References](#references)
 
-<!-- Added by: foreese, at: 2019-01-09T19:06-0500 -->
+<!-- Added by: foreese, at: 2019-01-10T18:29-0500 -->
 
 <!--te-->
 
-## Background
+# Background
+
+## Competitive Facility Location
 
 The CFL problem, also called the Voronoi Game, is to optimally
 distribute resources (facilities) assigned to different entities
@@ -39,6 +48,8 @@ transportation and GIS world. An excellent review of the literature in
 its many domains is presented by (Eiselt, Laporte, and Thisse
 [1993](#ref-EISELT199344)).
 
+## Example
+
 A good example domain is pizza delivery: consider two pizza companies,
 Pizza John and Papa Hut, both of whom are competing to build stores in a
 geographic region with the goal of maximzing profit. Assuming both
@@ -50,6 +61,8 @@ in the region when Papa Hut seeks to enter the market. The game starts
 when the “second player”, Papa Hut, places a new store. Obviously Papa
 Hut will try to place one or more stores such that the number of
 customers closer to Papa Hut stores than Pizza John stores is maximized.
+
+## CFL in *R<sup>2</sup>*
 
 If we consider the customer space in *R<sup>2</sup>* as in (Banik et al.
 [2017](#ref-BANIK201753)), where the customer distance metric is
@@ -112,7 +125,43 @@ Uehara [2011](#ref-JGAA-235)), (Banik et al. [2016](#ref-BANIK201641)),
 (Drezner [2014](#ref-DREZNER2014)), (Eiselt and Laporte
 [1989](#ref-EISELT1989231))).
 
-## Approach
+## Line Segment Intersection
+
+As we will see in [Approach](#approach), we will use a modified version
+of the classical plane sweep algorithm for computing line segment
+intersections. Here we review the classical plane sweep approach for
+reference.
+
+The input is a set of line segments. We maintain the event queue *Q*,
+the sweep status *T*, and the sweep line *L*.
+
+*Q* is a priority queue containing events, which are either endpoint
+events (endpoints of the input segments) or intersection events (points
+where segments intersect). The queue is initialized with all endpoints
+of the input segments, and intersection points are discovered as *L*
+sweeps the plane. Event points are visited in order of descending *y*
+coordinate. At each event we draw the sweep line *L* at the same *y*
+value as the event point. *T* is a binary search tree that stores
+references to all segments which intersect *L* sorted by the *x*
+coordinate at which each segment intersects *L*. Note that the event
+points are sorted lexicographically, so all points at the same *y*
+coordinate are visited in order of increasing *x* coordinate.
+
+The fundamental observation the drives the algorithm is that for
+segments to intersect, their *y* intervals and *x* intervals have to
+overlap. By restricting the status tree *T* to segments that intersect
+*L*, we know their *y* intervals overlap. Then by sorting *T* by *x*
+coordinate of all segments at each *L*, we know immediately that only
+adjacent segments in *T* can possibly intersect. The trick is that, at
+each intersection point formed by two segments *A* and *B*, the
+positions of *A* and *B* in *T* are swapped. At this moment we can check
+again whether *A* and *B* intersect the next adjacent edges in *T* and
+queue any further intersection points. To maintain the invariant that
+*T* holds every segment that intersects *L*, we insert a segment to *T*
+when we visit its top endpoint and remove the segment from *T* when we
+visit its bottom endpoint.
+
+# Approach
 
 This project aims to provide a CFL implementation with realistic results
 and constraints. Though the *Ο(n<sup>8</sup>)* runtime of the player 1
@@ -174,14 +223,14 @@ to avoid web queries during active runs of a CPU-intensive geometric
 algorithm, we decided to take as input a quantized cache of this data
 for the query points. Each customer is input to the program as a
 combination point and list of a fixed number of rings. Each ring is an
-*isochrome*, or a *polyline* such that every point on the boundary of
-the isochrome takes a fixed time *t* to reach from the center. Each
-round of the game, the max-depth algorithm will request (1) the travel
-time from each customer to its nearest facility, and (2) an isochrome
-matching that travel time centered at each customer. To produce these we
-linearly interpolate between the known fixed rings according to the
-Euclidean distance between the facility point and its nearest two rings,
-or between the smallest ring and the center point. Past the end of all
+*isochrome*, or a *polygon* such that every point on the boundary of the
+isochrome takes a fixed time *t* to reach from the center. Each round of
+the game, the max-depth algorithm will request (1) the travel time from
+each customer to its nearest facility, and (2) an isochrome matching
+that travel time centered at each customer. To produce these we linearly
+interpolate between the known fixed rings according to the Euclidean
+distance between the facility point and its nearest two rings, or
+between the smallest ring and the center point. Past the end of all
 known rings we extrapolate similarly.
 
 It is possible to increase the accuracy of the algorithm by writing a
@@ -189,10 +238,176 @@ tool to query travel time offline, for example using an (“OpenStreetMap”
 [2019](#ref-OpenStreetMap)) database or ArcGIS. Another improvement
 would be to write a script to prefetch actual data from (“TravelTime
 Platform” [2019](#ref-TravelTimePlatform)) – for now, the only data
-tested with is randomly generated by a helper script in
-`[generate.py](/scripts/generate.py)`
+tested with is randomly generated by the helper script
+[`generate.py`](scripts/generate.py).
 
-# Shapefiles
+Following the (Imai and Asano [1983](#ref-IMAI1983310)) algorithm, the
+algorithm can be broken into two main parts: the [plane
+sweep](#plane-sweep) and [max depth
+calculation](#max-depth-calculation).
+
+The idea is that the maximal-depth region formed by the most number of
+intersecting polygons (or triangles) will be a solution isomorphic to
+the maximal intersecting number of squares or circles. Unlike Banik’s
+solution with circles, however, we believe we can compute the solution
+in an average *Ο(n* log *n)* time.
+
+### Plane Sweep
+
+First we need to detect the intersections of the triangles, as we would
+with squares or circles. But the algorithm to detect intersections must
+be slightly different when using isochromes instead of circles or
+rectangles.
+
+First, we require any continuous isochromes to be discretized into
+polygons. Then, to simplify the intersection algorithm, we decompose the
+polygons into triangles. Triangles intersect iff their edges intersect,
+so we consider the edge set of the trianges as line segments and compute
+the intersections of all segments.
+
+In our first pass implementation to find the segment intersection points
+we follow the classical [line segment
+intersection](#line-segment-intersection) plane sweep algorithm, where
+the event queue *Q* is a `std::priority_queue` of points, the sweep
+status *T* is a `std::set` of segments, and the sweep line *L* is stored
+as the last *y* coordinate visited. We use a `std::set` because its
+search, removal, and insertion operations have logarithmic complexity
+bounds. (In practice the `std::set` is usually a red-black tree).
+
+To properly maintain the segments in *T*, a custom comparator is used
+which intersects each segment with *L* and sorts by the *x*-value of the
+intersection. At intersection points, both segments then intersect *L*
+at the same *x* value, so we sort by orientation such that the left-most
+oriented segment comes first. To see why, imagine that *L* moves an
+infinitesimally small distance below the intersection point. Clearly the
+left-oriented segment will intersect *L* at a lower *x* value.
+
+At endpoint events, we update *L* and then insert/remove the segment
+(for top/bottom endpoints). At intersection events, to swap segments we
+remove the segments from *T*, update *L*, then re-insert the segments
+(with a location hint for efficiency) so they are ordered correctly past
+the intersection point.
+
+We accomplish this using `std::set` by providing the comparator with an
+indirect reference to *L*, so the sorting criteria changes when *L* is
+updated. Strictly speaking this breaks the invariant that the comparator
+object and elements of a `std::set` remain `const`. However, the only
+time the order of segments in *T* can ever change is at an intersection
+point, due to the design of the algorithm. At this point the only
+segments whose order in *T* could be affected is the segments that make
+up the intersection. Since we remove them before updating *L*, *T*
+remains consistent.
+
+It turns out that this implementation is not robust for intersection
+points which are formed by more than two segments. Unfortunately, for
+our input, this is guaranteed to happen, because our line segments are
+from triangles which form triangulated polygons. Every triangle will
+share edges with two other triangles; that is, we will have many
+segments which appear twice (once for each triangle) but are really the
+same edge/segment. We can’t completely collapse the edge into a single
+segment because we need to acknowledge the intersection of any lines
+through both triangles separately for the [max depth
+calculation](#max-depth-calculation).
+
+Consider if we have a set of segments *S* which all intersect at point
+*P*. To handle this, we need more than a single “swap”. The most
+intuitive way to think about this is that each pair from {S 2}
+**℘***<sub>2</sub>(S)* (the subset of the power set of *S* of
+cardinality 2) forms a separate intersection event consisting of a
+single swap. This follows the operation of the classical algorithm, BUT
+the pairwise swaps must occur in the correct order; that is, in order of
+orientation from left to right. Then each segment in *S* must be checked
+for intersections with the adjacent segments in *T* that are *not* in
+*S* (line segments cannot intersect each other twice).
+
+So far it appears this intuitive approach *could* work. However,
+consider the case where two identical segments *B* and *C* are
+intersected by some non-colliner segment *A*, and that the order of
+these segments is in the status tree *T* is *(A, B, C)*. In theory, if
+*B* is ordered before *C* for whatever reason, first the intersection
+event *A ∩ B* is queued. When the intersection event is visited, *A* and
+*B* are swapped so *T* contains *(B, A, C)*. At this point, *A* and *B*
+are checked for intersections with their neighbors, and *A ∩ C* is found
+and queued. The intersection is the next event handled (since it’s at
+the same point) at which time *A* will swap with *C* and *T* will
+contain *(B, C, A)*.
+
+In order to implement the algorithm so the above example works, since we
+simply remove and re-insert segments to perform swaps, at some point the
+comparator would have to decide to sort *A* between *B* and *C*. But *B*
+and *C* are identical segments, which intersect *L* at the same *x*
+value and have the same orientation\! Furthermore, *A*’s orientation is
+to the right of both *B* and *C*, so the comparator could never decide
+that *T* should contain *(B, A, C)*. It would immediately sort *A* after
+*C* after the first removal and re-insertion when handling *A ∩ B*. In
+this case, *C* is never checked for intersections with adjacent segments
+in the status. The problem is exacerbated if there are additional
+segments which intersect at the same point.
+
+To solve this, it is clear that all segments that form an intersection
+point must be “handled” in a single visitation of the intersection
+event. That is, when a set of segments *S* all intersect at point *P*,
+we should handle *P* once and in so doing check every segment in *S* for
+intersections with the left- and right-adjacent segments in *T* which
+are *not* in *S*.
+
+To that end, our implementation maintains an additional structure *I*
+which is an associative container (`std::unordered_map`) mapping
+intersection points *P* to the set *S<sub>P</sub>* of segments
+(`std::unordered_set`) which intersect at *P*. The order of segments in
+the set is not important, since the segments themselves are still sorted
+properly in *T*. When it is discovered that two segments *X* and *Y*
+intersect at a point *P*, the point is hashed, used to find
+*S<sub>P</sub>* from *I*, and then *X* and *Y* are inserted into
+*S<sub>P</sub>*. Since it is a set, no segment will appear twice. When
+an intersection event *E* is handled, the corresponding set
+*S<sub>E</sub>* is looked up from *I*. All segments in *S<sub>E</sub>*
+are located in and removed from *T* before *L* is updated. Once *L* is
+updated, all segments are inserted again (in no particular order) and
+checked for intersections with the segments in *T* adjacent but outside
+*S<sub>E</sub>*. This way, duplicates are collapsed and no segments are
+skipped in the re-sorting step.
+
+It is worth discussing the runtime of the sweep algorithm after our
+modifications. Let *n* be the number of segments in the input. Clearly
+|*T*| is bounded by *n*. The cost for an endpoint event is one insertion
+(or removal) in *T* each requiring time *\&Omicron(*log *n)* followed by
+one or two checks for intersection with the neighboring segments in *T*.
+Accessing a neighboring segment and checking two segments for
+intersection take amortized constant time. Therefore the total cost for
+all endpoint events is *\&Omicron(n* log *n)*.
+
+The cost for an intersection event *E* is one removal and one insertion
+in *T* and one or two segment intersection checks for each segment in
+*S<sub>E</sub>*. The insertion and removals again take time
+*\&Omicron(*log *n)* and the adjacent traversals and intersection checks
+are amortized constant time. It follows that the time for each
+intersection event is *Ο(k<sub>E</sub>* log *t)*, where *k<sub>E</sub> =
+*|*S<sub>E</sub>*|. Let the total time for all intersection events be
+*T<sub>I</sub>*. Let *K =* Σ*<sub>E</sub> k<sub>E</sub>*. Then
+*T<sub>I</sub> ≤ K* log *n*.
+
+Let *m* be the number of intersection events. *m* is upper-bounded by
+Σ<sub>*i=1,n*</sub> *i ≤ M* where *M = n<sup>2</sup>/2*. To see this,
+consider adding segments to the input one-by-one so that each insertion
+creates the maximal number of intersections; the *i+1*-th segment can
+contribute *i* intersections by intersecting all the *i* existing
+segments. Any inserted segment that forms an intersection with other
+segments at an existing intersection point *P* instead adds one to *K*
+and contributes only *i - k<sub>P</sub>* to *m*. By summing the terms we
+see that *m ≤ M - K* and *m + K ≤ M*. Thus, the amortized traversal over
+*k<sub>E</sub>* segments for each intersection event *E* does not cost
+us anything more than the classical traversal of only pairwise
+intersection events. Therefore the runtime of our sweep algorithm is
+still *Ο((n + m)* log *n)* which is input-sensitive and bounded by
+*Ο(n<sup>2</sup>* log *n)* as with the classical plane sweep algorithm
+for line segment intersections.
+
+### Max Depth Calculation
+
+# Input and Output
+
+## Shapefiles
 
 This program reads and writes in the [ESRI
 Shapefile](https://en.wikipedia.org/wiki/Shapefile) format. This format
