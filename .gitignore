@@ -58,3 +58,5 @@ data/
 /*.m
 scripts/solution.m
 scripts/triangles.m
+doc/README.html
+doc/README.bib

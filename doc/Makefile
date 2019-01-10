@@ -9,15 +9,30 @@ TOC    ?= $(DOC)/gh-md-toc
 OUT    := $(TOP)/README.md
 IN     := $(DOC)/README.md.in
 BIBFIL := $(DOC)/README.bib
+OUT_HTML := $(DOC)/README.html
 
-PANFLAGS = --bibliography $(BIBFIL) -t gfm-citations -s $< -o $@
+DEPS = $(IN) $(DOC)/Makefile $(BIBFIL)
 
-$(OUT): $(IN) $(DOC)/Makefile $(BIBFIL) $(CSLFIL)
+$(OUT): $(DEPS)
 	@rm -f $@
-	$(PANDOC) $(PANFLAGS)
+	$(PANDOC) --bibliography $(BIBFIL) -t gfm-citations -s $< -o $@
 	$(TOC) --insert $@
 	@rm -f $@.orig.* $@.toc.*
 	@chmod -w $@
 
+all: $(OUT) $(OUT_HTML)
+
+html: $(OUT_HTML)
+
+$(OUT_HTML): $(DEPS)
+	@rm -f $@
+	$(PANDOC) --bibliography $(BIBFIL) -t html-citations -s $< -o $@
+	@chmod -w $@
+
 $(BIBFIL): $(BIBSRC)
 	rm -f $@; cat $^ > $@ && chmod -w $@
+
+clean:
+	rm -f $(OUT) $(OUT_HTML) $(BIBFIL)
+
+.PHONY: all html clean
