@@ -12,7 +12,7 @@ BIBFIL := $(DOC)/README.bib
 
 PANFLAGS = --bibliography $(BIBFIL) -t gfm-citations -s $< -o $@
 
-$(OUT): $(IN) $(BIBFIL) $(CSLFIL) $(DOC)/Makefile
+$(OUT): $(IN) $(DOC)/Makefile $(BIBFIL) $(CSLFIL)
 	@rm -f $@
 	$(PANDOC) $(PANFLAGS)
 	$(TOC) --insert $@
@@ -20,4 +20,4 @@ $(OUT): $(IN) $(BIBFIL) $(CSLFIL) $(DOC)/Makefile
 	@chmod -w $@
 
 $(BIBFIL): $(BIBSRC)
-	@rm -f $@ && cat $^ > $@ && chmod -w $@
+	rm -f $@; cat $^ > $@ && chmod -w $@
