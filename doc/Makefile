@@ -20,14 +20,17 @@ $(OUT): $(DEPS)
 	@rm -f $@.orig.* $@.toc.*
 	@chmod -w $@
 
+$(OUT_HTML): $(DEPS) $(DOC)/template.html
+	@rm -f $@
+	$(PANDOC) --bibliography $(BIBFIL) -t html-citations \
+	  --toc -V toc-title:"Table of Contents" \
+	  --template=$(DOC)/template.html \
+	  -s $< -o $@
+	@chmod -w $@
+
 all: $(OUT) $(OUT_HTML)
 
 html: $(OUT_HTML)
-
-$(OUT_HTML): $(DEPS)
-	@rm -f $@
-	$(PANDOC) --bibliography $(BIBFIL) -t html-citations -s $< -o $@
-	@chmod -w $@
 
 $(BIBFIL): $(BIBSRC)
 	rm -f $@; cat $^ > $@ && chmod -w $@

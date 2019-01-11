@@ -1,18 +1,15 @@
 ---
-title: Competitive Facility Location with the Voronoi Game
-author: Fritz Reese
+title: The Voronoi Game
+author: Fritz Reese  &lt;fritzoreese@gmail.com&gt;
 link-citations: true
-...
-
+---
 
 # The Voronoi Game
 
-This project aims to implement some algorithms in the field of Competitive
-Facility Location (CFL). There are many papers on the problem itself (see
-[References]), but there appear to be few implementations floating
-around.
+This problem aims to implement a practical algorithm in the field of Competitive
+Facility Location (CFL) in *R<sup>2</sup>*, also known as *The Voronoi Game*.
 
-# Table of contents
+# Table of Contents
 
 <!--ts-->
 <!--te-->
@@ -82,7 +79,7 @@ characteristics of a graph of intersecting rectangles, the solution is always
 obtainable in *&Omicron;(n* log *n)* time.
 
 This runtime is excellent, but the solution is approximate. Banik shows that
-the identical solution in the L2 norm runs in *&Omicron(n<sup>2</sup>)* time.
+the identical solution in the L2 norm runs in *&Omicron;(n<sup>2</sup>)* time.
 This is not unexpected for a small problem in 2D, but can add up quite quickly
 when the input consists of millions of customers. Input of that size is not
 always necessary; but the input size depends on the domain.
@@ -319,14 +316,14 @@ and no segments are skipped in the re-sorting step.
 It is worth discussing the runtime of the sweep algorithm after our
 modifications. Let *n* be the number of segments in the input. Clearly |*T*| is
 bounded by *n*. The cost for an endpoint event is one insertion (or removal) in
-*T* each requiring time *&Omicron(*log *n)* followed by one or two checks for
+*T* each requiring time *&Omicron;(* log *n)* followed by one or two checks for
 intersection with the neighboring segments in *T*. Accessing a neighboring
 segment and checking two segments for intersection take amortized constant time.
-Therefore the total cost for all endpoint events is *&Omicron(n* log *n)*.
+Therefore the total cost for all endpoint events is *&Omicron;(n* log *n)*.
 
 The cost for an intersection event *E* is one removal and one insertion in *T*
 and one or two segment intersection checks for each segment in *S<sub>E</sub>*.
-The insertion and removals again take time *&Omicron(*log *n)* and the adjacent
+The insertion and removals again take time *&Omicron;(* log *n)* and the adjacent
 traversals and intersection checks are amortized constant time.  It follows that
 the time for each intersection event is *&Omicron;(k<sub>E</sub>* log *t)*,
 where *k<sub>E</sub> = *|*S<sub>E</sub>*|.  Let the total time for all

@@ -1,15 +1,14 @@
 # The Voronoi Game
 
-This project aims to implement some algorithms in the field of
-Competitive Facility Location (CFL). There are many papers on the
-problem itself (see [References](#references)), but there appear to be
-few implementations floating around.
+This problem aims to implement a practical algorithm in the field of
+Competitive Facility Location (CFL) in *R<sup>2</sup>*, also known as
+*The Voronoi Game*.
 
-# Table of contents
+# Table of Contents
 
 <!--ts-->
    * [The Voronoi Game](#the-voronoi-game)
-   * [Table of contents](#table-of-contents)
+   * [Table of Contents](#table-of-contents)
    * [Background](#background)
       * [Competitive Facility Location](#competitive-facility-location)
       * [Example](#example)
@@ -26,7 +25,7 @@ few implementations floating around.
    * [Authors](#authors)
    * [References](#references)
 
-<!-- Added by: foreese, at: 2019-01-10T18:29-0500 -->
+<!-- Added by: foreese, at: 2019-01-11T17:28-0500 -->
 
 <!--te-->
 
@@ -103,11 +102,11 @@ due to the special characteristics of a graph of intersecting
 rectangles, the solution is always obtainable in *Ο(n* log *n)* time.
 
 This runtime is excellent, but the solution is approximate. Banik shows
-that the identical solution in the L2 norm runs in
-*\&Omicron(n<sup>2</sup>)* time. This is not unexpected for a small
-problem in 2D, but can add up quite quickly when the input consists of
-millions of customers. Input of that size is not always necessary; but
-the input size depends on the domain.
+that the identical solution in the L2 norm runs in *Ο(n<sup>2</sup>)*
+time. This is not unexpected for a small problem in 2D, but can add up
+quite quickly when the input consists of millions of customers. Input of
+that size is not always necessary; but the input size depends on the
+domain.
 
 A related and more complex problem is the player 1 solution. That is,
 where should Pizza John, who is already in the market, place its first 4
@@ -311,14 +310,14 @@ calculation](#max-depth-calculation).
 
 Consider if we have a set of segments *S* which all intersect at point
 *P*. To handle this, we need more than a single “swap”. The most
-intuitive way to think about this is that each pair from {S 2}
-**℘***<sub>2</sub>(S)* (the subset of the power set of *S* of
-cardinality 2) forms a separate intersection event consisting of a
-single swap. This follows the operation of the classical algorithm, BUT
-the pairwise swaps must occur in the correct order; that is, in order of
-orientation from left to right. Then each segment in *S* must be checked
-for intersections with the adjacent segments in *T* that are *not* in
-*S* (line segments cannot intersect each other twice).
+intuitive way to think about this is that each pair from
+*℘<sub>2</sub>(S)* (all pairs possible from *S*) forms a separate
+intersection event consisting of a single swap. This follows the
+operation of the classical algorithm, BUT the pairwise swaps must occur
+in the correct order; that is, in order of orientation from left to
+right. Then each segment in *S* must be checked for intersections with
+the adjacent segments in *T* that are *not* in *S* (line segments cannot
+intersect each other twice).
 
 So far it appears this intuitive approach *could* work. However,
 consider the case where two identical segments *B* and *C* are
@@ -371,21 +370,20 @@ skipped in the re-sorting step.
 It is worth discussing the runtime of the sweep algorithm after our
 modifications. Let *n* be the number of segments in the input. Clearly
 |*T*| is bounded by *n*. The cost for an endpoint event is one insertion
-(or removal) in *T* each requiring time *\&Omicron(*log *n)* followed by
-one or two checks for intersection with the neighboring segments in *T*.
+(or removal) in *T* each requiring time *Ο(* log *n)* followed by one or
+two checks for intersection with the neighboring segments in *T*.
 Accessing a neighboring segment and checking two segments for
 intersection take amortized constant time. Therefore the total cost for
-all endpoint events is *\&Omicron(n* log *n)*.
+all endpoint events is *Ο(n* log *n)*.
 
 The cost for an intersection event *E* is one removal and one insertion
 in *T* and one or two segment intersection checks for each segment in
-*S<sub>E</sub>*. The insertion and removals again take time
-*\&Omicron(*log *n)* and the adjacent traversals and intersection checks
-are amortized constant time. It follows that the time for each
-intersection event is *Ο(k<sub>E</sub>* log *t)*, where *k<sub>E</sub> =
-*|*S<sub>E</sub>*|. Let the total time for all intersection events be
-*T<sub>I</sub>*. Let *K =* Σ*<sub>E</sub> k<sub>E</sub>*. Then
-*T<sub>I</sub> ≤ K* log *n*.
+*S<sub>E</sub>*. The insertion and removals again take time *Ο(* log
+*n)* and the adjacent traversals and intersection checks are amortized
+constant time. It follows that the time for each intersection event is
+*Ο(k<sub>E</sub>* log *t)*, where *k<sub>E</sub> = *|*S<sub>E</sub>*|.
+Let the total time for all intersection events be *T<sub>I</sub>*. Let
+*K =* Σ*<sub>E</sub> k<sub>E</sub>*. Then *T<sub>I</sub> ≤ K* log *n*.
 
 Let *m* be the number of intersection events. *m* is upper-bounded by
 Σ<sub>*i=1,n*</sub> *i ≤ M* where *M = n<sup>2</sup>/2*. To see this,
