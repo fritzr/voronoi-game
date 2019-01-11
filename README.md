@@ -18,14 +18,18 @@ Competitive Facility Location (CFL) in *R<sup>2</sup>*, also known as
       * [L1 P2 Solution](#l1-p2-solution)
       * [Time-based P2 solution](#time-based-p2-solution)
          * [Plane Sweep](#plane-sweep)
+            * [Plane Sweep Issues](#plane-sweep-issues)
+            * [Plane Sweep Runtime](#plane-sweep-runtime)
          * [Max Depth Calculation](#max-depth-calculation)
+            * [Max Depth Issues](#max-depth-issues)
+   * [Future Work](#future-work)
    * [Input and Output](#input-and-output)
       * [Shapefiles](#shapefiles)
    * [Building](#building)
    * [Authors](#authors)
    * [References](#references)
 
-<!-- Added by: foreese, at: 2019-01-11T17:28-0500 -->
+<!-- Added by: foreese, at: 2019-01-11T18:07-0500 -->
 
 <!--te-->
 
@@ -205,7 +209,8 @@ First, we reconsidered the idea of straight-line distance as a customer
 choice model. We realized that a distance metric is actually just an
 approximation of *time*, which most directly represents the customers’
 selection criteria (think again of the pizza example). To realize this,
-we replaced the concepts of distance in the max-depth with time.
+we replaced the concepts of distance in the max-depth algorithm with
+time.
 
 There are two main requirements which change significantly when
 replacing distance with time: first we need to identify the nearest
@@ -246,10 +251,16 @@ sweep](#plane-sweep) and [max depth
 calculation](#max-depth-calculation).
 
 The idea is that the maximal-depth region formed by the most number of
-intersecting polygons (or triangles) will be a solution isomorphic to
-the maximal intersecting number of squares or circles. Unlike Banik’s
-solution with circles, however, we believe we can compute the solution
-in an average *Ο(n* log *n)* time.
+intersecting polygons will be a solution isomorphic to the maximal
+intersecting number of squares or circles. Instead of intersecting
+polygons, we decided to triangulate the polygons and intersect triangles
+instead. The idea is that the arrangement of triangles (and the
+resulting regions) is easier to calculate and represent than the
+arrangement of polygons.
+
+Unlike Banik’s solution with circles, we believe we can compute the
+max-depth player 2 solution using this triangulated isochrome method in
+an average time proportional to *n* log *n* (for *n* customers).
 
 ### Plane Sweep
 
@@ -296,6 +307,8 @@ point, due to the design of the algorithm. At this point the only
 segments whose order in *T* could be affected is the segments that make
 up the intersection. Since we remove them before updating *L*, *T*
 remains consistent.
+
+#### Plane Sweep Issues
 
 It turns out that this implementation is not robust for intersection
 points which are formed by more than two segments. Unfortunately, for
@@ -367,6 +380,8 @@ checked for intersections with the segments in *T* adjacent but outside
 *S<sub>E</sub>*. This way, duplicates are collapsed and no segments are
 skipped in the re-sorting step.
 
+#### Plane Sweep Runtime
+
 It is worth discussing the runtime of the sweep algorithm after our
 modifications. Let *n* be the number of segments in the input. Clearly
 |*T*| is bounded by *n*. The cost for an endpoint event is one insertion
@@ -402,6 +417,45 @@ still *Ο((n + m)* log *n)* which is input-sensitive and bounded by
 for line segment intersections.
 
 ### Max Depth Calculation
+
+Once the intersections between all triangulated customer isochromes are
+computed, we can go ahead and compute the maximal depth region. Our
+original approach for this was to follow (Imai and Asano
+[1983](#ref-IMAI1983310)) again. In their paper, visiting all the
+intersections of the input shapes (rectangles) computed the connected
+components graph. This graph is represented as an adjacency list (or
+matrix) wherein each vertex corresponds to an input shape, and an edge
+between two vertices indicates that the two corresponding shapes
+intersect (overlap). In the resulting graph, every maximally connected
+subgraph represents a single “connected component”. Imai & Asano prove
+that maximal cliques in this graph correspond 1:1 with the maximal depth
+intersecting regions formed by the input rectangles.
+
+To copy this procedure for triangles, we set up an adjacency matrix
+where the indexes correspond to the indexes of the input triangles.
+During the [plane sweep](#plane-sweep) algorithm, whenever we handle an
+intersection between segments we simply look up the owning triangles and
+mark an edge between their corresponding vertices in the adjacency
+matrix.
+
+The idea is that the maximal clique for such an intersection graph of
+triangles, like the corresponding graph of rectangles, represents
+triangles which intersect to form a maximal-depth region.
+
+#### Max Depth Issues
+
+Unfortunately, after some thought, it becomes clear that the solution
+Imai & Asano present for rectangles does not translate cleanly to
+triangles. It is true that any maximal-depth region with depth *d* will
+form a clique of degree *d*. However, it is easy to imagine *d+1*
+triangles which all intersect each other, but do not intersect in any
+single closed region with depth *d*. In fact you can construct any
+number of triangles which all intersect each other such that no more
+than two triangles intersect in the same region. So even by searching
+among maximal cliques of depth *d+1* or greater one will never find the
+true maximal-depth region of depth *d*.
+
+# Future Work
 
 # Input and Output
 

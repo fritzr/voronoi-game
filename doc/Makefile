@@ -16,7 +16,7 @@ DEPS = $(IN) $(DOC)/Makefile $(BIBFIL)
 $(OUT): $(DEPS)
 	@rm -f $@
 	$(PANDOC) --bibliography $(BIBFIL) -t gfm-citations -s $< -o $@
-	$(TOC) --insert $@
+	$(TOC) --insert $@ >/dev/null
 	@rm -f $@.orig.* $@.toc.*
 	@chmod -w $@
 
