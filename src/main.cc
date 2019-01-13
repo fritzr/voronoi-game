@@ -41,7 +41,7 @@ typedef typename cfla::cfla_traits<point_type, rect_solver_type> rect_traits;
 typedef typename cfla::VGame<rect_traits> RectGame;
 
 // Travel time max-tri solver
-typedef User<point_type> User2d; // Customer points with isochromes
+typedef User<point_type> User2d; // Customer points with isochrones
 typedef typename cfla::tri::MaxTriSolver<coordinate_type> tri_solver_type;
 typedef typename cfla::cfla_traits<point_type, tri_solver_type, User2d>
   tri_traits;

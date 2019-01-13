@@ -1350,7 +1350,7 @@ struct make_sla_traits
 {
   INHERIT_TRAITS(Tp_);
 
-  typedef typename traits::polygon_type *value_type; // isochromes
+  typedef typename traits::polygon_type *value_type; // isochrones
   typedef typename traits::solution_cell_type solution_type;
 
   typedef typename traits::event_point_type event_type;
@@ -1587,7 +1587,7 @@ private:
   template<typename point_filter>
   point_type compute(const nn1_type &nn1, point_filter filter)
   {
-    // To solve for player 2, build isochromes from the opposing player's
+    // To solve for player 2, build isochrones from the opposing player's
     // facilities to each user point, then triangulate the polygons (for
     // simplicity) and solve for max-depth triangular intersections.
     for (auto userp = begin(); userp != end(); ++userp)
@@ -1596,12 +1596,12 @@ private:
       if (!filter(*userp))
         continue;
 
-      // Compute an isochrome representing the fixed travel time distance to
+      // Compute an isochrone representing the fixed travel time distance to
       // the nearest facility.
       point_type nearest_facility(nn1(*userp));
 
       polygon_type *p = new polygon_type;
-      userp->isochrome(*p, nearest_facility);
+      userp->isochrone(*p, nearest_facility);
       solver_.add_event(p);
     }
     solver_.compute();

@@ -6,7 +6,7 @@ using namespace std;
 
 template<typename Pt_>
 bool
-User<Pt_>::isochrome_bounds(point_type const& query,
+User<Pt_>::isochrone_bounds(point_type const& query,
     const_iterator &lb, const_iterator &ub) const
 {
   if (isolines_.empty())
@@ -32,13 +32,13 @@ User<Pt_>::isochrome_bounds(point_type const& query,
 
 template<typename Pt_>
 void
-User<Pt_>::isochrome(polygon_type &result, point_type const& query) const
+User<Pt_>::isochrone(polygon_type &result, point_type const& query) const
 {
   const_iterator lower_ring, upper_ring;
-  if (isochrome_bounds(query, lower_ring, upper_ring))
+  if (isochrone_bounds(query, lower_ring, upper_ring))
   {
     // TODO for now we just copy one of the bounds. We should really generate
-    // an interpolated isochrome from travelTime(query).
+    // an interpolated isochrone from travelTime(query).
     result.copy(*((upper_ring != isolines_.end()) ? upper_ring : lower_ring));
     result.triangulate(); // we will need this
   }
@@ -51,7 +51,7 @@ User<Pt_>::travelTime(typename User<Pt_>::point_type query) const
 {
   /* If the helper fails we have no way to know the answer.  */
   const_iterator lower_ring, upper_ring;
-  if (!isochrome_bounds(query, lower_ring, upper_ring))
+  if (!isochrone_bounds(query, lower_ring, upper_ring))
     return std::numeric_limits<coordinate_type>::max();
 
   /* Interpolate the travel time using the FTT endpoints and distance.

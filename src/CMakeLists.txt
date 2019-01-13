@@ -48,7 +48,7 @@ include_directories(
 add_subdirectory(shapefile)
 add_subdirectory(shapelib)
 
-set(TEST_PROG vgtest)
+set(TEST_PROG voronoi-game)
 
 add_executable(${TEST_PROG}
   boost_geo_poly.h
