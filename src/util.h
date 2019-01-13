@@ -26,6 +26,7 @@ const float ANGLE_DEG = 45.0f;
 const float pangle = deg2rad(ANGLE_DEG);
 const float nangle = -pangle;
 
+#if 0
 #include <opencv2/core/core.hpp>
 
 inline cv::Point2f rotateZ2f_neg(cv::Point2f pt) {
@@ -47,6 +48,7 @@ inline cv::Point2f rotateZ2f_pos(cv::Point2f pt) {
   cv::Mat ans = cv::Mat(cv::Matx12f({pt.x, pt.y})) * rotZp;
   return cv::Point2f(ans.at<float>(0u, 0u), ans.at<float>(0u, 1u));
 }
+#endif
 
 #include <random>
 #include <ctime>

@@ -1,4 +1,4 @@
-/* Adapt OpenCV types to be usable with boost::polygon/boost:geometry.  */
+/* Adapt boost::geometry types to be usable with boost::polygon.  */
 #pragma once
 
 #include <boost/polygon/polygon.hpp>

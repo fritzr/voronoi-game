@@ -10,8 +10,6 @@
 
 #include <iostream>
 
-#include <opencv2/core/core.hpp> // cv::norm
-
 #include <boost/geometry/geometry.hpp>
 #include <boost/geometry/algorithms/comparable_distance.hpp>
 
@@ -160,9 +158,6 @@ private:
   player_list players_;
   solver_type solver_;
   unsigned int current_round;
-#ifdef DEBUG
-  cv::Mat* img_ = nullptr;
-#endif
 
 public:
   template<class UserIter>
@@ -181,10 +176,6 @@ public:
       }
     }
   }
-
-#ifdef DEBUG
-  inline void set_img(cv::Mat& img) { img_ = &img; }
-#endif
 
   inline user_iterator users_begin(void) const { return solver_.begin(); }
   inline user_iterator users_end(void) const { return solver_.end(); }

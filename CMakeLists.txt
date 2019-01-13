@@ -34,10 +34,6 @@ else()
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 endif()
 
-if (${MAXRECT_DEBUG})
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMAXRECT_DEBUG")
-endif()
-
 # Unfortunately FIST is 32-bit so we must build everything in 32 bits
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32")
 set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32")

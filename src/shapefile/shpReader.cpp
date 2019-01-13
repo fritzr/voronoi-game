@@ -23,6 +23,18 @@ namespace shp
 
   using ::operator<<;
 
+void
+ShapeWriter::reset(void)
+{
+  if (shp_)
+    SHPClose(shp_);
+  shp_ = NULL;
+
+  if (dbf_)
+    DBFClose(dbf_);
+  dbf_ = NULL;
+}
+
 template <typename Val>
 ShapeReader<Val>::ShapeReader()
   : nShapeType(SHPT_NULL), nShapeFilter(SHPT_NULL), nEntities(-1),

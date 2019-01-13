@@ -1,22 +1,5 @@
 set(CMAKE_SYSTEM_PROCESSOR "i686") # 32-bit build required for FIST
 
-# Force OpenCV to use 32-bit configs
-if (EXISTS /usr/lib/OpenCV)
-  set(OpenCV_DIR /usr/lib/OpenCV)
-  set(OpenCV_LIB_DIR ${OpenCV_DIR})
-  set(OpenCV_CONFIG_PATH ${OpenCV_DIR})
-else()
-  set(OpenCV_DIR /usr/lib/cmake/OpenCV)
-  set(OpenCV_CONFIG_PATH ${OpenCV_DIR})
-  set(OpenCV_LIB_DIR /usr/lib)
-endif()
-
-set(OpenCV_CONFIG ${OpenCV_CONFIG_PATH}/OpenCVConfig.cmake)
-set(OpenCV_LIB_DIR_OPT ${OpenCV_LIB_DIR})
-set(OpenCV_LIB_DIR_DBG ${OpenCV_LIB_DIR})
-
-find_package(OpenCV REQUIRED)
-
 # >= 1.47.0 for polygon and geometry packages
 # >= 1.54.0 for boost::geomtry::index::rtree
 # >= 1.59.0 for boost::geometry::index::rtree::const_iterator
@@ -58,7 +41,6 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/shapefile
   ${CMAKE_CURRENT_SOURCE_DIR}/shapelib
-  ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
   ${LIB_INCLUDE}
   )
@@ -87,7 +69,6 @@ add_executable(${TEST_PROG}
   user.h
   user.cc
 
-  opencv_compat.h
   main.h
   main.cc
 )
@@ -96,7 +77,6 @@ add_executable(${TEST_PROG}
 add_definitions(-Wno-parentheses)
 
 target_link_libraries(${TEST_PROG}
-  ${OpenCV_LIBS}
   ${Boost_LIBRARIES}
   ${FIST_LIBRARY}
   shapefile shapelib

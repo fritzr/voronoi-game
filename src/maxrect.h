@@ -10,12 +10,14 @@
 #include <iomanip>
 #endif
 
-#include <opencv2/core/core.hpp>
+// XXX not all of the classes here have been instantiated recently.
+// some things may have been broken since refactoring for the maxtri code.
 
 #include <boost/polygon/polygon.hpp>
 #include <boost/polygon/point_concept.hpp>
 #include <boost/polygon/rectangle_concept.hpp>
 #include <boost/geometry.hpp>
+#include <boost/geometry/geometries/point_xy.hpp>
 
 #include <boost/graph/adjacency_list.hpp>
 
@@ -30,6 +32,9 @@ namespace cfla { namespace rect
 namespace b  = boost;
 namespace bp = boost::polygon;
 namespace bg = boost::geometry;
+
+template<typename Tp_>
+  using point_xy = boost::geometry::model::d2::point_xy<Tp_>;
 
 template<class Tp_>
 struct Edge
@@ -172,7 +177,7 @@ template<typename Tp_>
 struct MaxDepthRectTraits
 {
   typedef Tp_                            coordinate_type;
-  typedef typename cv::Point_<Tp_>       point_type;
+  typedef point_xy<Tp_>       point_type;
   typedef RectWrapper<Tp_>             rect_type;
   typedef typename rect_type::super_type pure_rect_type;
   typedef Edge<Tp_>                      edge_type;

@@ -89,6 +89,125 @@ public:
   bool read(const std::string& filename);
 };
 
+// To use a ShapeWriter, just wrap the iterator with one of the wrappers below
+// and pass it to write().
+class ShapeWriter
+{
+private:
+  int nShapeType;
+  SHPHandle shp_;
+  DBFHandle dbf_;
+
+  void reset();
+
+public:
+  ~ShapeWriter() { reset(); }
+
+  ShapeWriter(int shapeType)
+    : nShapeType(shapeType), shp_(NULL), dbf_(NULL)
+  {}
+
+
+  // XXX Writing DBF fields is currently unimplemented
+
+  template<typename Iter>
+  bool write(const std::string& filename, Iter begin, Iter end)
+  {
+    shp_ = SHPCreate(filename.c_str(), nShapeType);
+    if (shp_ == NULL)
+    {
+      reset();
+      return false;
+    }
+
+    dbf_ = DBFCreate(filename.c_str());
+    if (dbf_ == NULL)
+    {
+      reset();
+      return false;
+    }
+
+    while (begin != end)
+    {
+      SHPObject *obj = SHPCreateSimpleObject(nShapeType,
+          begin->nVertices, begin->padfX, begin->padfY, begin->padfZ);
+
+      if (obj == NULL)
+      {
+        reset();
+        return false;
+      }
+
+      SHPWriteObject(shp_, -1, obj);
+      SHPDestroyObject(obj);
+
+      ++begin;
+    }
+
+    reset();
+    return true;
+  }
+};
+
+// Wrap an iterator for writing a SHPT_POINT file via ShapeWriter::write().
+template <class Iterator>
+class point_writer_wrapper
+  : public std::iterator<std::input_iterator_tag,void,void,void,void>
+{
+public:
+  struct PointObject {
+    int nVertices;
+    double x, *padfX, y, *padfY, *padfZ=NULL;
+
+    PointObject()
+      : nVertices(1), x(0.0), padfX(&x), y(0.0), padfY(&y), padfZ(NULL)
+    {}
+
+    inline void set(double xx, double yy) {
+      x = xx;
+      y = yy;
+    }
+  };
+
+protected:
+  Iterator ptr;
+  PointObject current;
+
+public:
+  point_writer_wrapper(Iterator it)
+    : ptr(it)
+  {}
+
+  inline PointObject const& operator*(void) {
+    auto const& pt = *ptr;
+    // XXX boost::geometry::get<N>(pt)
+    current.set(pt.x(), pt.y());
+    return current;
+  }
+  inline const PointObject* operator->(void) {
+    (void)(*this);
+    return &current;
+  };
+
+  inline point_writer_wrapper& operator++(){ ++ptr; return *this; }
+  inline point_writer_wrapper operator++(int) {
+    point_writer_wrapper i = *this;
+    ++i;
+    return i;
+  }
+
+  inline bool operator==(point_writer_wrapper const& o) const {
+    return ptr == o.ptr;
+  }
+  inline bool operator!=(point_writer_wrapper const& o) const {
+    return ptr != o.ptr;
+  }
+};
+
+template<class Iterator>
+inline point_writer_wrapper<Iterator>
+point_writer(Iterator i) { return point_writer_wrapper<Iterator>(i); }
+
 //
 // this reader reads ESRI shapefile format and convert
 // polygons to poly format
@@ -270,6 +389,14 @@ readPolygons(const std::string& path)
 {
   PolyReader<Pt_> r;
   return readShapefile(path, r);
+}
+
+template<typename Iter>
+inline bool
+writePoints(const std::string& path, Iter begin, Iter end)
+{
+  ShapeWriter w(SHPT_POINT);
+  return w.write(path, point_writer(begin), point_writer(end));
 }
 
 } // end namespace shp
