@@ -751,9 +751,9 @@ will be written).
 **Fritz Reese**  
 *M.S. Computer Science*, George Mason University, 2018.
 
-**[Jyh-Ming Lien](https://cs.gmu.edu/~jmlien/doku.php)**  
-*Ph.D. Computer Science*, Texas A\&M University, 2006.  
-Department of Computer Science  
+**[Jyh-Ming Lien](https://cs.gmu.edu/~jmlien/)**  
+[Motion and Shape Computing (MASC) group](http://masc.cs.gmu.edu/)
+Associate Prof., [Department of Computer Science](https://cs.gmu.edu/)
 George Mason University
 
 # References
