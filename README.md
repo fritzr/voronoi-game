@@ -752,9 +752,11 @@ will be written).
 *M.S. Computer Science*, George Mason University, 2018.
 
 **[Jyh-Ming Lien](https://cs.gmu.edu/~jmlien/)**  
-[Motion and Shape Computing (MASC) group](http://masc.cs.gmu.edu/)
-Associate Prof., [Department of Computer Science](https://cs.gmu.edu/)
-George Mason University
+
+  [Motion and Shape Computing (MASC) group](http://masc.cs.gmu.edu/)
+  
+  Associate Prof., [Department of Computer Science](https://cs.gmu.edu/),
+  George Mason University
 
 # References
 
